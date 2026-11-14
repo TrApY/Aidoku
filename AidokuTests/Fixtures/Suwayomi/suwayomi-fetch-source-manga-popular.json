@@ -1,0 +1,81 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 1,
+     "title": "Zatsuyougakari to shite Yado de Hatarakihajimeta Renkinjutsushi, Kanbanmusume-tachi to Issho ni Kurasu koto ni natta",
+     "thumbnailUrl": "/api/v1/manga/1/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 2,
+     "title": "Mahoutsukai no Yoru",
+     "thumbnailUrl": "/api/v1/manga/2/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 3,
+     "title": "LOCOS PALOMAS 2",
+     "thumbnailUrl": "/api/v1/manga/3/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 4,
+     "title": "Ecos del Comienzo: El Origen de la Mansión (Arknights: Endfield)",
+     "thumbnailUrl": "/api/v1/manga/4/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 5,
+     "title": "Pita y Poro",
+     "thumbnailUrl": "/api/v1/manga/5/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 6,
+     "title": "PISO COMPARTIDO (Girls und Panzer)",
+     "thumbnailUrl": "/api/v1/manga/6/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 7,
+     "title": "Miracle Milk",
+     "thumbnailUrl": "/api/v1/manga/7/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 8,
+     "title": "Es mi primera vez, así que no seas gentil. (Girls und Panzer)",
+     "thumbnailUrl": "/api/v1/manga/8/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 9,
+     "title": "¡Habla tú del amor! (Girls und Panzer)",
+     "thumbnailUrl": "/api/v1/manga/9/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    }
+   ],
+   "hasNextPage": false
+  }
+ }
+}

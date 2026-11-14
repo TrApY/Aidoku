@@ -1,0 +1,19 @@
+{
+ "data": {
+  "manga": {
+   "artist": null,
+   "author": null,
+   "description": null,
+   "id": 54,
+   "status": "UNKNOWN",
+   "thumbnailUrl": "/api/v1/manga/54/thumbnail",
+   "title": "Fate/Grand Order -turas réalta-",
+   "url": "/manga/8a1b2e8c-afd9-4c43-ba96-0eb1507a4ddf",
+   "genre": [],
+   "realUrl": null
+  },
+  "chapters": {
+   "nodes": []
+  }
+ }
+}

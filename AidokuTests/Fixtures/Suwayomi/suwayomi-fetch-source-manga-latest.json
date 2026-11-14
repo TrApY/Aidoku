@@ -1,0 +1,233 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 53,
+     "title": "Zatch Bell! 2",
+     "thumbnailUrl": "/api/v1/manga/53/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 54,
+     "title": "Fate/Grand Order -turas réalta-",
+     "thumbnailUrl": "/api/v1/manga/54/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 55,
+     "title": "Uma Musume - Cinderella Gray",
+     "thumbnailUrl": "/api/v1/manga/55/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 56,
+     "title": "El misterio del Santo Grial en la Capital Imperial  - Fate/type Redline",
+     "thumbnailUrl": "/api/v1/manga/56/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 57,
+     "title": "¡Vamos, Endfield!",
+     "thumbnailUrl": "/api/v1/manga/57/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 58,
+     "title": "Tenis de mesa Shunrai",
+     "thumbnailUrl": "/api/v1/manga/58/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 59,
+     "title": "Oshi ni Amagami",
+     "thumbnailUrl": "/api/v1/manga/59/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 60,
+     "title": "Arknights: Prelude Suite: Cadenza Virtuosa",
+     "thumbnailUrl": "/api/v1/manga/60/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 61,
+     "title": "Sonic Comic",
+     "thumbnailUrl": "/api/v1/manga/61/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 62,
+     "title": "Guardian Tales - Kanterbury Days!",
+     "thumbnailUrl": "/api/v1/manga/62/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 63,
+     "title": "Lord El-Melloi II-sei no Jikenbo",
+     "thumbnailUrl": "/api/v1/manga/63/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 64,
+     "title": "Hinako Note",
+     "thumbnailUrl": "/api/v1/manga/64/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 65,
+     "title": "Nine Peaks",
+     "thumbnailUrl": "/api/v1/manga/65/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 66,
+     "title": "K-9 - Keishichou Kouanbu Kouan Dai-9 Ka Inou Taisaku-gakari",
+     "thumbnailUrl": "/api/v1/manga/66/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 3,
+     "title": "LOCOS PALOMAS 2",
+     "thumbnailUrl": "/api/v1/manga/3/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 2,
+     "title": "Mahoutsukai no Yoru",
+     "thumbnailUrl": "/api/v1/manga/2/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 67,
+     "title": "Una Pareja de Cucos",
+     "thumbnailUrl": "/api/v1/manga/67/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 68,
+     "title": "Ketsuretsu",
+     "thumbnailUrl": "/api/v1/manga/68/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 69,
+     "title": "Noise Ring",
+     "thumbnailUrl": "/api/v1/manga/69/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 70,
+     "title": "Hallowed Haven",
+     "thumbnailUrl": "/api/v1/manga/70/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 71,
+     "title": "Kono Healer, Mendokusai",
+     "thumbnailUrl": "/api/v1/manga/71/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 7,
+     "title": "Miracle Milk",
+     "thumbnailUrl": "/api/v1/manga/7/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 72,
+     "title": "2-nen B-gumi Yuusha Destroyers",
+     "thumbnailUrl": "/api/v1/manga/72/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 73,
+     "title": "Fushigi no Mayuri-san",
+     "thumbnailUrl": "/api/v1/manga/73/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 74,
+     "title": "Juumonji-kun shika Mienai!!",
+     "thumbnailUrl": "/api/v1/manga/74/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 75,
+     "title": "Fate/kaleid liner PRISMA☆ILLYA 3rei!!",
+     "thumbnailUrl": "/api/v1/manga/75/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 1,
+     "title": "Zatsuyougakari to shite Yado de Hatarakihajimeta Renkinjutsushi, Kanbanmusume-tachi to Issho ni Kurasu koto ni natta",
+     "thumbnailUrl": "/api/v1/manga/1/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 76,
+     "title": "Cool na Eikoku Bishoujo wa Orenchi ni Homestay Shitairashii",
+     "thumbnailUrl": "/api/v1/manga/76/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    }
+   ],
+   "hasNextPage": true
+  }
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "data": {
+  "fetchChapters": null
+ },
+ "errors": [
+  {
+   "message": "Exception while fetching data (/fetchChapters) : No chapters found\r\n\r\njava.lang.Exception: No chapters found\n\tat suwayomi.tachidesk.manga.impl.Chapter.updateChapterListDatabase(Chapter.kt:127)\n\tat suwayomi.tachidesk.manga.impl.Manga.updateMangaAndChapters(Manga.kt:182)\n\tat suwayomi.tachidesk.manga.impl.Manga$updateMangaAndChapters$1.invokeSuspend(Manga.kt)\n\tat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)\n\tat kotlinx.coroutines.internal.ScopeCoroutine.afterResume(Scopes.kt:35)\n\tat kotlinx.coroutines.AbstractCoroutine.resumeWith(AbstractCoroutine.kt:101)\n\tat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:47)\n\tat kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)\n\tat kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)\n\tat kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:798)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)\n",
+   "locations": [
+    {
+     "line": 1,
+     "column": 42
+    }
+   ],
+   "path": [
+    "fetchChapters"
+   ]
+  }
+ ]
+}

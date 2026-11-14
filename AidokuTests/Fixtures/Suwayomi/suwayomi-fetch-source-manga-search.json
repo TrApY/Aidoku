@@ -1,0 +1,169 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 33,
+     "title": "One Piece",
+     "thumbnailUrl": "/api/v1/manga/33/thumbnail",
+     "author": "Oda Eiichirou (尾田栄一郎)",
+     "artist": "Oda Eiichirou (尾田栄一郎)",
+     "inLibrary": false
+    },
+    {
+     "id": 34,
+     "title": "One Piece Academy",
+     "thumbnailUrl": "/api/v1/manga/34/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 35,
+     "title": "One Piece Omake",
+     "thumbnailUrl": "/api/v1/manga/35/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 36,
+     "title": "Cursed One Piece",
+     "thumbnailUrl": "/api/v1/manga/36/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 37,
+     "title": "ONE PIECE STRONG WORLD",
+     "thumbnailUrl": "/api/v1/manga/37/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 38,
+     "title": "One-Punch Man - Saitama in the One Piece Universe (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/38/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 39,
+     "title": "One Piece (Official Colored)",
+     "thumbnailUrl": "/api/v1/manga/39/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 40,
+     "title": "One Piece in Love",
+     "thumbnailUrl": "/api/v1/manga/40/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 41,
+     "title": "Fischer's×ONE PIECE",
+     "thumbnailUrl": "/api/v1/manga/41/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 42,
+     "title": "One Piece - Sweet Tongue (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/42/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 43,
+     "title": "One Piece - Historic Grammar (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/43/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 44,
+     "title": "One Piece - Sanji, Yoji, Goji (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/44/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 45,
+     "title": "One Piece - Return to Innocence (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/45/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 46,
+     "title": "One Piece The Movie - Dead End no Bouken",
+     "thumbnailUrl": "/api/v1/manga/46/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 47,
+     "title": "One Piece - Much Ado About Nothing (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/47/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 48,
+     "title": "Ohana Moyou no One-Piece",
+     "thumbnailUrl": "/api/v1/manga/48/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 49,
+     "title": "One Piece: Ace’s Story—The Manga",
+     "thumbnailUrl": "/api/v1/manga/49/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 50,
+     "title": "One Piece - Doujin Sakka Collection: Ketchup (Doujinshi)",
+     "thumbnailUrl": "/api/v1/manga/50/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 51,
+     "title": "One Piece - Vivi no Bouken",
+     "thumbnailUrl": "/api/v1/manga/51/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 52,
+     "title": "One Piece Party",
+     "thumbnailUrl": "/api/v1/manga/52/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    }
+   ],
+   "hasNextPage": true
+  }
+ }
+}
