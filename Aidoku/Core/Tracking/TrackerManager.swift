@@ -677,13 +677,26 @@ extension TrackerManager {
 extension TrackerManager {
     /// Pending updates after a batch was sent: `current` is the pending list now (it may have new updates
     /// queued while the batch was on the network), `sent` the batch, `failed` the ones of the batch to
-    /// retry. Only what was sent leaves the list; a newer update for the same chapter wins over a retry (pending).
+    /// retry. Only what was sent leaves the list; a newer update for the same chapter wins over a retry.
     static func remainingPageUpdates(
         current: [PageTrackUpdate],
         sent: [PageTrackUpdate],
         failed: [PageTrackUpdate]
     ) -> [PageTrackUpdate] {
-        failed
+        func sameTarget(_ a: PageTrackUpdate, _ b: PageTrackUpdate) -> Bool {
+            a.trackerId == b.trackerId && a.trackId == b.trackId && a.chapterId == b.chapterId
+        }
+        func same(_ a: PageTrackUpdate, _ b: PageTrackUpdate) -> Bool {
+            sameTarget(a, b) && a.progress.completed == b.progress.completed && a.progress.page == b.progress.page
+                && a.progress.date == b.progress.date && a.failCount == b.failCount
+        }
+        // what was queued meanwhile stays (anything not exactly an update of the batch)
+        var remaining = current.filter { update in !sent.contains { same($0, update) } }
+        // retries, unless a newer update for the same chapter was queued meanwhile
+        for update in failed where !remaining.contains(where: { sameTarget($0, update) }) {
+            remaining.append(update)
+        }
+        return remaining
     }
 
     func processPendingUpdates() async {
@@ -691,14 +704,17 @@ extension TrackerManager {
 
         if let pageUpdateTask {
             await pageUpdateTask.value
+            // updates queued while that batch was on the network are sent now
+            await processPendingUpdates()
             return
         }
 
         pageUpdateTask = Task {
             var stillPending: [PageTrackUpdate] = []
             var successes = 0
+            let batch = trackingState.pendingPageUpdates
 
-            for var update in trackingState.pendingPageUpdates {
+            for var update in batch {
                 guard let tracker = TrackerManager.getTracker(id: update.trackerId) as? PageTracker else {
                     continue // tracker no longer exists, remove the update
                 }
@@ -726,7 +742,11 @@ extension TrackerManager {
                 LogManager.logger.info("Processed \(successes) previously failed page tracker update\(successes > 1 ? "s" : "")")
             }
 
-            trackingState.pendingPageUpdates = stillPending
+            trackingState.pendingPageUpdates = Self.remainingPageUpdates(
+                current: trackingState.pendingPageUpdates,
+                sent: batch,
+                failed: stillPending
+            )
             savePageTrackingState()
             pageUpdateTask = nil
         }

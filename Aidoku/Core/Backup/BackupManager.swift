@@ -709,8 +709,8 @@ extension BackupManager {
             defaults.set(value ?? nil, forKey: key)
             written.insert(key)
         }
-        // a backup from before the pillarbox margin per orientation (pending: all the backup's keys)
-        PillarboxSettings.restoredFromBackup(keys: Set(settings.keys), defaults: defaults, domain: domain)
+        // a backup from before the pillarbox margin per orientation (only keys really restored count)
+        PillarboxSettings.restoredFromBackup(keys: written, defaults: defaults, domain: domain)
         return written
     }
 

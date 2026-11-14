@@ -69,6 +69,15 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
     private var pendingLocal: Position?
     /// Last position not yet sent to the trackers.
     private(set) var pending: Position?
+    /// When the oldest unsaved change happened (for the maximum waits).
+    private var localSince: TimeInterval?
+    private var trackerSince: TimeInterval?
+    /// Last page saved locally / sent (also the opening page, which is already stored).
+    private var lastLocalKey: String?
+    private var lastTrackerKey: String?
+    /// After a chapter loads, the first page reported is where it opened.
+    private var awaitingOpeningPage = false
+    private var openingKey: String?
 
     /// - isEnabled: false (incognito) schedules nothing.
     /// - saveLocal: progress only (no reading session, no tracker), ~2 s after the last change. Gets the
@@ -89,30 +98,58 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
     /// Call on every page change: the last position wins.
     func pageChanged(_ position: Position) {
         guard isEnabled() else { return }
+        let key = position.pageKey
+        if awaitingOpeningPage {
+            awaitingOpeningPage = false
+            openingKey = key
+            lastLocalKey = key
+            lastTrackerKey = key
+            return
+        }
+        if let openingKey {
+            guard key != openingKey else { return } // still where it opened
+            self.openingKey = nil
+        }
         pending = position
         pendingLocal = position
+        let now = scheduler.now
 
         localTimer?.cancel()
-        localTimer = scheduler.schedule(after: Self.localDelay) { [weak self] in
+        let localStart = localSince ?? now
+        localSince = localStart
+        let localDelay = min(Self.localDelay, max(0, Self.localMaxWait - (now - localStart)))
+        localTimer = scheduler.schedule(after: localDelay) { [weak self] in
             guard let self else { return }
             self.localTimer = nil
+            self.localSince = nil
             guard let position = self.pendingLocal else { return }
             self.pendingLocal = nil
+            guard position.pageKey != self.lastLocalKey else { return } // already saved
+            self.lastLocalKey = position.pageKey
             self.saveLocal(position, self.generation)
         }
 
         trackerTimer?.cancel()
-        trackerTimer = scheduler.schedule(after: Self.trackerDelay) { [weak self] in
+        let trackerStart = trackerSince ?? now
+        trackerSince = trackerStart
+        let trackerDelay = min(Self.trackerDelay, max(0, Self.trackerMaxWait - (now - trackerStart)))
+        trackerTimer = scheduler.schedule(after: trackerDelay) { [weak self] in
             guard let self else { return }
             self.trackerTimer = nil
+            self.trackerSince = nil
             guard let position = self.pending else { return }
             self.pending = nil
+            guard position.pageKey != self.lastTrackerKey else { return } // already sent
+            self.lastTrackerKey = position.pageKey
             self.saveTracker(position, self.generation)
         }
     }
 
-    /// A chapter was loaded: its first page is where reading starts, not a change (pending).
+    /// A chapter was loaded: its first page is where reading starts, not a change.
     func chapterOpened() {
+        cancel()
+        awaitingOpeningPage = true
+        openingKey = nil
     }
 
     /// Drops what's pending (leaving the reader, changing chapter): the caller saves right away.
@@ -123,16 +160,22 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
         trackerTimer = nil
         pendingLocal = nil
         pending = nil
+        localSince = nil
+        trackerSince = nil
+        generation += 1
     }
 
     /// For an immediate save (scene deactivating, going to the background): drops what's pending and
-    /// tells whether this page still needs saving (false: already saved and sent, e.g. a second notice) (pending).
+    /// tells whether this page still needs saving (false: already saved and sent, e.g. a second notice).
     func claimImmediateSave(pageKey: String) -> Bool {
         cancel()
+        guard pageKey != lastLocalKey || pageKey != lastTrackerKey else { return false }
+        lastLocalKey = pageKey
+        lastTrackerKey = pageKey
         return true
     }
 
     func isCurrent(_ generation: Int) -> Bool {
-        true // pending
+        generation == self.generation
     }
 }
