@@ -195,6 +195,8 @@ struct SuwayomiMangaNode: Decodable, Sendable {
     let author: String?
     let description: String?
     let id: Int?
+    let initialized: Bool?
+    let inLibrary: Bool?
     let inLibraryAt: String?
     let lastFetchedAt: String?
     let status: String?

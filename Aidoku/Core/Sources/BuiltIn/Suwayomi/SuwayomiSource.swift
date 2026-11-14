@@ -70,9 +70,13 @@ actor SuwayomiSourceRunner: Runner {
     /// Last list of server sources that could be offered (used if the server stops answering).
     private var serverSourcesCache: [SuwayomiServerSource]?
 
-    init(sourceKey: String, name: String, server: String) {
+    init(sourceKey: String, name: String, server: String, transport: SuwayomiHelper.Transport? = nil) {
         self.sourceKey = sourceKey
-        self.helper = .init(sourceKey: sourceKey)
+        self.helper = if let transport {
+            .init(sourceKey: sourceKey, transport: transport)
+        } else {
+            .init(sourceKey: sourceKey)
+        }
         self.name = name
         self.server = server
     }
@@ -180,6 +184,8 @@ actor SuwayomiSourceRunner: Runner {
                     author
                     description
                     id
+                    initialized
+                    inLibrary
                     status
                     thumbnailUrl
                     title

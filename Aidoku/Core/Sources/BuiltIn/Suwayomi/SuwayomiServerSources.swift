@@ -376,6 +376,34 @@ enum SuwayomiServerSources {
         return missingChapters || missingDetails
     }
 
+    // MARK: pending (red)
+
+    static let libraryListingId = "library"
+
+    static func libraryListing() -> AidokuRunner.Listing {
+        .init(id: libraryListingId, name: NSLocalizedString("LIBRARY"), kind: .default)
+    }
+
+    static func searchSourceId(filters: [AidokuRunner.FilterValue], selectedIds: [String]) -> String? {
+        searchSourceId(filters: filters)
+    }
+
+    struct RemoteFetchPlan: Equatable, Sendable {
+        var fetchManga: Bool
+        var fetchChapters: Bool
+
+        var isEmpty: Bool { !fetchManga && !fetchChapters }
+    }
+
+    static func remoteFetchPlan(
+        _ response: SuwayomiMangaUpdateResponse,
+        needsDetails: Bool,
+        needsChapters: Bool
+    ) -> RemoteFetchPlan {
+        let fetch = needsRemoteFetch(response, needsDetails: needsDetails, needsChapters: needsChapters)
+        return .init(fetchManga: fetch, fetchChapters: fetch)
+    }
+
     /// Readable message from a GraphQL error: the server prepends
     /// "Exception while fetching data (/field) : " and appends a stack trace.
     static func readableMessage(_ message: String) -> String {

@@ -9,7 +9,11 @@ import AidokuRunner
 import Foundation
 
 struct SuwayomiHelper: Sendable {
+    /// Sends a GraphQL request; replaceable in tests.
+    typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
     let sourceKey: String
+    var transport: Transport = { try await URLSession.shared.data(for: $0) }
 
     func authorize(request: inout URLRequest) {
         if let cookie = UserDefaults.standard.string(forKey: "\(sourceKey).cookie") {
@@ -62,7 +66,7 @@ struct SuwayomiHelper: Sendable {
 
         let data: Data
         do {
-            (data, _) = try await URLSession.shared.data(for: request)
+            (data, _) = try await transport(request)
         } catch {
             throw SourceError.networkError
         }

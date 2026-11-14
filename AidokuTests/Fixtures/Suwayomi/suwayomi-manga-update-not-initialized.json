@@ -1,0 +1,21 @@
+{
+ "data": {
+  "manga": {
+   "artist": null,
+   "author": null,
+   "description": null,
+   "id": 56,
+   "initialized": false,
+   "inLibrary": false,
+   "status": "UNKNOWN",
+   "thumbnailUrl": "/api/v1/manga/56/thumbnail",
+   "title": "El misterio del Santo Grial en la Capital Imperial  - Fate/type Redline",
+   "url": "/manga/510f29a8-99b4-46af-ba5e-916e96bc6f37",
+   "genre": [],
+   "realUrl": null
+  },
+  "chapters": {
+   "nodes": []
+  }
+ }
+}

@@ -1,0 +1,30 @@
+{
+ "data": {
+  "mangas": {
+   "nodes": [
+    {
+     "artist": null,
+     "author": null,
+     "id": 156,
+     "inLibraryAt": "1794689698",
+     "thumbnailUrl": "/api/v1/manga/156/thumbnail",
+     "title": "Guía De Supervivencia Del Cazador De Bestias Demoníacas",
+     "chapters": {
+      "totalCount": 47
+     },
+     "latestUploadedChapter": {
+      "uploadDate": "1794689341000"
+     },
+     "latestFetchedChapter": {
+      "fetchedAt": "1794689701"
+     },
+     "lastReadChapter": {
+      "lastReadAt": "0"
+     },
+     "unreadCount": 47,
+     "downloadCount": 0
+    }
+   ]
+  }
+ }
+}

@@ -111,6 +111,7 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         let es = listings.filter { $0.id.hasSuffix(mangaDexEs) }
         #expect(es.map(\.id) == ["popular-\(mangaDexEs)", "latest-\(mangaDexEs)"])
         #expect(es.allSatisfy { $0.name.contains("MangaDex (ES)") })
+        try #require(es.count == 2)
         #expect(es[0].name == String(format: NSLocalizedString("SUWAYOMI_LISTING_POPULAR"), "MangaDex (ES)"))
         #expect(es[1].name == String(format: NSLocalizedString("SUWAYOMI_LISTING_LATEST"), "MangaDex (ES)"))
         #expect(!es[0].name.contains("SUWAYOMI_LISTING"))
@@ -225,18 +226,46 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         #expect(first.authors == ["Oda Eiichirou (尾田栄一郎)"])
     }
 
-    @Test func remoteFetchOnlyWhenServerHasNothingYet() throws {
-        let empty = try JSONDecoder().decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-without-chapters"))
-        #expect(empty.data.chapters.nodes.isEmpty)
-        #expect(SuwayomiServerSources.needsRemoteFetch(empty, needsDetails: true, needsChapters: true))
-        #expect(SuwayomiServerSources.needsRemoteFetch(empty, needsDetails: false, needsChapters: true))
-        #expect(SuwayomiServerSources.needsRemoteFetch(empty, needsDetails: true, needsChapters: false))
-        #expect(!SuwayomiServerSources.needsRemoteFetch(empty, needsDetails: false, needsChapters: false))
+    @Test func remoteFetchPlanUsesInitialized() throws {
+        let decoder = JSONDecoder()
+        let fresh = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-not-initialized"))
+        #expect(fresh.data.manga.initialized == false)
+        #expect(SuwayomiServerSources.remoteFetchPlan(fresh, needsDetails: true, needsChapters: true) == .init(fetchManga: true, fetchChapters: true))
+        #expect(SuwayomiServerSources.remoteFetchPlan(fresh, needsDetails: true, needsChapters: false) == .init(fetchManga: true, fetchChapters: false))
+        #expect(SuwayomiServerSources.remoteFetchPlan(fresh, needsDetails: false, needsChapters: false).isEmpty)
 
-        let full = try JSONDecoder().decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-with-chapters"))
-        #expect(!full.data.chapters.nodes.isEmpty)
+        // MangaDex manga come with an author even before being fetched: «initialized» decides, not the author
+        let full = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-initialized"))
+        #expect(full.data.manga.initialized == true)
         #expect(full.data.manga.author == "TYPE-MOON")
-        #expect(!SuwayomiServerSources.needsRemoteFetch(full, needsDetails: true, needsChapters: true))
+        #expect(!full.data.chapters.nodes.isEmpty)
+        #expect(SuwayomiServerSources.remoteFetchPlan(full, needsDetails: true, needsChapters: true).isEmpty)
+
+        // details fetched but no chapters yet, outside the server library: only the chapters
+        let noChaptersData = try fixture("manga-update-initialized-no-chapters")
+        let noChapters = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: noChaptersData)
+        #expect(noChapters.data.chapters.nodes.isEmpty)
+        #expect(SuwayomiServerSources.remoteFetchPlan(noChapters, needsDetails: true, needsChapters: true) == .init(fetchManga: false, fetchChapters: true))
+        #expect(SuwayomiServerSources.remoteFetchPlan(noChapters, needsDetails: true, needsChapters: false).isEmpty)
+
+        // in the server library the server keeps the chapters updated itself: no remote fetch
+        let inLibraryData = Data(String(decoding: noChaptersData, as: UTF8.self)
+            .replacingOccurrences(of: "\"inLibrary\": false", with: "\"inLibrary\": true").utf8)
+        let inLibrary = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: inLibraryData)
+        #expect(inLibrary.data.manga.inLibrary == true)
+        #expect(SuwayomiServerSources.remoteFetchPlan(inLibrary, needsDetails: true, needsChapters: true).isEmpty)
+    }
+
+    @Test func staleSearchSourceFallsBackToLibrary() {
+        let filters: [AidokuRunner.FilterValue] = [.select(id: "searchIn", value: "999")]
+        #expect(SuwayomiServerSources.searchSourceId(filters: filters, selectedIds: [mangaDexEs]) == nil)
+        #expect(SuwayomiServerSources.searchSourceId(filters: filters, selectedIds: []) == nil)
+        #expect(SuwayomiServerSources.searchSourceId(
+            filters: [.select(id: "searchIn", value: mangaDexEs)],
+            selectedIds: [mangaDexEs]
+        ) == mangaDexEs)
+        #expect(SuwayomiServerSources.libraryListing().id == "library")
+        #expect(SuwayomiServerSources.libraryListing().name == NSLocalizedString("LIBRARY"))
     }
 
     @Test func noChaptersFoundIsRecognised() throws {

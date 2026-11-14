@@ -1,0 +1,25 @@
+{
+ "data": {
+  "manga": {
+   "artist": "Oda Eiichirou (尾田栄一郎)",
+   "author": "Oda Eiichirou (尾田栄一郎)",
+   "description": "One Piece Omake are short manga chapters originally published in the One Piece Log Books & Databooks.",
+   "id": 35,
+   "initialized": true,
+   "inLibrary": false,
+   "status": "ONGOING",
+   "thumbnailUrl": "/api/v1/manga/35/thumbnail",
+   "title": "One Piece Omake",
+   "url": "/manga/487f1f04-75f3-4a2e-a4af-76e615e32585",
+   "genre": [
+    "Comedia",
+    "Shounen",
+    "Japonés"
+   ],
+   "realUrl": "https://mangadex.org/title/487f1f04-75f3-4a2e-a4af-76e615e32585/one-piece-omake"
+  },
+  "chapters": {
+   "nodes": []
+  }
+ }
+}
