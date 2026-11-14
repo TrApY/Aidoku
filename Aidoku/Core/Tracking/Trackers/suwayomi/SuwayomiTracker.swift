@@ -170,7 +170,7 @@ final class SuwayomiMarkedSet: @unchecked Sendable {
     }
 
     func removeAll(withPrefix prefix: String) {
-        // pending
+        lock.withLock { values = values.filter { !$0.hasPrefix(prefix) } }
     }
 }
 
