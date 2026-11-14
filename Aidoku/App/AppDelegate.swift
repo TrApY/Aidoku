@@ -106,6 +106,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // margin per orientation from the old amount + orientation, once (reads stored values only)
+        PillarboxSettings.migrate()
         UserDefaults.standard.register(
             defaults: [
                 "History.lockHistoryTab": false,
@@ -134,6 +136,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 "Reader.pillarbox": false,
                 "Reader.pillarboxAmount": 15,
                 "Reader.pillarboxOrientation": "both",
+                PillarboxSettings.portraitKey: PillarboxSettings.defaultAmount,
+                PillarboxSettings.landscapeKey: PillarboxSettings.defaultAmount,
                 "Reader.autoScroll": false,
                 "Reader.autoScrollSpeed": 5,
                 "Reader.orientation": "device",

@@ -555,31 +555,24 @@ extension ReaderSettingsView {
             )
             SettingView(
                 setting: .init(
-                    key: "Reader.pillarboxAmount",
-                    title: NSLocalizedString("PILLARBOX_AMOUNT"),
+                    key: PillarboxSettings.portraitKey,
+                    title: NSLocalizedString("PILLARBOX_AMOUNT_PORTRAIT"),
                     requires: "Reader.pillarbox",
-                    value: .stepper(.init(minimumValue: 5, maximumValue: 95, stepValue: 5))
+                    value: .stepper(.init(minimumValue: 0, maximumValue: 95, stepValue: 5))
                 )
             )
             SettingView(
                 setting: .init(
-                    key: "Reader.pillarboxOrientation",
-                    title: NSLocalizedString("PILLARBOX_ORIENTATION"),
+                    key: PillarboxSettings.landscapeKey,
+                    title: NSLocalizedString("PILLARBOX_AMOUNT_LANDSCAPE"),
                     requires: "Reader.pillarbox",
-                    value: .select(.init(
-                        values: ["both", "portrait", "landscape"],
-                        titles: [
-                            NSLocalizedString("BOTH"),
-                            NSLocalizedString("PORTRAIT"),
-                            NSLocalizedString("LANDSCAPE")
-                        ]
-                    ))
+                    value: .stepper(.init(minimumValue: 0, maximumValue: 95, stepValue: 5))
                 )
             )
         } header: {
             Text(NSLocalizedString("WEBTOON"))
         } footer: {
-            Text(NSLocalizedString("PILLARBOX_ORIENTATION_INFO"))
+            Text(NSLocalizedString("PILLARBOX_AMOUNTS_INFO"))
         }
     }
 

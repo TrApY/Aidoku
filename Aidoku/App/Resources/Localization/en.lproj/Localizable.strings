@@ -887,3 +887,8 @@
 "DOWNLOAD_AHEAD_OFF" = "Off";
 "DOWNLOAD_AHEAD_ONE" = "1 chapter";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i chapters";
+
+// Pillarbox per orientation
+"PILLARBOX_AMOUNT_PORTRAIT" = "Portrait Margin";
+"PILLARBOX_AMOUNT_LANDSCAPE" = "Landscape Margin";
+"PILLARBOX_AMOUNTS_INFO" = "Margin (percent of the width) for each orientation. 0 turns pillarboxing off in that orientation.";

@@ -19,18 +19,35 @@ enum PillarboxSettings {
 
     /// Margin (percent of the width) for the current orientation, within 0...95.
     static func amount(isPortrait: Bool, portrait: CGFloat, landscape: CGFloat) -> CGFloat {
-        0 // pending
+        min(max(isPortrait ? portrait : landscape, 0), maximumAmount)
     }
 
     /// Fraction of the width the page keeps, or nil without pillarbox (off, or 0 for this orientation).
     static func widthFraction(enabled: Bool, isPortrait: Bool, portrait: CGFloat, landscape: CGFloat) -> CGFloat? {
-        nil // pending
+        guard enabled else { return nil }
+        let amount = amount(isPortrait: isPortrait, portrait: portrait, landscape: landscape)
+        guard amount > 0 else { return nil }
+        return (100 - amount) / 100
     }
 
     /// Turns the old `Reader.pillarboxAmount` + `Reader.pillarboxOrientation` into the two amounts, once.
-    /// Must run before the app registers its defaults (so missing keys read as missing); the old keys stay.
-    static func migrate(defaults: UserDefaults = .standard) {
-        // pending
+    /// Reads only what is stored in `domain` (registered defaults don't count as set); the old keys stay.
+    static func migrate(
+        defaults: UserDefaults = .standard,
+        domain: String? = Bundle.main.bundleIdentifier
+    ) {
+        guard !defaults.bool(forKey: migratedKey) else { return }
+        let stored = domain.flatMap { defaults.persistentDomain(forName: $0) } ?? [:]
+        // old defaults: 15, both
+        let amount = (stored["Reader.pillarboxAmount"] as? NSNumber)?.doubleValue ?? Double(defaultAmount)
+        let orientation = stored["Reader.pillarboxOrientation"] as? String ?? "both"
+        if stored[portraitKey] == nil {
+            defaults.set(orientation == "both" || orientation == "portrait" ? amount : 0, forKey: portraitKey)
+        }
+        if stored[landscapeKey] == nil {
+            defaults.set(orientation == "both" || orientation == "landscape" ? amount : 0, forKey: landscapeKey)
+        }
+        defaults.set(true, forKey: migratedKey)
     }
 
     /// New value from a settings notification (the stepper posts a Double).

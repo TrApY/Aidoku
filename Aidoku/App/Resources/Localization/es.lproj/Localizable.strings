@@ -759,3 +759,8 @@
 "DOWNLOAD_AHEAD_OFF" = "Desactivada";
 "DOWNLOAD_AHEAD_ONE" = "1 capítulo";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i capítulos";
+
+// Pillarbox per orientation
+"PILLARBOX_AMOUNT_PORTRAIT" = "Margen en vertical";
+"PILLARBOX_AMOUNT_LANDSCAPE" = "Margen en horizontal";
+"PILLARBOX_AMOUNTS_INFO" = "Margen (porcentaje del ancho) para cada orientación. Con 0 no hay pillarbox en esa orientación.";

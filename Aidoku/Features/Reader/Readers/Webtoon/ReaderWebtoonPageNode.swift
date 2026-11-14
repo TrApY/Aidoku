@@ -57,8 +57,8 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     private var currentImageRequest: ImageRequest?
 
     var pillarbox = UserDefaults.standard.bool(forKey: "Reader.pillarbox")
-    var pillarboxAmount = CGFloat(UserDefaults.standard.double(forKey: "Reader.pillarboxAmount"))
-    var pillarboxOrientation = UserDefaults.standard.string(forKey: "Reader.pillarboxOrientation")
+    var pillarboxPortrait = CGFloat(UserDefaults.standard.double(forKey: PillarboxSettings.portraitKey))
+    var pillarboxLandscape = CGFloat(UserDefaults.standard.double(forKey: PillarboxSettings.landscapeKey))
 
     static let defaultRatio: CGFloat = 1.435
 
@@ -104,13 +104,12 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
             self?.pillarbox = notification.object as? Bool ?? false
             self?.transition()
         }
-        addObserver(forName: "Reader.pillarboxAmount") { [weak self] notification in
-            guard let doubleValue = notification.object as? Double else { return }
-            self?.pillarboxAmount = CGFloat(doubleValue)
+        addObserver(forName: PillarboxSettings.portraitKey) { [weak self] notification in
+            self?.pillarboxPortrait = PillarboxSettings.value(from: notification.object, key: PillarboxSettings.portraitKey)
             self?.transition()
         }
-        addObserver(forName: "Reader.pillarboxOrientation") { [weak self] notification in
-            self?.pillarboxOrientation = notification.object as? String ?? "both"
+        addObserver(forName: PillarboxSettings.landscapeKey) { [weak self] notification in
+            self?.pillarboxLandscape = PillarboxSettings.value(from: notification.object, key: PillarboxSettings.landscapeKey)
             self?.transition()
         }
         addObserver(forName: UIApplication.didReceiveMemoryWarningNotification.rawValue) { [weak self] _ in
@@ -224,16 +223,19 @@ extension ReaderWebtoonPageNode {
         return width / image.size.width * image.size.height
     }
 
-    func isPillarboxOrientation() -> Bool {
-        pillarboxOrientation == "both"
-            || (pillarboxOrientation == "portrait" && pillarboxLayoutState.isPortrait)
-            || (pillarboxOrientation == "landscape" && !pillarboxLayoutState.isPortrait)
+    /// Width fraction for the current orientation, or nil without pillarbox.
+    func pillarboxPercent() -> CGFloat? {
+        PillarboxSettings.widthFraction(
+            enabled: pillarbox,
+            isPortrait: pillarboxLayoutState.isPortrait,
+            portrait: pillarboxPortrait,
+            landscape: pillarboxLandscape
+        )
     }
 
     override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
         if let image {
-            if pillarbox && isPillarboxOrientation() {
-                let percent = (100 - pillarboxAmount) / 100
+            if let percent = pillarboxPercent() {
                 let height = getPillarboxHeight(percent: percent, maxWidth: constrainedSize.max.width)
 
                 imageNode.style.width = ASDimensionMakeWithFraction(percent)
@@ -254,8 +256,7 @@ extension ReaderWebtoonPageNode {
             }
         } else if text != nil {
             // todo: the text node should probably adjust its size based on the text
-            if pillarbox && isPillarboxOrientation() {
-                let percent = (100 - pillarboxAmount) / 100
+            if let percent = pillarboxPercent() {
                 let ratio = percent * (ratio ?? Self.defaultRatio)
 
                 return ASRatioLayoutSpec(
@@ -269,8 +270,7 @@ extension ReaderWebtoonPageNode {
                 )
             }
         } else {
-            if pillarbox && isPillarboxOrientation() {
-                let percent = (100 - pillarboxAmount) / 100
+            if let percent = pillarboxPercent() {
                 let ratio = percent * (ratio ?? Self.defaultRatio)
 
                 return ASRatioLayoutSpec(

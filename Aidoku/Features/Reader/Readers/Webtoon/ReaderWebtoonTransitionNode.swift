@@ -12,8 +12,8 @@ class ReaderWebtoonTransitionNode: BaseObservingCellNode {
     let pillarboxLayoutState: ReaderPillarboxLayoutState
 
     var pillarbox = UserDefaults.standard.bool(forKey: "Reader.pillarbox")
-    var pillarboxAmount: CGFloat = CGFloat(UserDefaults.standard.double(forKey: "Reader.pillarboxAmount"))
-    var pillarboxOrientation = UserDefaults.standard.string(forKey: "Reader.pillarboxOrientation")
+    var pillarboxPortrait = CGFloat(UserDefaults.standard.double(forKey: PillarboxSettings.portraitKey))
+    var pillarboxLandscape = CGFloat(UserDefaults.standard.double(forKey: PillarboxSettings.landscapeKey))
 
     private lazy var transitionNode = ReaderTransitionNode(transition: transition)
 
@@ -28,26 +28,28 @@ class ReaderWebtoonTransitionNode: BaseObservingCellNode {
         addObserver(forName: "Reader.pillarbox") { [weak self] notification in
             self?.pillarbox = notification.object as? Bool ?? false
         }
-        addObserver(forName: "Reader.pillarboxAmount") { [weak self] notification in
-            guard let doubleValue = notification.object as? Double else { return }
-            self?.pillarboxAmount = CGFloat(doubleValue)
+        addObserver(forName: PillarboxSettings.portraitKey) { [weak self] notification in
+            self?.pillarboxPortrait = PillarboxSettings.value(from: notification.object, key: PillarboxSettings.portraitKey)
         }
-        addObserver(forName: "Reader.pillarboxOrientation") { [weak self] notification in
-            self?.pillarboxOrientation = notification.object as? String ?? "both"
+        addObserver(forName: PillarboxSettings.landscapeKey) { [weak self] notification in
+            self?.pillarboxLandscape = PillarboxSettings.value(from: notification.object, key: PillarboxSettings.landscapeKey)
         }
     }
 
-    func isPillarboxOrientation() -> Bool {
-        pillarboxOrientation == "both"
-            || (pillarboxOrientation == "portrait" && pillarboxLayoutState.isPortrait)
-            || (pillarboxOrientation == "landscape" && !pillarboxLayoutState.isPortrait)
+    /// Width fraction for the current orientation, or nil without pillarbox.
+    func pillarboxPercent() -> CGFloat? {
+        PillarboxSettings.widthFraction(
+            enabled: pillarbox,
+            isPortrait: pillarboxLayoutState.isPortrait,
+            portrait: pillarboxPortrait,
+            landscape: pillarboxLandscape
+        )
     }
 
     override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
         transitionNode.referenceWidth = constrainedSize.max.width
 
-        if pillarbox && isPillarboxOrientation() {
-            let percent = (100 - pillarboxAmount) / 100
+        if let percent = pillarboxPercent() {
             let height = constrainedSize.max.width * percent
 
             transitionNode.style.width = ASDimensionMakeWithFraction(percent)

@@ -33,19 +33,19 @@ import Testing
 
     // MARK: Migration
 
-    private func withDefaults(_ body: (UserDefaults) -> Void) {
+    private func withDefaults(_ body: (UserDefaults, String) -> Void) {
         let name = "PillarboxSettingsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
-        body(defaults)
+        body(defaults, name)
     }
 
     private func migrated(amount: Int?, orientation: String?) -> (portrait: Int, landscape: Int, oldKept: Bool) {
         var result = (portrait: -1, landscape: -1, oldKept: false)
-        withDefaults { defaults in
+        withDefaults { defaults, domain in
             if let amount { defaults.set(Double(amount), forKey: "Reader.pillarboxAmount") }
             if let orientation { defaults.set(orientation, forKey: "Reader.pillarboxOrientation") }
-            PillarboxSettings.migrate(defaults: defaults)
+            PillarboxSettings.migrate(defaults: defaults, domain: domain)
             result = (
                 defaults.integer(forKey: PillarboxSettings.portraitKey),
                 defaults.integer(forKey: PillarboxSettings.landscapeKey),
@@ -66,11 +66,11 @@ import Testing
     }
 
     @Test func migrationKeepsExistingValuesAndRunsOnce() {
-        withDefaults { defaults in
+        withDefaults { defaults, domain in
             defaults.set(40.0, forKey: PillarboxSettings.portraitKey)
             defaults.set(25.0, forKey: "Reader.pillarboxAmount")
             defaults.set("both", forKey: "Reader.pillarboxOrientation")
-            PillarboxSettings.migrate(defaults: defaults)
+            PillarboxSettings.migrate(defaults: defaults, domain: domain)
             #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 40) // not overwritten
             #expect(defaults.integer(forKey: PillarboxSettings.landscapeKey) == 25)
             #expect(defaults.bool(forKey: PillarboxSettings.migratedKey))
@@ -79,9 +79,9 @@ import Testing
             defaults.set(5.0, forKey: PillarboxSettings.portraitKey)
             defaults.set(60.0, forKey: "Reader.pillarboxAmount")
             defaults.removeObject(forKey: PillarboxSettings.landscapeKey)
-            PillarboxSettings.migrate(defaults: defaults)
+            PillarboxSettings.migrate(defaults: defaults, domain: domain)
             #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 5)
-            #expect(defaults.object(forKey: PillarboxSettings.landscapeKey) == nil)
+            #expect(defaults.persistentDomain(forName: domain)?[PillarboxSettings.landscapeKey] == nil)
         }
     }
 }
