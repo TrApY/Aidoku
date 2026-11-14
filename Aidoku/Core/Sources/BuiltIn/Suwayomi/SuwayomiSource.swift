@@ -67,8 +67,13 @@ actor SuwayomiSourceRunner: Runner {
 
     private var name: String
     private var server: String
-    /// Last list of server sources that could be offered (used if the server stops answering).
+    /// Last list of installed sources received from the server, unfiltered (also stored in
+    /// UserDefaults, used if the server stops answering), and when it was received.
     private var serverSourcesCache: [SuwayomiServerSource]?
+    private var serverSourcesFetchedAt: Date?
+    private var refreshingServerSources = false
+    /// «Todo» refreshes the cached source list in the background after this time.
+    private static let serverSourcesMaxAge: TimeInterval = 5 * 60
 
     /// Max time per server source when searching everywhere (shorter in tests).
     private let searchAllTimeout: TimeInterval
@@ -206,9 +211,8 @@ actor SuwayomiSourceRunner: Runner {
     ) async throws -> AidokuRunner.MangaPageResult {
         guard page == 1 else { return .init(entries: [], hasNextPage: false) }
 
-        // settings order, as the listings (falls back to the stored order if the server doesn't list them)
-        let sourceIds = (try? await selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout))?.map(\.id)
-            ?? selectedServerSourceIds()
+        // settings order, as the listings
+        let sourceIds = await serverSourcesForSearch().map(\.id)
 
         let helper = helper
         let sourceKey = sourceKey
@@ -307,9 +311,16 @@ actor SuwayomiSourceRunner: Runner {
             let result = await fetchFromOrigin(mangaId: mangaId, plan: plan)
             if result.fetchedSomething {
                 response = try await helper.request(body: Payload(variables: .init(mangaId: mangaId)))
-            } else if let error = result.error, plan.fetchManga, response.data.chapters.nodes.isEmpty {
-                // never fetched and nothing stored to fall back on
-                throw error
+            }
+            if response.data.chapters.nodes.isEmpty {
+                if needsChapters, let error = result.chaptersError {
+                    // chapters asked, none stored and the fetch failed: not the same as «no chapters»
+                    throw error
+                }
+                if !result.fetchedSomething, let error = result.mangaError {
+                    // never fetched and nothing stored to fall back on
+                    throw error
+                }
             }
         }
 
@@ -545,10 +556,62 @@ actor SuwayomiSourceRunner: Runner {
     /// Sources installed on the server that can be offered (no local source, NSFW per app setting).
     private func fetchServerSources(timeout: TimeInterval? = nil) async throws -> [SuwayomiServerSource] {
         let response: SuwayomiSourcesResponse = try await helper.request(body: SuwayomiServerSourcesPayload(), timeout: timeout)
-        let allowNsfw = SuwayomiServerSources.allowsNsfw(contentRatings: AppSettings.browse.contentRatings.get())
-        let sources = SuwayomiServerSources.available(response.data.sources.nodes, allowNsfw: allowNsfw)
-        serverSourcesCache = sources
-        return sources
+        let nodes = response.data.sources.nodes
+        serverSourcesCache = nodes
+        serverSourcesFetchedAt = Date()
+        if let data = try? JSONEncoder().encode(nodes) {
+            UserDefaults.standard.set(data, forKey: SuwayomiServerSources.snapshotKey(sourceKey: sourceKey))
+        }
+        return SuwayomiServerSources.available(nodes, allowNsfw: allowsNsfw())
+    }
+
+    private func allowsNsfw() -> Bool {
+        SuwayomiServerSources.allowsNsfw(contentRatings: AppSettings.browse.contentRatings.get())
+    }
+
+    /// The last source list received, from memory or from the copy stored after the last answer.
+    private func knownServerSources() -> [SuwayomiServerSource]? {
+        if let serverSourcesCache { return serverSourcesCache }
+        guard
+            let data = UserDefaults.standard.data(forKey: SuwayomiServerSources.snapshotKey(sourceKey: sourceKey)),
+            let nodes = try? JSONDecoder().decode([SuwayomiServerSource].self, from: data)
+        else { return nil }
+        serverSourcesCache = nodes
+        return nodes
+    }
+
+    /// Refreshes the source list without making anyone wait (once at a time, when old or never fetched).
+    private func refreshServerSourcesInBackground() {
+        if let serverSourcesFetchedAt, Date().timeIntervalSince(serverSourcesFetchedAt) < Self.serverSourcesMaxAge {
+            return
+        }
+        guard !refreshingServerSources else { return }
+        refreshingServerSources = true
+        Task {
+            _ = try? await self.fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+            self.finishRefreshingServerSources()
+        }
+    }
+
+    private func finishRefreshingServerSources() {
+        refreshingServerSources = false
+    }
+
+    /// Sources to search in «Todo», without waiting for the server when the list is already known.
+    private func serverSourcesForSearch() async -> [SuwayomiServerSource] {
+        let ids = selectedServerSourceIds()
+        guard !ids.isEmpty else { return [] }
+        if let known = knownServerSources() {
+            refreshServerSourcesInBackground()
+            return SuwayomiServerSources.searchSources(selectedIds: ids, known: known, allowNsfw: allowsNsfw())
+        }
+        do {
+            return try await selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+        } catch {
+            // never got the list: without it there's no order nor NSFW flag, so only the library
+            LogManager.logger.warn("Suwayomi server sources unknown, searching only the library: \(error)")
+            return []
+        }
     }
 
     /// Server sources chosen in the settings, in the settings order.
@@ -563,8 +626,8 @@ actor SuwayomiSourceRunner: Runner {
         do {
             sources = try await fetchServerSources(timeout: timeout)
         } catch {
-            guard let serverSourcesCache else { throw error }
-            sources = serverSourcesCache
+            guard let known = knownServerSources() else { throw error }
+            sources = SuwayomiServerSources.available(known, allowNsfw: allowsNsfw())
         }
         return SuwayomiServerSources.selected(ids: ids, from: sources)
     }
@@ -574,9 +637,10 @@ actor SuwayomiSourceRunner: Runner {
     private func fetchFromOrigin(
         mangaId: Int,
         plan: SuwayomiServerSources.RemoteFetchPlan
-    ) async -> (fetchedSomething: Bool, error: Error?) {
+    ) async -> (fetchedSomething: Bool, mangaError: Error?, chaptersError: Error?) {
         var fetchedSomething = false
-        var firstError: Error?
+        var mangaError: Error?
+        var chaptersError: Error?
         if plan.fetchManga {
             do {
                 let _: SuwayomiFetchMangaResponse = try await helper.request(
@@ -586,7 +650,7 @@ actor SuwayomiSourceRunner: Runner {
                 fetchedSomething = true
             } catch {
                 LogManager.logger.error("Suwayomi fetchManga \(mangaId) failed: \(error)")
-                firstError = error
+                mangaError = error
             }
         }
         if plan.fetchChapters {
@@ -600,10 +664,10 @@ actor SuwayomiSourceRunner: Runner {
                 // the origin has no chapters: an empty list, not an error
             } catch {
                 LogManager.logger.error("Suwayomi fetchChapters \(mangaId) failed: \(error)")
-                firstError = firstError ?? error
+                chaptersError = error
             }
         }
-        return (fetchedSomething, firstError)
+        return (fetchedSomething, mangaError, chaptersError)
     }
 
     private func updateSourceConfig(updateSourceList: Bool = false) async {

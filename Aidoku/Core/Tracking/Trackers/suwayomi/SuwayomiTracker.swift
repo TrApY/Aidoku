@@ -15,6 +15,8 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
     let isLoggedIn = true
 
     private let api: SuwayomiApi
+    /// Manga already marked in the server library during this session (sourceKey|id).
+    private let markedInLibrary = SuwayomiMarkedSet()
 
     init(api: SuwayomiApi = .init()) {
         self.api = api
@@ -134,10 +136,14 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
 }
 
 extension SuwayomiTracker {
-    /// Idempotent and best effort: a failure never breaks tracking.
+    /// Idempotent and best effort: a failure never breaks tracking. Only once per manga and session
+    /// (update runs on every reading progress); a failed attempt is retried next time.
     private func addToServerLibrary(sourceKey: String, seriesId: String) async {
+        let markKey = "\(sourceKey)\(idSeparator)\(seriesId)"
+        guard !markedInLibrary.contains(markKey) else { return }
         do {
             try await api.addToLibrary(sourceKey: sourceKey, seriesId: seriesId)
+            markedInLibrary.insert(markKey)
         } catch {
             LogManager.logger.error("Unable to add suwayomi manga \(seriesId) to the server library: \(error)")
         }
@@ -147,6 +153,20 @@ extension SuwayomiTracker {
         let split = id.split(separator: idSeparator, maxSplits: 2).map(String.init)
         guard split.count == 2 else { throw SuwayomiTrackerError.invalidId }
         return (sourceKey: split[0], seriesId: split[1])
+    }
+}
+
+/// Thread-safe set of strings.
+final class SuwayomiMarkedSet: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values = Set<String>()
+
+    func contains(_ value: String) -> Bool {
+        lock.withLock { values.contains(value) }
+    }
+
+    func insert(_ value: String) {
+        lock.withLock { _ = values.insert(value) }
     }
 }
 

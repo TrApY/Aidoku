@@ -268,7 +268,7 @@ enum SuwayomiServerSources {
         known: [SuwayomiServerSource],
         allowNsfw: Bool
     ) -> [SuwayomiServerSource] {
-        [] // pending
+        selected(ids: selectedIds, from: available(known, allowNsfw: allowNsfw))
     }
 
     /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",
@@ -334,7 +334,8 @@ enum SuwayomiServerSources {
         return .init(variables: .init(source: sourceId, type: .popular, page: page, query: nil))
     }
 
-    /// The server source chosen in the "search in" filter, or nil for the server library.
+    /// The raw value of the "search in" filter: a server source id, `searchInLibraryId`,
+    /// or nil when absent or empty («Todo»).
     static func searchSourceId(filters: [AidokuRunner.FilterValue]) -> String? {
         for filter in filters {
             if case let .select(id, value) = filter, id == searchInFilterId, !value.isEmpty {
@@ -432,13 +433,6 @@ enum SuwayomiServerSources {
     /// First listing, always present: the server library (what the source showed before).
     static func libraryListing() -> AidokuRunner.Listing {
         .init(id: libraryListingId, name: NSLocalizedString("LIBRARY"), kind: .default)
-    }
-
-    /// The server source chosen in the "search in" filter if it's still selected in the settings,
-    /// or nil for the server library.
-    static func searchSourceId(filters: [AidokuRunner.FilterValue], selectedIds: [String]) -> String? {
-        guard let id = searchSourceId(filters: filters), selectedIds.contains(id) else { return nil }
-        return id
     }
 
     struct RemoteFetchPlan: Equatable, Sendable {
