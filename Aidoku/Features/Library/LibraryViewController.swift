@@ -1624,6 +1624,8 @@ extension LibraryViewController {
         let chapters: [Chapter]
         let trackItems: [TrackItem]
         let categories: [String]
+        /// «Descarga adelantada» setting, removed with the manga.
+        let downloadAhead: Int
     }
 
     @discardableResult
@@ -1652,7 +1654,8 @@ extension LibraryViewController {
                         manga: manga,
                         chapters: chapters,
                         trackItems: trackItems,
-                        categories: categories
+                        categories: categories,
+                        downloadAhead: DownloadAheadSetting.get(for: $0)
                     )
                 }
             }
@@ -1671,7 +1674,8 @@ extension LibraryViewController {
                             manga: snapshot.manga,
                             chapters: snapshot.chapters,
                             trackItems: snapshot.trackItems,
-                            categories: snapshot.categories
+                            categories: snapshot.categories,
+                            downloadAhead: snapshot.downloadAhead
                         )
                     }
 

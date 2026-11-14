@@ -495,10 +495,7 @@ actor TrackerManager {
                 }
             )
             // «descarga adelantada»: chapters read on another device move the window too
-            let mangaId = manga.identifier
-            Task {
-                await downloadManager.ensureAheadDownloaded(mangaId: mangaId, onlyOnWifi: onlyOnWifi)
-            }
+            await downloadManager.ensureAheadDownloaded(mangaId: manga.identifier, onlyOnWifi: onlyOnWifi)
         }
         for (chapterKey, page) in progressed {
             NotificationCenter.default.post(

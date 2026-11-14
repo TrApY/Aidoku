@@ -31,11 +31,14 @@ enum DownloadAheadSetting {
         max(0, UserDefaults.standard.integer(forKey: key(for: manga)))
     }
 
-    /// Carries the setting over when a manga is migrated to another source (like the reading mode).
+    /// Carries the setting over when a manga is migrated to another source (like the reading mode),
+    /// without overwriting a value the destination already has. Call once the migration succeeded.
     static func migrate(from oldManga: MangaIdentifier, to newManga: MangaIdentifier, copy: Bool) {
         let value = get(for: oldManga)
         guard value > 0, oldManga != newManga else { return }
-        set(value, for: newManga)
+        if get(for: newManga) == 0 {
+            set(value, for: newManga)
+        }
         if !copy {
             set(0, for: oldManga)
         }
@@ -59,7 +62,7 @@ enum DownloadAheadPlanner {
     }
 
     /// Downloaded and queued chapter keys from their download status. A failed chapter is missing (queued
-    /// again) unless this trigger already queued it once (`retried`): at most one retry per trigger (pending).
+    /// again) unless this trigger already queued it once (`retried`): at most one retry per trigger.
     static func split(
         statuses: [(key: String, status: DownloadStatus)],
         retried: Set<String>
@@ -70,7 +73,11 @@ enum DownloadAheadPlanner {
             switch state(for: status) {
                 case .downloaded: downloaded.insert(key)
                 case .queued: queued.insert(key)
-                case .missing: break
+                case .missing:
+                    // failed again after being queued by this trigger: leave it for the next one
+                    if status == .failed && retried.contains(key) {
+                        queued.insert(key)
+                    }
             }
         }
         return (downloaded, queued)

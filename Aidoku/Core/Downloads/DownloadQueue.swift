@@ -46,15 +46,16 @@ actor DownloadQueue {
         self.stateKey = stateKey
     }
 
-    /// The task of a source, created if needed (pending).
+    /// The task of a source, created if needed. Stored before any suspension point, so a reentrant call
+    /// can't create a second one.
     @discardableResult
-    func makeTaskIfNeeded(sourceKey: String) async -> DownloadTask {
-        if tasks[sourceKey] == nil {
-            let task = DownloadTask(id: sourceKey, cache: cache, downloads: queue[sourceKey] ?? [])
-            await task.setDelegate(delegate: self)
-            tasks[sourceKey] = task
+    func makeTaskIfNeeded(sourceKey: String) -> DownloadTask {
+        if let task = tasks[sourceKey] {
+            return task
         }
-        return tasks[sourceKey]!
+        let task = DownloadTask(id: sourceKey, cache: cache, downloads: queue[sourceKey] ?? [], delegate: self)
+        tasks[sourceKey] = task
+        return task
     }
 
     /// Chapter keys the source's task holds (nil without a task). For tests.
@@ -73,6 +74,7 @@ actor DownloadQueue {
 
     func start() async {
         paused = false
+        userPaused = false
 
         guard !queue.isEmpty else { return }
 
@@ -103,18 +105,14 @@ actor DownloadQueue {
     }
 
     private func initAndResumeTasks() async {
-        for (sourceKey, downloads) in queue {
-            if tasks[sourceKey] == nil {
-                let task = DownloadTask(id: sourceKey, cache: cache, downloads: downloads)
-                await task.setDelegate(delegate: self)
-                tasks[sourceKey] = task
-            }
-            await tasks[sourceKey]?.resume()
+        for sourceKey in queue.keys {
+            await makeTaskIfNeeded(sourceKey: sourceKey).resume()
         }
     }
 
     func resume() async {
         paused = false
+        userPaused = false
 
         if #available(iOS 26.0, *), AppSettings.downloads.background.get() {
             if bgTask == nil {
@@ -123,10 +121,8 @@ actor DownloadQueue {
         }
 
         // downloads added while paused (without autoStart) for a source with no task yet
-        for (sourceKey, downloads) in queue where tasks[sourceKey] == nil {
-            let task = DownloadTask(id: sourceKey, cache: cache, downloads: downloads)
-            await task.setDelegate(delegate: self)
-            tasks[sourceKey] = task
+        for sourceKey in queue.keys {
+            makeTaskIfNeeded(sourceKey: sourceKey)
         }
 
         await withTaskGroup(of: Void.self) { group in
@@ -138,6 +134,9 @@ actor DownloadQueue {
 
     func pause(byUser: Bool = false) async {
         paused = true
+        if byUser {
+            userPaused = true
+        }
 
         if #available(iOS 26.0, *) {
             if let task = bgTask as? BGContinuedProcessingTask {
@@ -184,12 +183,14 @@ actor DownloadQueue {
                 queue[manga.sourceKey] = [download]
             } else {
                 queue[manga.sourceKey]?.append(download)
-                await tasks[manga.sourceKey]?.add(download: download)
             }
+            // also when the source had nothing queued: its task may still exist (everything cancelled)
+            await tasks[manga.sourceKey]?.add(download: download)
         }
         totalDownloads += downloads.count
         bgTask?.progress.totalUnitCount = Int64(totalDownloads)
-        if autoStart != .never {
+        // checked right before starting, inside the queue: no pause can slip in between
+        if autoStart == .always || (autoStart == .unlessUserPaused && !userPaused) {
             await start()
         }
         saveQueueState()
@@ -282,7 +283,7 @@ actor DownloadQueue {
     }
 
     func isPausedByUser() -> Bool {
-        paused // pending
+        userPaused
     }
 
     func hasQueuedDownloads() -> Bool {
@@ -316,7 +317,7 @@ extension DownloadQueue {
 
             task.expirationHandler = {
                 Task {
-                    await DownloadManager.shared.pauseDownloads()
+                    await DownloadManager.shared.pauseDownloads(byUser: false) // system pause: automatic downloads may start it again
                     await self.setBackgroundTask(nil)
                 }
                 task.setTaskCompleted(success: false)

@@ -230,7 +230,7 @@ extension MangaManager {
         await UIApplication.shared.appDelegate?.hideLoadingIndicator()
     }
 
-    /// - downloadAhead: the manga's «descarga adelantada» setting when it was removed (pending).
+    /// - downloadAhead: the manga's «descarga adelantada» setting when it was removed (undo).
     func restoreToLibrary(
         manga: Manga,
         chapters: [Chapter],
@@ -301,6 +301,9 @@ extension MangaManager {
                 LogManager.logger.error(
                     "MangaManager.restoreToLibrary: \(error.localizedDescription)")
             }
+        }
+        if downloadAhead > 0 {
+            DownloadAheadSetting.set(downloadAhead, for: newManga.identifier)
         }
     }
 
@@ -871,8 +874,6 @@ extension MangaManager {
                 UserDefaults.standard.removeObject(forKey: "Reader.readingMode.\(oldManga.identifier)")
             }
         }
-        DownloadAheadSetting.migrate(from: oldManga.identifier, to: newManga.identifier, copy: copy)
-
         // add new item to library if copying
         if copy {
             let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
@@ -1046,6 +1047,10 @@ extension MangaManager {
                 LogManager.logger.error("Error migrating manga \(oldManga.key): \(error)")
                 return nil
             }
+        }
+
+        if result != nil {
+            DownloadAheadSetting.migrate(from: oldManga.identifier, to: newManga.identifier, copy: copy)
         }
 
         if copy && result != nil {
