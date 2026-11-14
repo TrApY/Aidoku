@@ -31,8 +31,14 @@ enum DownloadAheadSetting {
         max(0, UserDefaults.standard.integer(forKey: key(for: manga)))
     }
 
-    /// Carries the setting over when a manga is migrated to another source (pending).
+    /// Carries the setting over when a manga is migrated to another source (like the reading mode).
     static func migrate(from oldManga: MangaIdentifier, to newManga: MangaIdentifier, copy: Bool) {
+        let value = get(for: oldManga)
+        guard value > 0, oldManga != newManga else { return }
+        set(value, for: newManga)
+        if !copy {
+            set(0, for: oldManga)
+        }
     }
 
     static func set(_ value: Int, for manga: MangaIdentifier) {
@@ -55,8 +61,9 @@ enum DownloadAheadPlanner {
     static func state(for status: DownloadStatus) -> ChapterState {
         switch status {
             case .finished: .downloaded
-            case .none: .missing
-            default: .queued // pending
+            case .queued, .downloading, .paused: .queued
+            // a failed download is no longer in the queue (DownloadQueue.downloadFailed): queue it again
+            case .failed, .cancelled, .none: .missing
         }
     }
 
@@ -138,20 +145,24 @@ private actor DownloadAheadRuns {
 extension DownloadManager {
     /// Queues what's missing of the manga's «descarga adelantada» window, using the stored chapters,
     /// reading history and chapter filters of the (library) manga. Returns the queued chapters.
-    /// Without Wi-Fi, when downloads require it, it queues nothing and doesn't ask.
+    /// Without Wi-Fi, when downloads require it, it queues nothing and doesn't ask. A paused queue
+    /// stays paused. A failed chapter is queued again, at most once per trigger.
     @discardableResult
     func ensureAheadDownloaded(
         manga: AidokuRunner.Manga,
         connection: NetworkDataType? = nil
     ) async -> [AidokuRunner.Chapter] {
         let mangaId = manga.identifier
-        guard
-            DownloadAheadSetting.get(for: mangaId) > 0,
-            manga.sourceKey != LocalSourceRunner.sourceKey,
+        let canQueue = {
             DownloadAheadPlanner.canQueue(
                 onlyOnWifi: AppSettings.downloads.downloadOnlyOnWifi.get(),
                 connection: connection ?? Reachability.getConnectionType()
             )
+        }
+        guard
+            DownloadAheadSetting.get(for: mangaId) > 0,
+            manga.sourceKey != LocalSourceRunner.sourceKey,
+            canQueue()
         else {
             return []
         }
@@ -159,7 +170,10 @@ extension DownloadManager {
         let runKey = DownloadAheadSetting.key(for: mangaId)
         guard await DownloadAheadRuns.shared.begin(runKey) else { return [] }
         var queuedNow: [AidokuRunner.Chapter] = []
+        var retried = Set<String>()
         repeat {
+            // a pending trigger may come after the connection changed
+            guard canQueue() else { continue }
             let target = DownloadAheadSetting.get(for: mangaId)
             // stored in source order (newest first): reversed is the reading order downloadUnread uses
             let chapters = await CoreDataManager.shared.getChapters(mangaId: mangaId).reversed().map { $0.toNew() }
@@ -172,11 +186,15 @@ extension DownloadManager {
             var queued = Set<String>()
             for chapter in chapters {
                 let identifier = ChapterIdentifier(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key)
-                switch getDownloadStatus(for: identifier) {
-                    case .finished: downloaded.insert(chapter.key)
-                    case .none: break
-                    // queued, or failed and waiting in the queue for a manual retry
-                    default: queued.insert(chapter.key)
+                let status = getDownloadStatus(for: identifier)
+                switch DownloadAheadPlanner.state(for: status) {
+                    case .downloaded: downloaded.insert(chapter.key)
+                    case .queued: queued.insert(chapter.key)
+                    case .missing:
+                        // failed again after being queued by this trigger: leave it for the next one
+                        if status == .failed && retried.contains(chapter.key) {
+                            queued.insert(chapter.key)
+                        }
                 }
             }
             let toQueue = DownloadAheadPlanner.chaptersToQueue(
@@ -189,7 +207,9 @@ extension DownloadManager {
                 scanlators: filters.scanlators ?? []
             )
             if !toQueue.isEmpty {
-                await download(manga: manga, chapters: toQueue)
+                retried.formUnion(toQueue.map(\.key))
+                // automatic: don't resume a queue the user paused
+                await download(manga: manga, chapters: toQueue, autoStart: !(await isQueuePausedByUser()))
                 queuedNow += toQueue
             }
         } while await DownloadAheadRuns.shared.end(runKey)

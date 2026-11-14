@@ -197,6 +197,7 @@ extension MangaManager {
                 LogManager.logger.error("Failed to remove manga: \(error)")
             }
         }
+        DownloadAheadSetting.set(0, for: mangaId)
         await MainActor.run {
             NotificationCenter.default.post(name: .removeFromLibrary, object: mangaId)
             NotificationCenter.default.post(name: .updateLibrary, object: nil)
@@ -215,6 +216,9 @@ extension MangaManager {
             } catch {
                 LogManager.logger.error("Failed to remove multiple manga: \(error)")
             }
+        }
+        for mangaId in mangaIds {
+            DownloadAheadSetting.set(0, for: mangaId)
         }
         await MainActor.run {
             for id in mangaIds {
@@ -865,6 +869,7 @@ extension MangaManager {
                 UserDefaults.standard.removeObject(forKey: "Reader.readingMode.\(oldManga.identifier)")
             }
         }
+        DownloadAheadSetting.migrate(from: oldManga.identifier, to: newManga.identifier, copy: copy)
 
         // add new item to library if copying
         if copy {

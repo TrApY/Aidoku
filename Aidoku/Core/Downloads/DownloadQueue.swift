@@ -89,6 +89,13 @@ actor DownloadQueue {
             }
         }
 
+        // downloads added while paused (without autoStart) for a source with no task yet
+        for (sourceKey, downloads) in queue where tasks[sourceKey] == nil {
+            let task = DownloadTask(id: sourceKey, cache: cache, downloads: downloads)
+            await task.setDelegate(delegate: self)
+            tasks[sourceKey] = task
+        }
+
         await withTaskGroup(of: Void.self) { group in
             for task in tasks.values {
                 group.addTask { await task.resume() }
