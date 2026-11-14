@@ -17,11 +17,15 @@ protocol ReadPositionTimer {
 /// Runs an action after a delay. Injectable so tests can drive the clock.
 @MainActor
 protocol ReadPositionScheduler {
+    /// Seconds on a monotonic clock.
+    var now: TimeInterval { get }
     func schedule(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> ReadPositionTimer
 }
 
 /// Main-queue scheduler used by the reader.
 struct MainQueueReadPositionScheduler: ReadPositionScheduler {
+    var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+
     private final class Timer: ReadPositionTimer {
         let item: DispatchWorkItem
         init(item: DispatchWorkItem) { self.item = item }
@@ -37,17 +41,28 @@ struct MainQueueReadPositionScheduler: ReadPositionScheduler {
     }
 }
 
+/// A position that knows which page (of which chapter) it is.
+protocol ReadPositionKeyed {
+    var pageKey: String { get }
+}
+
 /// Debounces read position saves. `Position` carries everything a save needs (chapter, page...),
 /// so a save always writes the chapter it was scheduled for.
 @MainActor
-final class ReadPositionSaver<Position> {
+final class ReadPositionSaver<Position: ReadPositionKeyed> {
     static var localDelay: TimeInterval { 2 }
     static var trackerDelay: TimeInterval { 10 }
+    /// Longest wait while pages keep changing.
+    static var localMaxWait: TimeInterval { 5 }
+    static var trackerMaxWait: TimeInterval { 20 }
 
     private let scheduler: ReadPositionScheduler
     private let isEnabled: () -> Bool
-    private let saveLocal: (Position) -> Void
-    private let saveTracker: (Position) -> Void
+    private let saveLocal: (Position, Int) -> Void
+    private let saveTracker: (Position, Int) -> Void
+
+    /// Bumped when pending saves are dropped: a delayed save already running checks it before writing.
+    private(set) var generation = 0
 
     private var localTimer: ReadPositionTimer?
     private var trackerTimer: ReadPositionTimer?
@@ -56,13 +71,14 @@ final class ReadPositionSaver<Position> {
     private(set) var pending: Position?
 
     /// - isEnabled: false (incognito) schedules nothing.
-    /// - saveLocal: progress only (no reading session, no tracker), ~2 s after the last change.
+    /// - saveLocal: progress only (no reading session, no tracker), ~2 s after the last change. Gets the
+    ///   generation to check with `isCurrent` right before writing.
     /// - saveTracker: page trackers, ~10 s after the last change.
     init(
         scheduler: ReadPositionScheduler? = nil,
         isEnabled: @escaping () -> Bool,
-        saveLocal: @escaping (Position) -> Void,
-        saveTracker: @escaping (Position) -> Void
+        saveLocal: @escaping (Position, Int) -> Void,
+        saveTracker: @escaping (Position, Int) -> Void
     ) {
         self.scheduler = scheduler ?? MainQueueReadPositionScheduler()
         self.isEnabled = isEnabled
@@ -82,7 +98,7 @@ final class ReadPositionSaver<Position> {
             self.localTimer = nil
             guard let position = self.pendingLocal else { return }
             self.pendingLocal = nil
-            self.saveLocal(position)
+            self.saveLocal(position, self.generation)
         }
 
         trackerTimer?.cancel()
@@ -91,25 +107,32 @@ final class ReadPositionSaver<Position> {
             self.trackerTimer = nil
             guard let position = self.pending else { return }
             self.pending = nil
-            self.saveTracker(position)
+            self.saveTracker(position, self.generation)
         }
+    }
+
+    /// A chapter was loaded: its first page is where reading starts, not a change (pending).
+    func chapterOpened() {
     }
 
     /// Drops what's pending (leaving the reader, changing chapter): the caller saves right away.
     func cancel() {
-        flush()
-    }
-
-    /// Cancels the delayed saves and returns the pending position (the caller saves it now).
-    @discardableResult
-    func flush() -> Position? {
         localTimer?.cancel()
         trackerTimer?.cancel()
         localTimer = nil
         trackerTimer = nil
         pendingLocal = nil
-        let position = pending
         pending = nil
-        return position
+    }
+
+    /// For an immediate save (scene deactivating, going to the background): drops what's pending and
+    /// tells whether this page still needs saving (false: already saved and sent, e.g. a second notice) (pending).
+    func claimImmediateSave(pageKey: String) -> Bool {
+        cancel()
+        return true
+    }
+
+    func isCurrent(_ generation: Int) -> Bool {
+        true // pending
     }
 }

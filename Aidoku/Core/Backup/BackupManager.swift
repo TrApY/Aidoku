@@ -671,31 +671,47 @@ extension BackupManager {
             }
         }
 
-        var needsMigrate = false
+        let written = Self.applySettings(
+            settings.mapValues { $0.toRaw() },
+            sourceKeyPrefixes: sourceKeyPrefixes,
+            onlySources: sourceKeys != nil
+        )
 
-        for (key, value) in settings {
-            let hasAllowedPrefix = (sourceKeys == nil && Self.allowedSettingsPrefixes.contains { key.hasPrefix($0) })
-                || sourceKeyPrefixes.contains { key.hasPrefix($0) }
-            guard
-                hasAllowedPrefix,
-                !Self.excludedSettings.contains(key),
-                !Self.excludedSettingsPrefixes.contains(where: { key.hasPrefix($0) })
-            else {
-                continue
-            }
-            UserDefaults.standard.set(value.toRaw(), forKey: key)
-            if AppDelegate.legacySettingKeys.contains(key) {
-                needsMigrate = true
-            }
-        }
-
-        if needsMigrate {
+        if !written.isDisjoint(with: AppDelegate.legacySettingKeys) {
             await MainActor.run {
                 UIApplication.shared.appDelegate?.migrateSettings()
             }
         }
-        // a backup from before the pillarbox margin per orientation
-        PillarboxSettings.restoredFromBackup(keys: Set(settings.keys))
+    }
+
+    /// Writes the backup settings that may be restored and returns their keys. Then migrates the pillarbox
+    /// margins if an old backup brought the old pillarbox keys.
+    /// - onlySources: only settings of the given sources (restoring missing sources afterwards).
+    @discardableResult
+    nonisolated static func applySettings(
+        _ settings: [String: Any?],
+        sourceKeyPrefixes: [String],
+        onlySources: Bool,
+        defaults: UserDefaults = .standard,
+        domain: String? = Bundle.main.bundleIdentifier
+    ) -> Set<String> {
+        var written = Set<String>()
+        for (key, value) in settings {
+            let hasAllowedPrefix = (!onlySources && allowedSettingsPrefixes.contains { key.hasPrefix($0) })
+                || sourceKeyPrefixes.contains { key.hasPrefix($0) }
+            guard
+                hasAllowedPrefix,
+                !excludedSettings.contains(key),
+                !excludedSettingsPrefixes.contains(where: { key.hasPrefix($0) })
+            else {
+                continue
+            }
+            defaults.set(value ?? nil, forKey: key)
+            written.insert(key)
+        }
+        // a backup from before the pillarbox margin per orientation (pending: all the backup's keys)
+        PillarboxSettings.restoredFromBackup(keys: Set(settings.keys), defaults: defaults, domain: domain)
+        return written
     }
 
     private func confirmExternalSourceRestore(keys: Set<String>) async -> Bool {

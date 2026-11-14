@@ -49,18 +49,24 @@ class ReaderViewController: BaseObservingViewController {
     private var sessionLastInteraction: Date?
 
     /// What a delayed save of the reading position needs.
-    private struct ReadPosition {
+    private struct ReadPosition: ReadPositionKeyed {
         let chapter: AidokuRunner.Chapter
         let page: Int
         let totalPages: Int
         let scrollPosition: Double?
+
+        var pageKey: String { Self.pageKey(chapter: chapter, page: page) }
+
+        static func pageKey(chapter: AidokuRunner.Chapter, page: Int) -> String {
+            "\(chapter.key)#\(page)"
+        }
     }
 
     /// Saves the page while reading (locally after ~2 s, page trackers after ~10 s), so it isn't lost
     /// if the app is killed without leaving the reader.
     private lazy var readPositionSaver = ReadPositionSaver<ReadPosition>(
         isEnabled: { !AppSettings.general.incognitoMode.get() },
-        saveLocal: { [weak self] position in
+        saveLocal: { [weak self] position, generation in
             Task {
                 await self?.updateReadPosition(
                     currentPage: position.page,
@@ -68,13 +74,14 @@ class ReaderViewController: BaseObservingViewController {
                     chapter: position.chapter,
                     scrollPosition: position.scrollPosition,
                     updateTrackers: false,
-                    saveSession: false
+                    saveSession: false,
+                    generation: generation
                 )
             }
         },
-        saveTracker: { [weak self] position in
+        saveTracker: { [weak self] position, generation in
             Task {
-                await self?.updateTrackerProgress(page: position.page, chapter: position.chapter)
+                await self?.updateTrackerProgress(page: position.page, chapter: position.chapter, generation: generation)
             }
         }
     )
@@ -527,18 +534,25 @@ extension ReaderViewController {
     }
 
     /// Saves the position now (local + page trackers, awaited), even if the app goes to the background.
+    /// Deactivating and then going to the background save once: the second notice finds the page saved.
     private func saveReadPositionNow() {
-        readPositionSaver.flush()
+        let page = currentPage
+        let chapter = chapter
+        let needsSave = readPositionSaver.claimImmediateSave(pageKey: ReadPosition.pageKey(chapter: chapter, page: page))
+        let needsSession = sessionStartDate != nil && !AppSettings.general.incognitoMode.get()
+        guard needsSave || needsSession else { return }
         var backgroundTask = UIBackgroundTaskIdentifier.invalid
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Reader.saveReadPosition") {
             UIApplication.shared.endBackgroundTask(backgroundTask)
             backgroundTask = .invalid
         }
-        let page = currentPage
-        let chapter = chapter
         Task {
-            await updateReadPosition(currentPage: page, chapter: chapter, updateTrackers: false)
-            await updateTrackerProgress(page: page, chapter: chapter)
+            if needsSave {
+                await updateReadPosition(currentPage: page, chapter: chapter, updateTrackers: false)
+                await updateTrackerProgress(page: page, chapter: chapter)
+            } else {
+                await saveReadingSession(chapter: chapter)
+            }
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid
@@ -547,13 +561,15 @@ extension ReaderViewController {
     }
 
     /// Sends the page to the page trackers, if the chapter has history and isn't completed.
-    private func updateTrackerProgress(page: Int, chapter: AidokuRunner.Chapter) async {
+    /// - generation: for a delayed update, dropped if the saver moved on meanwhile.
+    private func updateTrackerProgress(page: Int, chapter: AidokuRunner.Chapter, generation: Int? = nil) async {
         guard !AppSettings.general.incognitoMode.get(), page >= 1 else { return }
         let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
         let (completed, progress) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
             CoreDataManager.shared.getProgress(chapterId: chapterId, context: context)
         }
         guard !completed, progress != nil else { return }
+        if let generation, !readPositionSaver.isCurrent(generation) { return }
         await TrackerManager.shared.setProgress(
             mangaId: chapterId.mangaIdentifier,
             chapter: chapter,
@@ -569,7 +585,8 @@ extension ReaderViewController {
         chapter: AidokuRunner.Chapter? = nil,
         scrollPosition: Double? = nil,
         updateTrackers: Bool = true,
-        saveSession: Bool = true
+        saveSession: Bool = true,
+        generation: Int? = nil
     ) async {
         let effectiveTotalPages = totalPages ?? toolbarView.totalPages ?? 0
         let effectiveCurrentPage = currentPage ?? self.currentPage
@@ -598,6 +615,11 @@ extension ReaderViewController {
             return
         }
 
+        // a delayed save that started before the position was saved right away (or the chapter changed)
+        if let generation, !readPositionSaver.isCurrent(generation) {
+            return
+        }
+
         await HistoryManager.shared.setProgress(
             chapterId: chapterId,
             chapter: chapter,
@@ -614,6 +636,8 @@ extension ReaderViewController {
 
     private func saveReadingSession(chapter: AidokuRunner.Chapter? = nil) async {
         guard let sessionStartDate else { return }
+        // cleared before awaiting, so a second call meanwhile (deactivate + background) can't save it again
+        self.sessionStartDate = nil
         let pagesRead = sessionReadPages.count
         if pagesRead > 0 && sessionLastInteraction != nil {
             let chapter = chapter ?? self.chapter
@@ -622,7 +646,6 @@ extension ReaderViewController {
                 data: .init(startDate: sessionStartDate, endDate: .now, pagesRead: pagesRead)
             )
         }
-        self.sessionStartDate = nil
     }
 
     func loadChapterList() async {
@@ -658,6 +681,8 @@ extension ReaderViewController {
                 currentPage = -1
             }
         }
+        // the page it opens at is not a change: nothing is saved until the user turns a page
+        readPositionSaver.chapterOpened()
         reader?.setChapter(chapter, startPage: currentPage)
     }
 

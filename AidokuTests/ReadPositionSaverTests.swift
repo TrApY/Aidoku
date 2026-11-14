@@ -29,32 +29,37 @@ private final class FakeScheduler: ReadPositionScheduler {
 
     func advance(by seconds: TimeInterval) {
         let end = now + seconds
-        while let next = items.filter({ !$0.timer.cancelled && $0.fire <= end }).min(by: { ($0.fire, $0.order) < ($1.fire, $1.order) }) {
+        while let next = items.filter({ !$0.timer.cancelled && $0.fire <= end + 0.000_001 }).min(by: { ($0.fire, $0.order) < ($1.fire, $1.order) }) {
             items.removeAll { $0.timer === next.timer }
-            now = next.fire
+            now = max(now, next.fire)
             next.action()
         }
         now = end
     }
 }
 
-private struct Position: Equatable {
+private struct Position: Equatable, ReadPositionKeyed {
     let chapter: String
     let page: Int
+    var pageKey: String { "\(chapter)#\(page)" }
 }
 
 @MainActor
 private final class Harness {
     let scheduler = FakeScheduler()
     var enabled = true
-    var local: [(Position, TimeInterval)] = []
-    var tracker: [(Position, TimeInterval)] = []
+    var local: [(position: Position, at: TimeInterval, generation: Int)] = []
+    var tracker: [(position: Position, at: TimeInterval, generation: Int)] = []
     lazy var saver = ReadPositionSaver<Position>(
         scheduler: scheduler,
         isEnabled: { [unowned self] in self.enabled },
-        saveLocal: { [unowned self] in self.local.append(($0, self.scheduler.now)) },
-        saveTracker: { [unowned self] in self.tracker.append(($0, self.scheduler.now)) }
+        saveLocal: { [unowned self] in self.local.append(($0, self.scheduler.now, $1)) },
+        saveTracker: { [unowned self] in self.tracker.append(($0, self.scheduler.now, $1)) }
     )
+
+    func turn(_ page: Int, chapter: String = "c1") {
+        saver.pageChanged(.init(chapter: chapter, page: page))
+    }
 }
 
 @MainActor
@@ -62,78 +67,141 @@ struct ReadPositionSaverTests {
     @Test func changesInARowGiveOneSaveOfTheLastPage() {
         let h = Harness()
         for page in 1...5 {
-            h.saver.pageChanged(.init(chapter: "c1", page: page))
+            h.turn(page)
             h.scheduler.advance(by: 0.2) // 5 changes in 1 s
         }
         h.scheduler.advance(by: 30)
-        #expect(h.local.map(\.0) == [.init(chapter: "c1", page: 5)])
-        #expect(h.tracker.map(\.0) == [.init(chapter: "c1", page: 5)])
+        #expect(h.local.map(\.position) == [.init(chapter: "c1", page: 5)])
+        #expect(h.tracker.map(\.position) == [.init(chapter: "c1", page: 5)])
     }
 
     @Test func localSaveTwoSecondsAfterTheLastChange() {
         let h = Harness()
-        h.saver.pageChanged(.init(chapter: "c1", page: 3))
+        h.turn(3)
         h.scheduler.advance(by: 1.9)
         #expect(h.local.isEmpty)
         h.scheduler.advance(by: 0.2)
         #expect(h.local.count == 1)
-        #expect(abs((h.local.first?.1 ?? 0) - 2) < 0.001)
+        #expect(abs((h.local.first?.at ?? 0) - 2) < 0.001)
         #expect(h.tracker.isEmpty) // the tracker waits longer
-        #expect(h.saver.pending == .init(chapter: "c1", page: 3)) // still pending for the tracker
     }
 
     @Test func trackerTenSecondsAfterTheLastChange() {
         let h = Harness()
-        h.saver.pageChanged(.init(chapter: "c1", page: 3))
+        h.turn(3)
         h.scheduler.advance(by: 6)
-        h.saver.pageChanged(.init(chapter: "c1", page: 4)) // restarts both delays
+        h.turn(4) // restarts both delays
         h.scheduler.advance(by: 9.9)
         #expect(h.tracker.isEmpty)
         h.scheduler.advance(by: 0.2)
-        #expect(h.tracker.map(\.0) == [.init(chapter: "c1", page: 4)])
-        #expect(abs((h.tracker.first?.1 ?? 0) - 16) < 0.001)
-        // the local save ran for each burst (page 3 at 2 s, page 4 at 8 s)
-        #expect(h.local.map(\.0.page) == [3, 4])
-        #expect(h.saver.pending == nil)
+        #expect(h.tracker.map(\.position) == [.init(chapter: "c1", page: 4)])
+        #expect(abs((h.tracker.first?.at ?? 0) - 16) < 0.001)
+        #expect(h.local.map(\.position.page) == [3, 4])
+    }
+
+    @Test func readingNonStopStillSaves() {
+        let h = Harness()
+        // a page every second for 40 s: the delays never run out, the maximum waits do
+        for page in 1...40 {
+            h.turn(page)
+            h.scheduler.advance(by: 1)
+        }
+        #expect(h.local.count >= 7)
+        let localTimes = [0] + h.local.map(\.at)
+        #expect(zip(localTimes, localTimes.dropFirst()).allSatisfy { $1 - $0 <= 5.001 })
+        #expect(h.tracker.count >= 2)
+        let trackerTimes = [0] + h.tracker.map(\.at)
+        #expect(zip(trackerTimes, trackerTimes.dropFirst()).allSatisfy { $1 - $0 <= 20.001 })
+        // what's saved is the page shown at that moment
+        #expect(h.local.allSatisfy { Double($0.position.page) >= $0.at - 1 })
+    }
+
+    @Test func theOpeningPageIsNotSaved() {
+        let h = Harness()
+        h.saver.chapterOpened()
+        h.turn(5) // the reader reports where it opened
+        h.scheduler.advance(by: 30)
+        h.turn(5) // same page again (scrolling within it)
+        h.scheduler.advance(by: 30)
+        #expect(h.local.isEmpty)
+        #expect(h.tracker.isEmpty)
+        // nothing to save when leaving the app either
+        #expect(!h.saver.claimImmediateSave(pageKey: "c1#5"))
+        // the first real change is saved
+        h.turn(6)
+        h.scheduler.advance(by: 30)
+        #expect(h.local.map(\.position.page) == [6])
+        #expect(h.tracker.map(\.position.page) == [6])
+    }
+
+    @Test func thePageLastSavedIsNotSavedAgain() {
+        let h = Harness()
+        h.turn(3)
+        h.scheduler.advance(by: 3) // c1#3 saved
+        h.turn(4)
+        h.scheduler.advance(by: 0.5)
+        h.turn(3) // back before the save of 4
+        h.scheduler.advance(by: 30)
+        #expect(h.local.map(\.position.page) == [3])
+        #expect(h.tracker.map(\.position.page) == [3])
     }
 
     @Test func changingChapterCancelsWhatIsPending() {
         let h = Harness()
-        h.saver.pageChanged(.init(chapter: "c1", page: 7))
+        h.turn(7)
         h.scheduler.advance(by: 1)
         h.saver.cancel() // leaving the reader / new chapter: the reader saves c1 right away itself
-        h.saver.pageChanged(.init(chapter: "c2", page: 2))
+        h.turn(2, chapter: "c2")
         h.scheduler.advance(by: 30)
-        #expect(h.local.map(\.0) == [.init(chapter: "c2", page: 2)])
-        #expect(h.tracker.map(\.0) == [.init(chapter: "c2", page: 2)])
-        h.saver.pageChanged(.init(chapter: "c2", page: 3))
+        #expect(h.local.map(\.position) == [.init(chapter: "c2", page: 2)])
+        #expect(h.tracker.map(\.position) == [.init(chapter: "c2", page: 2)])
+        h.turn(3, chapter: "c2")
         h.saver.cancel()
         h.scheduler.advance(by: 30)
         #expect(h.local.count == 1)
         #expect(h.saver.pending == nil)
     }
 
-    @Test func deactivationFlushesRightAway() {
+    @Test func deactivationSavesRightAwayAndOnlyOnce() {
         let h = Harness()
-        h.saver.pageChanged(.init(chapter: "c1", page: 8))
+        h.turn(8)
         h.scheduler.advance(by: 0.5)
-        h.saver.pageChanged(.init(chapter: "c1", page: 9))
-        let flushed = h.saver.flush()
-        #expect(flushed == .init(chapter: "c1", page: 9))
+        h.turn(9)
+        // will deactivate: save now
+        #expect(h.saver.claimImmediateSave(pageKey: "c1#9"))
+        // did enter background right after: same page, already saved
+        #expect(!h.saver.claimImmediateSave(pageKey: "c1#9"))
         h.scheduler.advance(by: 30)
-        // the delayed saves are gone: the reader saved (local + tracker) at once
-        #expect(h.local.isEmpty)
+        #expect(h.local.isEmpty) // the delayed saves are gone
         #expect(h.tracker.isEmpty)
-        #expect(h.saver.flush() == nil)
+        // a page later, it saves again
+        h.turn(10)
+        #expect(h.saver.claimImmediateSave(pageKey: "c1#10"))
+    }
+
+    @Test func anOldDelayedSaveIsDiscarded() {
+        let h = Harness()
+        h.turn(3)
+        h.scheduler.advance(by: 2.1)
+        let started = try? #require(h.local.first?.generation)
+        #expect(h.saver.isCurrent(started ?? -1))
+        // the save is still running (async) when the position is saved right away
+        _ = h.saver.claimImmediateSave(pageKey: "c1#4")
+        #expect(!h.saver.isCurrent(started ?? -1))
+        // later delayed saves carry the new generation
+        h.turn(5)
+        h.scheduler.advance(by: 3)
+        let later = h.local.last?.generation ?? -1
+        #expect(h.saver.isCurrent(later))
     }
 
     @Test func incognitoSavesNothing() {
         let h = Harness()
         h.enabled = false
-        h.saver.pageChanged(.init(chapter: "c1", page: 4))
+        h.turn(4)
         h.scheduler.advance(by: 30)
         #expect(h.local.isEmpty)
         #expect(h.tracker.isEmpty)
-        #expect(h.saver.flush() == nil)
+        #expect(h.saver.pending == nil)
     }
 }

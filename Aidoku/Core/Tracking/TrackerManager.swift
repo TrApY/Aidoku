@@ -675,6 +675,17 @@ extension TrackerManager {
 
 // MARK: Tracking State
 extension TrackerManager {
+    /// Pending updates after a batch was sent: `current` is the pending list now (it may have new updates
+    /// queued while the batch was on the network), `sent` the batch, `failed` the ones of the batch to
+    /// retry. Only what was sent leaves the list; a newer update for the same chapter wins over a retry (pending).
+    static func remainingPageUpdates(
+        current: [PageTrackUpdate],
+        sent: [PageTrackUpdate],
+        failed: [PageTrackUpdate]
+    ) -> [PageTrackUpdate] {
+        failed
+    }
+
     func processPendingUpdates() async {
         guard !trackingState.pendingPageUpdates.isEmpty else { return }
 

@@ -160,4 +160,45 @@ import Testing
             #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 10)
         }
     }
+
+    @Test func restoringOnlySourceSettingsDoesNotMigrateAgain() {
+        withDefaults { defaults, domain in
+            defaults.set(10.0, forKey: PillarboxSettings.portraitKey)
+            defaults.set(30.0, forKey: PillarboxSettings.landscapeKey)
+            defaults.set(true, forKey: PillarboxSettings.migratedKey)
+            defaults.set(40.0, forKey: "Reader.pillarboxAmount")
+            defaults.set("landscape", forKey: "Reader.pillarboxOrientation")
+            // an old backup, restoring only the settings of sources installed afterwards
+            let written = BackupManager.applySettings(
+                [
+                    "Reader.pillarboxAmount": 60.0,
+                    "Reader.pillarboxOrientation": "portrait",
+                    "suwayomi.test.searchIn": "library"
+                ],
+                sourceKeyPrefixes: ["suwayomi.test."],
+                onlySources: true,
+                defaults: defaults,
+                domain: domain
+            )
+            #expect(written == ["suwayomi.test.searchIn"])
+            #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 10)
+            #expect(defaults.integer(forKey: PillarboxSettings.landscapeKey) == 30)
+            #expect(defaults.double(forKey: "Reader.pillarboxAmount") == 40)
+        }
+        withDefaults { defaults, domain in
+            defaults.set(10.0, forKey: PillarboxSettings.portraitKey)
+            defaults.set(30.0, forKey: PillarboxSettings.landscapeKey)
+            defaults.set(true, forKey: PillarboxSettings.migratedKey)
+            // the full restore of the same backup does migrate its values
+            BackupManager.applySettings(
+                ["Reader.pillarboxAmount": 60.0, "Reader.pillarboxOrientation": "portrait"],
+                sourceKeyPrefixes: [],
+                onlySources: false,
+                defaults: defaults,
+                domain: domain
+            )
+            #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 60)
+            #expect(defaults.integer(forKey: PillarboxSettings.landscapeKey) == 0)
+        }
+    }
 }
