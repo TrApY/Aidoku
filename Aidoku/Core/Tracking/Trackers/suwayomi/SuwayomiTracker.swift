@@ -16,7 +16,7 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
 
     private let api: SuwayomiApi
     /// Manga already marked in the server library during this session (sourceKey|id).
-    private let markedInLibrary = SuwayomiMarkedSet()
+    let markedInLibrary = SuwayomiMarkedSet()
 
     init(api: SuwayomiApi = .init()) {
         self.api = api
@@ -167,6 +167,10 @@ final class SuwayomiMarkedSet: @unchecked Sendable {
 
     func insert(_ value: String) {
         lock.withLock { _ = values.insert(value) }
+    }
+
+    func removeAll(withPrefix prefix: String) {
+        lock.withLock { values = values.filter { !$0.hasPrefix(prefix) } }
     }
 }
 

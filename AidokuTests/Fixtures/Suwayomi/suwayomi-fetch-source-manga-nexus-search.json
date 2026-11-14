@@ -1,0 +1,169 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 244,
+     "title": "¿Fuiste tú quien mató a mi personaje favorito?",
+     "thumbnailUrl": "/api/v1/manga/244/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 210,
+     "title": "La casa de mi vecina - Sin Censura",
+     "thumbnailUrl": "/api/v1/manga/210/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 246,
+     "title": "Nunca solo amigos",
+     "thumbnailUrl": "/api/v1/manga/246/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 245,
+     "title": "Gatita traviesa",
+     "thumbnailUrl": "/api/v1/manga/245/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 247,
+     "title": "¡Está Bien, Es Solo Una Broma!",
+     "thumbnailUrl": "/api/v1/manga/247/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 248,
+     "title": "Park Sujin y Baek Seojeong",
+     "thumbnailUrl": "/api/v1/manga/248/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 723,
+     "title": "Hazme renacer bien dotado",
+     "thumbnailUrl": "/api/v1/manga/723/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 249,
+     "title": "La Historia de una Profesora Casada obsesionada por su Alumna de Secundaria",
+     "thumbnailUrl": "/api/v1/manga/249/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 250,
+     "title": "Se convirtió en Hitler",
+     "thumbnailUrl": "/api/v1/manga/250/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 251,
+     "title": "Codigo de Esclavo",
+     "thumbnailUrl": "/api/v1/manga/251/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 252,
+     "title": "Teto x Egen",
+     "thumbnailUrl": "/api/v1/manga/252/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 253,
+     "title": "Soy el Unico Hombre en el Salón de Masajes",
+     "thumbnailUrl": "/api/v1/manga/253/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 254,
+     "title": "El autobús guía se ha convertido en una sustancia extraña.",
+     "thumbnailUrl": "/api/v1/manga/254/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 255,
+     "title": "Mi madrastra me hizo su juguete 2",
+     "thumbnailUrl": "/api/v1/manga/255/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 256,
+     "title": "Clasificado Como Rango F, Zenon, Ayuda Al Grupo De Las Chicas Mas Hermosas A Comunicarse Con Su Habilidad [Interpretación] Uniendose A Su Grupo Y Hasta Convertirse En Un Talento Sin Igual",
+     "thumbnailUrl": "/api/v1/manga/256/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 257,
+     "title": "Por favor, enséñame, Sunbae-nim",
+     "thumbnailUrl": "/api/v1/manga/257/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 259,
+     "title": "La novia de la espada maldita",
+     "thumbnailUrl": "/api/v1/manga/259/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 260,
+     "title": "Yancha Gal no Anjou-san",
+     "thumbnailUrl": "/api/v1/manga/260/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 724,
+     "title": "Lo Que hago Con El Lider De equipo",
+     "thumbnailUrl": "/api/v1/manga/724/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 725,
+     "title": "¿De verdad se puede vivir una aventura con compañeros vestidos con atuendos eróticos?",
+     "thumbnailUrl": "/api/v1/manga/725/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    }
+   ],
+   "hasNextPage": true
+  }
+ }
+}

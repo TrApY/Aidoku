@@ -71,9 +71,13 @@ actor SuwayomiSourceRunner: Runner {
     /// UserDefaults, used if the server stops answering), and when it was received.
     private var serverSourcesCache: [SuwayomiServerSource]?
     private var serverSourcesFetchedAt: Date?
-    private var refreshingServerSources = false
+    /// Last failed attempt to get the list from «Todo» (cool down before asking again).
+    private var serverSourcesFailedAt: Date?
+    private var serverSourcesRefresh: Task<Void, Never>?
     /// «Todo» refreshes the cached source list in the background after this time.
-    private static let serverSourcesMaxAge: TimeInterval = 5 * 60
+    private let serverSourcesMaxAge: TimeInterval
+    /// After a failed attempt, «Todo» doesn't ask for the list again during this time.
+    private let serverSourcesRetryDelay: TimeInterval
 
     /// Max time per server source when searching everywhere (shorter in tests).
     private let searchAllTimeout: TimeInterval
@@ -83,10 +87,14 @@ actor SuwayomiSourceRunner: Runner {
         name: String,
         server: String,
         transport: SuwayomiHelper.Transport? = nil,
-        searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout
+        searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout,
+        serverSourcesMaxAge: TimeInterval = 5 * 60,
+        serverSourcesRetryDelay: TimeInterval = 60
     ) {
         self.sourceKey = sourceKey
         self.searchAllTimeout = searchAllTimeout
+        self.serverSourcesMaxAge = serverSourcesMaxAge
+        self.serverSourcesRetryDelay = serverSourcesRetryDelay
         self.helper = if let transport {
             .init(sourceKey: sourceKey, transport: transport)
         } else {
@@ -543,6 +551,7 @@ actor SuwayomiSourceRunner: Runner {
                 if newValue != server {
                     // update db source config with new server url
                     server = newValue
+                    forgetServerState()
                     Task {
                         await updateSourceConfig()
                     }
@@ -555,7 +564,10 @@ actor SuwayomiSourceRunner: Runner {
 
     /// Sources installed on the server that can be offered (no local source, NSFW per app setting).
     private func fetchServerSources(timeout: TimeInterval? = nil) async throws -> [SuwayomiServerSource] {
+        let requestedServer = server
         let response: SuwayomiSourcesResponse = try await helper.request(body: SuwayomiServerSourcesPayload(), timeout: timeout)
+        // the server changed meanwhile: this answer is the old server's
+        guard server == requestedServer else { throw CancellationError() }
         let nodes = response.data.sources.nodes
         serverSourcesCache = nodes
         serverSourcesFetchedAt = Date()
@@ -580,21 +592,55 @@ actor SuwayomiSourceRunner: Runner {
         return nodes
     }
 
-    /// Refreshes the source list without making anyone wait (once at a time, when old or never fetched).
+    /// Another server: its sources and library are not the old one's.
+    private func forgetServerState() {
+        serverSourcesRefresh?.cancel()
+        serverSourcesRefresh = nil
+        serverSourcesCache = nil
+        serverSourcesFetchedAt = nil
+        serverSourcesFailedAt = nil
+        UserDefaults.standard.removeObject(forKey: SuwayomiServerSources.snapshotKey(sourceKey: sourceKey))
+        TrackerManager.suwayomi.markedInLibrary.removeAll(withPrefix: "\(sourceKey)|")
+    }
+
+    /// True while a failed attempt from «Todo» is recent.
+    private func isCoolingDown() -> Bool {
+        guard let serverSourcesFailedAt else { return false }
+        return Date().timeIntervalSince(serverSourcesFailedAt) < serverSourcesRetryDelay
+    }
+
+    /// Asks for the list from «Todo», noting a failure for the cool down.
+    private func fetchServerSourcesForSearch() async throws -> [SuwayomiServerSource] {
+        do {
+            let sources = try await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+            serverSourcesFailedAt = nil
+            return sources
+        } catch {
+            serverSourcesFailedAt = Date()
+            throw error
+        }
+    }
+
+    /// Refreshes the source list without making anyone wait (once at a time, when old or never fetched,
+    /// and not right after a failed attempt).
     private func refreshServerSourcesInBackground() {
-        if let serverSourcesFetchedAt, Date().timeIntervalSince(serverSourcesFetchedAt) < Self.serverSourcesMaxAge {
+        if let serverSourcesFetchedAt, Date().timeIntervalSince(serverSourcesFetchedAt) < serverSourcesMaxAge {
             return
         }
-        guard !refreshingServerSources else { return }
-        refreshingServerSources = true
-        Task {
-            _ = try? await self.fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+        guard serverSourcesRefresh == nil, !isCoolingDown() else { return }
+        serverSourcesRefresh = Task {
+            _ = try? await self.fetchServerSourcesForSearch()
             self.finishRefreshingServerSources()
         }
     }
 
+    /// Waits for a background refresh of the source list, if any (tests).
+    func waitForServerSourcesRefresh() async {
+        await serverSourcesRefresh?.value
+    }
+
     private func finishRefreshingServerSources() {
-        refreshingServerSources = false
+        serverSourcesRefresh = nil
     }
 
     /// Sources to search in «Todo», without waiting for the server when the list is already known.
@@ -605,10 +651,13 @@ actor SuwayomiSourceRunner: Runner {
             refreshServerSourcesInBackground()
             return SuwayomiServerSources.searchSources(selectedIds: ids, known: known, allowNsfw: allowsNsfw())
         }
+        // never got the list: without it there's no order nor NSFW flag, so only the library;
+        // after a failure, don't wait for it again on every search
+        guard !isCoolingDown() else { return [] }
         do {
-            return try await selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+            let sources = try await fetchServerSourcesForSearch()
+            return SuwayomiServerSources.selected(ids: ids, from: sources)
         } catch {
-            // never got the list: without it there's no order nor NSFW flag, so only the library
             LogManager.logger.warn("Suwayomi server sources unknown, searching only the library: \(error)")
             return []
         }
