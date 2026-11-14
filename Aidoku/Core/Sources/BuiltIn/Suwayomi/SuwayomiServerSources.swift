@@ -240,6 +240,8 @@ enum SuwayomiServerSources {
     static let searchInFilterId = "searchIn"
     /// Fetching from the origin websites can be slow.
     static let fetchTimeout: TimeInterval = 90
+    /// Listing the installed sources must not block settings or listings when the server is down.
+    static let sourcesTimeout: TimeInterval = 10
 
     static func defaultsKey(sourceKey: String) -> String {
         "\(sourceKey).\(settingKey)"
@@ -363,29 +365,18 @@ enum SuwayomiServerSources {
         )
     }
 
-    /// Whether the server has to fetch the manga from its origin before reading it:
-    /// no chapters stored yet, or details requested but never fetched.
-    static func needsRemoteFetch(
-        _ response: SuwayomiMangaUpdateResponse,
-        needsDetails: Bool,
-        needsChapters: Bool
-    ) -> Bool {
-        let missingChapters = needsChapters && response.data.chapters.nodes.isEmpty
-        let manga = response.data.manga
-        let missingDetails = needsDetails && manga.description == nil && manga.author == nil
-        return missingChapters || missingDetails
-    }
-
-    // MARK: pending (red)
-
     static let libraryListingId = "library"
 
+    /// First listing, always present: the server library (what the source showed before).
     static func libraryListing() -> AidokuRunner.Listing {
         .init(id: libraryListingId, name: NSLocalizedString("LIBRARY"), kind: .default)
     }
 
+    /// The server source chosen in the "search in" filter if it's still selected in the settings,
+    /// or nil for the server library.
     static func searchSourceId(filters: [AidokuRunner.FilterValue], selectedIds: [String]) -> String? {
-        searchSourceId(filters: filters)
+        guard let id = searchSourceId(filters: filters), selectedIds.contains(id) else { return nil }
+        return id
     }
 
     struct RemoteFetchPlan: Equatable, Sendable {
@@ -395,13 +386,23 @@ enum SuwayomiServerSources {
         var isEmpty: Bool { !fetchManga && !fetchChapters }
     }
 
+    /// What the server has to fetch from the origin before the manga can be read.
+    /// - details: only while the manga isn't `initialized` (never fetched);
+    /// - chapters: when none are stored and the server doesn't keep them updated itself
+    ///   (not initialized, or not in the server library).
     static func remoteFetchPlan(
         _ response: SuwayomiMangaUpdateResponse,
         needsDetails: Bool,
         needsChapters: Bool
     ) -> RemoteFetchPlan {
-        let fetch = needsRemoteFetch(response, needsDetails: needsDetails, needsChapters: needsChapters)
-        return .init(fetchManga: fetch, fetchChapters: fetch)
+        let manga = response.data.manga
+        // servers without the field: fall back to "no details at all"
+        let initialized = manga.initialized ?? (manga.description != nil || manga.author != nil)
+        let inLibrary = manga.inLibrary ?? false
+        return .init(
+            fetchManga: !initialized && (needsDetails || needsChapters),
+            fetchChapters: needsChapters && response.data.chapters.nodes.isEmpty && (!initialized || !inLibrary)
+        )
     }
 
     /// Readable message from a GraphQL error: the server prepends

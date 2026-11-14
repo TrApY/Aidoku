@@ -152,7 +152,7 @@ actor SuwayomiSourceRunner: Runner {
         }
 
         let baseUrl = try helper.getConfiguredServer()
-        if let serverSourceId = SuwayomiServerSources.searchSourceId(filters: filters) {
+        if let serverSourceId = SuwayomiServerSources.searchSourceId(filters: filters, selectedIds: selectedServerSourceIds()) {
             // searching an installed source: the library filters don't apply
             let response: SuwayomiFetchSourceMangaResponse = try await helper.request(
                 body: SuwayomiServerSources.searchPayload(sourceId: serverSourceId, query: query, page: page),
@@ -217,10 +217,16 @@ actor SuwayomiSourceRunner: Runner {
         var response: SuwayomiMangaUpdateResponse = try await helper.request(
             body: Payload(variables: .init(mangaId: mangaId))
         )
-        if SuwayomiServerSources.needsRemoteFetch(response, needsDetails: needsDetails, needsChapters: needsChapters) {
+        let plan = SuwayomiServerSources.remoteFetchPlan(response, needsDetails: needsDetails, needsChapters: needsChapters)
+        if !plan.isEmpty {
             // manga only browsed from a server source: the server hasn't fetched it from the origin yet
-            try await fetchFromOrigin(mangaId: mangaId)
-            response = try await helper.request(body: Payload(variables: .init(mangaId: mangaId)))
+            let result = await fetchFromOrigin(mangaId: mangaId, plan: plan)
+            if result.fetchedSomething {
+                response = try await helper.request(body: Payload(variables: .init(mangaId: mangaId)))
+            } else if let error = result.error, plan.fetchManga, response.data.chapters.nodes.isEmpty {
+                // never fetched and nothing stored to fall back on
+                throw error
+            }
         }
 
         var manga = manga
@@ -263,6 +269,10 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     func getMangaList(listing: AidokuRunner.Listing, page: Int) async throws -> AidokuRunner.MangaPageResult {
+        if listing.id == SuwayomiServerSources.libraryListingId {
+            // the server library, as the search without text nor filters
+            return try await getSearchMangaList(query: nil, page: page, filters: [])
+        }
         guard let payload = SuwayomiServerSources.listingPayload(listingId: listing.id, page: page) else {
             return .init(entries: [], hasNextPage: false)
         }
@@ -275,7 +285,9 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     func getListings() async throws -> [AidokuRunner.Listing] {
-        SuwayomiServerSources.listings(for: try await selectedServerSources())
+        // the library always comes first (the source opens on it); server sources are optional
+        let serverSources = (try? await selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)) ?? []
+        return [SuwayomiServerSources.libraryListing()] + SuwayomiServerSources.listings(for: serverSources)
     }
 
     func getImageRequest(url: String, context: PageContext?) async throws -> URLRequest {
@@ -356,7 +368,7 @@ actor SuwayomiSourceRunner: Runner {
         }
         // installed server sources; hidden if the server doesn't answer
         if
-            let sources = try? await fetchServerSources(),
+            let sources = try? await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout),
             let setting = SuwayomiServerSources.setting(sources: sources)
         {
             settings.append(setting)
@@ -442,8 +454,8 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     /// Sources installed on the server that can be offered (no local source, NSFW per app setting).
-    private func fetchServerSources() async throws -> [SuwayomiServerSource] {
-        let response: SuwayomiSourcesResponse = try await helper.request(body: SuwayomiServerSourcesPayload())
+    private func fetchServerSources(timeout: TimeInterval? = nil) async throws -> [SuwayomiServerSource] {
+        let response: SuwayomiSourcesResponse = try await helper.request(body: SuwayomiServerSourcesPayload(), timeout: timeout)
         let allowNsfw = SuwayomiServerSources.allowsNsfw(contentRatings: AppSettings.browse.contentRatings.get())
         let sources = SuwayomiServerSources.available(response.data.sources.nodes, allowNsfw: allowNsfw)
         serverSourcesCache = sources
@@ -451,12 +463,16 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     /// Server sources chosen in the settings, in the settings order.
-    private func selectedServerSources() async throws -> [SuwayomiServerSource] {
-        let ids = UserDefaults.standard.stringArray(forKey: SuwayomiServerSources.defaultsKey(sourceKey: sourceKey)) ?? []
+    private func selectedServerSourceIds() -> [String] {
+        UserDefaults.standard.stringArray(forKey: SuwayomiServerSources.defaultsKey(sourceKey: sourceKey)) ?? []
+    }
+
+    private func selectedServerSources(timeout: TimeInterval? = nil) async throws -> [SuwayomiServerSource] {
+        let ids = selectedServerSourceIds()
         guard !ids.isEmpty else { return [] }
         let sources: [SuwayomiServerSource]
         do {
-            sources = try await fetchServerSources()
+            sources = try await fetchServerSources(timeout: timeout)
         } catch {
             guard let serverSourcesCache else { throw error }
             sources = serverSourcesCache
@@ -464,20 +480,41 @@ actor SuwayomiSourceRunner: Runner {
         return SuwayomiServerSources.selected(ids: ids, from: sources)
     }
 
-    /// Asks the server to fetch a manga and its chapters from the origin website.
-    private func fetchFromOrigin(mangaId: Int) async throws {
-        let _: SuwayomiFetchMangaResponse = try await helper.request(
-            body: SuwayomiFetchMangaPayload(variables: .init(id: mangaId)),
-            timeout: SuwayomiServerSources.fetchTimeout
-        )
-        do {
-            let _: SuwayomiFetchChaptersResponse = try await helper.request(
-                body: SuwayomiFetchChaptersPayload(variables: .init(mangaId: mangaId)),
-                timeout: SuwayomiServerSources.fetchTimeout
-            )
-        } catch where SuwayomiServerSources.isNoChaptersFound(error) {
-            // the origin has no chapters: an empty list, not an error
+    /// Asks the server to fetch a manga and/or its chapters from the origin website.
+    /// Failures are logged, not thrown: the caller falls back on what the server already has.
+    private func fetchFromOrigin(
+        mangaId: Int,
+        plan: SuwayomiServerSources.RemoteFetchPlan
+    ) async -> (fetchedSomething: Bool, error: Error?) {
+        var fetchedSomething = false
+        var firstError: Error?
+        if plan.fetchManga {
+            do {
+                let _: SuwayomiFetchMangaResponse = try await helper.request(
+                    body: SuwayomiFetchMangaPayload(variables: .init(id: mangaId)),
+                    timeout: SuwayomiServerSources.fetchTimeout
+                )
+                fetchedSomething = true
+            } catch {
+                LogManager.logger.error("Suwayomi fetchManga \(mangaId) failed: \(error)")
+                firstError = error
+            }
         }
+        if plan.fetchChapters {
+            do {
+                let _: SuwayomiFetchChaptersResponse = try await helper.request(
+                    body: SuwayomiFetchChaptersPayload(variables: .init(mangaId: mangaId)),
+                    timeout: SuwayomiServerSources.fetchTimeout
+                )
+                fetchedSomething = true
+            } catch where SuwayomiServerSources.isNoChaptersFound(error) {
+                // the origin has no chapters: an empty list, not an error
+            } catch {
+                LogManager.logger.error("Suwayomi fetchChapters \(mangaId) failed: \(error)")
+                firstError = firstError ?? error
+            }
+        }
+        return (fetchedSomething, firstError)
     }
 
     private func updateSourceConfig(updateSourceList: Bool = false) async {
@@ -491,7 +528,7 @@ extension SuwayomiSourceRunner {
     func getSearchFilters() async throws -> [AidokuRunner.Filter] {
         async let categories = getCategories()
         async let tags = getTags()
-        async let serverSources = try? selectedServerSources()
+        async let serverSources = try? selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
 
         let categoryItems = try await categories
         let tagItems = try await tags

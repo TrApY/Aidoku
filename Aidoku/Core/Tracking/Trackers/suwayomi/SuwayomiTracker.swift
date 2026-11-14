@@ -26,11 +26,7 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
 
         // called when the manga is added to the Aidoku library: keep it in the server library too
         // (manga opened from a server source are not in it yet)
-        do {
-            try await api.addToLibrary(sourceKey: sourceKey, seriesId: seriesId)
-        } catch {
-            LogManager.logger.error("Unable to add suwayomi manga \(seriesId) to the server library: \(error)")
-        }
+        await addToServerLibrary(sourceKey: sourceKey, seriesId: seriesId)
 
         guard let highestChapterRead else { return nil }
 
@@ -48,6 +44,8 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
 
     func update(trackId: String, update: TrackUpdate) async throws {
         let (sourceKey, seriesId) = try getIdParts(from: trackId)
+        // register isn't called again for manga that kept their track item when re-added to the library
+        await addToServerLibrary(sourceKey: sourceKey, seriesId: seriesId)
         try await api.update(
             sourceKey: sourceKey,
             seriesId: seriesId,
@@ -132,6 +130,15 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
 }
 
 extension SuwayomiTracker {
+    /// Idempotent and best effort: a failure never breaks tracking.
+    private func addToServerLibrary(sourceKey: String, seriesId: String) async {
+        do {
+            try await api.addToLibrary(sourceKey: sourceKey, seriesId: seriesId)
+        } catch {
+            LogManager.logger.error("Unable to add suwayomi manga \(seriesId) to the server library: \(error)")
+        }
+    }
+
     private func getIdParts(from id: String) throws -> (sourceKey: String, seriesId: String) {
         let split = id.split(separator: idSeparator, maxSplits: 2).map(String.init)
         guard split.count == 2 else { throw SuwayomiTrackerError.invalidId }

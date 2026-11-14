@@ -199,6 +199,7 @@ extension SuwayomiHelper {
         var request = URLRequest(url: server)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = SuwayomiServerSources.sourcesTimeout // don't block the settings page
 
         guard let response = await send(request, followRedirects: false).response else {
             return nil
@@ -233,6 +234,7 @@ extension SuwayomiHelper {
 
             var request = URLRequest(url: graphqlUrl)
             request.httpMethod = "POST"
+            request.timeoutInterval = SuwayomiServerSources.sourcesTimeout
             request.httpBody = try? JSONEncoder().encode(Payload())
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
