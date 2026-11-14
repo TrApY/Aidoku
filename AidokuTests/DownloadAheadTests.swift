@@ -272,27 +272,83 @@ import Testing
         }
     }
 
+    private func addFakeTrack(_ tracker: FakePageTracker, id: String, manga: AidokuRunner.Manga) async {
+        await CoreDataManager.shared.container.performBackgroundTask { context in
+            _ = CoreDataManager.shared.createTrack(id: id, trackerId: tracker.id, mangaId: manga.identifier, title: nil, context: context)
+            try? context.save()
+        }
+    }
+
+    private func removeFakeTrack(_ tracker: FakePageTracker, manga: AidokuRunner.Manga) async {
+        await CoreDataManager.shared.container.performBackgroundTask { context in
+            CoreDataManager.shared.removeTrack(trackerId: tracker.id, mangaId: manga.identifier, context: context)
+            try? context.save()
+        }
+    }
+
     @Test func chaptersReadOnAnotherDeviceMoveTheWindow() async throws {
         try await withLibraryManga(key: "49", target: 2) { manga, newestFirst, manager in
             let tracker = FakePageTracker(progress: ["c1": .init(completed: true, page: 20, date: .now)])
-            await CoreDataManager.shared.container.performBackgroundTask { context in
-                _ = CoreDataManager.shared.createTrack(
-                    id: "fake-49", trackerId: tracker.id, mangaId: manga.identifier, title: nil, context: context
-                )
-                try? context.save()
-            }
+            await addFakeTrack(tracker, id: "fake-49", manga: manga)
             await TrackerManager.shared.syncPageTrackerHistory(
                 manga: manga,
                 chapters: newestFirst,
                 trackerLookup: { $0 == tracker.id ? tracker : nil },
-                downloadManager: manager,
-                onlyOnWifi: false
+                downloadAhead: { await manager.ensureAheadDownloaded(mangaId: $0, onlyOnWifi: false) }
             )
+            // the trigger runs on its own: wait for it (at most 5 s)
+            var second = status(manager, manga, "c2")
+            for _ in 0..<100 where second != .queued {
+                try await Task.sleep(nanoseconds: 50_000_000)
+                second = status(manager, manga, "c2")
+            }
             // c1 read elsewhere: the window is c2, c3
-            #expect(status(manager, manga, "c2") == .queued)
+            #expect(second == .queued)
             #expect(status(manager, manga, "c3") == .queued)
             #expect(status(manager, manga, "c1") == .none)
             #expect(status(manager, manga, "c4") == .none)
+            await removeFakeTrack(tracker, manga: manga)
+        }
+    }
+
+    @Test func syncDoesNotWaitForTheTrigger() async throws {
+        try await withLibraryManga(key: "52", target: 2) { manga, newestFirst, _ in
+            let tracker = FakePageTracker(progress: ["c1": .init(completed: true, page: 20, date: .now)])
+            await addFakeTrack(tracker, id: "fake-52", manga: manga)
+            let triggered = TriggerFlag()
+            let start = Date()
+            await TrackerManager.shared.syncPageTrackerHistory(
+                manga: manga,
+                chapters: newestFirst,
+                trackerLookup: { $0 == tracker.id ? tracker : nil },
+                downloadAhead: { _ in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000) // a slow trigger
+                    await triggered.set()
+                }
+            )
+            let elapsed = Date().timeIntervalSince(start)
+            #expect(elapsed < 1.5) // details, refresh and .historySet don't wait for it
+            var done = await triggered.value
+            for _ in 0..<100 where !done {
+                try await Task.sleep(nanoseconds: 50_000_000)
+                done = await triggered.value
+            }
+            #expect(done) // but it runs
+            await removeFakeTrack(tracker, manga: manga)
+        }
+    }
+
+    @Test func noQueueingIfWifiIsLostBeforeQueueing() async throws {
+        try await withLibraryManga(key: "53", target: 2) { manga, _, manager in
+            let checks = CheckCounter()
+            // Wi-Fi for the first checks (trigger start, pending-run start), lost right before queueing
+            let queued = await manager.ensureAheadDownloaded(
+                manga: manga,
+                onlyOnWifi: true,
+                connectionProvider: { checks.next() <= 2 ? .wifi : .cellular }
+            )
+            #expect(queued.isEmpty)
+            #expect(status(manager, manga, "c1") == .none)
         }
     }
 
@@ -304,19 +360,22 @@ import Testing
             DownloadAheadSetting.set(3, for: manga.identifier)
         }
         let first = mangas[0].identifier
+        // what LibraryViewController keeps for undo, read before removing
         let snapshot = await CoreDataManager.shared.container.performBackgroundTask { context in
-            (
-                CoreDataManager.shared.getManga(mangaId: first, context: context)?.toManga(),
-                CoreDataManager.shared.getChapters(mangaId: first, context: context).map { $0.toChapter() }
-            )
+            LibraryViewController.LibraryRemovalSnapshot.make(mangaId: first, context: context)
         }
         await MangaManager.shared.removeFromLibrary(mangaIds: mangas.map(\.identifier))
         #expect(DownloadAheadSetting.get(for: mangas[0].identifier) == 0)
         #expect(DownloadAheadSetting.get(for: mangas[1].identifier) == 0)
 
-        let oldManga = try #require(snapshot.0)
+        let removed = try #require(snapshot)
+        #expect(removed.downloadAhead == 3)
         await MangaManager.shared.restoreToLibrary(
-            manga: oldManga, chapters: snapshot.1, trackItems: [], categories: [], downloadAhead: 3
+            manga: removed.manga,
+            chapters: removed.chapters,
+            trackItems: removed.trackItems,
+            categories: removed.categories,
+            downloadAhead: removed.downloadAhead
         )
         #expect(DownloadAheadSetting.get(for: first) == 3)
         await MangaManager.shared.removeFromLibrary(mangaId: first)
@@ -334,6 +393,23 @@ import Testing
         DownloadAheadSetting.migrate(from: old, to: new, copy: false)
         #expect(DownloadAheadSetting.get(for: new) == 2)
         #expect(DownloadAheadSetting.get(for: old) == 0)
+    }
+}
+
+private actor TriggerFlag {
+    private(set) var value = false
+    func set() { value = true }
+}
+
+/// Counts connection checks (thread-safe).
+private final class CheckCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
     }
 }
 

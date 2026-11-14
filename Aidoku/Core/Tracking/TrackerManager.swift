@@ -368,14 +368,15 @@ actor TrackerManager {
     }
 
     /// Sync progress with all linked trackers that support page progress.
-    /// - trackerLookup, downloadManager: injectable for tests.
+    /// - trackerLookup, downloadAhead: injectable for tests. `downloadAhead` runs on its own (not awaited).
     func syncPageTrackerHistory(
         tracker: Tracker? = nil,
         manga: AidokuRunner.Manga,
         chapters: [AidokuRunner.Chapter]? = nil,
         trackerLookup: (String) -> Tracker? = { TrackerManager.getTracker(id: $0) },
-        downloadManager: DownloadManager = .shared,
-        onlyOnWifi: Bool? = nil
+        downloadAhead: @escaping @Sendable (MangaIdentifier) async -> Void = {
+            await DownloadManager.shared.ensureAheadDownloaded(mangaId: $0)
+        }
     ) async {
         let chapters = if let chapters {
             chapters
@@ -495,7 +496,7 @@ actor TrackerManager {
                 }
             )
             // «descarga adelantada»: chapters read on another device move the window too
-            await downloadManager.ensureAheadDownloaded(mangaId: manga.identifier, onlyOnWifi: onlyOnWifi)
+            await downloadAhead(manga.identifier) // pending: awaited
         }
         for (chapterKey, page) in progressed {
             NotificationCenter.default.post(

@@ -217,7 +217,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                     case .wifi:
                         if AppSettings.downloads.downloadOnlyOnWifi.get() {
                             Task {
-                                await DownloadManager.shared.resumeDownloads()
+                                // not over a pause of the user
+                                await DownloadManager.shared.resumeDownloadsUnlessUserPaused()
                             }
                         }
                     case .cellular, .none:

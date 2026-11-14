@@ -30,6 +30,9 @@ actor DownloadQueue {
     private var progressBlocks: [ChapterIdentifier: (Int, Int) -> Void] = [:]
 
     private var paused = false
+    /// Tasks created and not finished, per source, and the most seen at once (one is the rule). For tests.
+    private var aliveTasks: [String: Int] = [:]
+    private(set) var maxAliveTasksPerSource = 0
     /// Paused from the download queue UI (not by the Wi-Fi rule or the background task expiring).
     private var userPaused = false
     private var registeredTask = false
@@ -55,6 +58,8 @@ actor DownloadQueue {
         }
         let task = DownloadTask(id: sourceKey, cache: cache, downloads: queue[sourceKey] ?? [], delegate: self)
         tasks[sourceKey] = task
+        aliveTasks[sourceKey, default: 0] += 1
+        maxAliveTasksPerSource = max(maxAliveTasksPerSource, aliveTasks[sourceKey] ?? 0)
         return task
     }
 
@@ -108,6 +113,14 @@ actor DownloadQueue {
         for sourceKey in queue.keys {
             await makeTaskIfNeeded(sourceKey: sourceKey).resume()
         }
+    }
+
+    /// - unlessUserPaused: do nothing if the user paused the queue (automatic resume, e.g. Wi-Fi is back).
+    ///   Returns whether it resumed (pending).
+    @discardableResult
+    func resume(unlessUserPaused: Bool) async -> Bool {
+        await resume()
+        return true
     }
 
     func resume() async {
@@ -352,6 +365,7 @@ extension DownloadQueue: DownloadTaskDelegate {
     func taskPaused(task _: DownloadTask) async {}
 
     func taskFinished(task: DownloadTask) async {
+        aliveTasks[task.id, default: 1] -= 1
         tasks.removeValue(forKey: task.id)
         queue.removeValue(forKey: task.id)
         saveQueueState()

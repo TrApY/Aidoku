@@ -314,6 +314,13 @@ extension DownloadManager {
         invalidateDownloadedMangaCache()
     }
 
+    /// Automatic resume (Wi-Fi is back): keeps a queue the user paused paused.
+    func resumeDownloadsUnlessUserPaused() async {
+        guard await queue.resume(unlessUserPaused: true) else { return }
+        NotificationCenter.default.post(name: .downloadsResumed, object: nil)
+        invalidateDownloadedMangaCache()
+    }
+
     func resumeDownloads() async {
         await queue.resume()
         NotificationCenter.default.post(name: .downloadsResumed, object: nil)

@@ -176,13 +176,14 @@ extension DownloadManager {
     func ensureAheadDownloaded(
         manga: AidokuRunner.Manga,
         connection: NetworkDataType? = nil,
-        onlyOnWifi: Bool? = nil
+        onlyOnWifi: Bool? = nil,
+        connectionProvider: (@Sendable () -> NetworkDataType)? = nil
     ) async -> [AidokuRunner.Chapter] {
         let mangaId = manga.identifier
         let canQueue = {
             DownloadAheadPlanner.canQueue(
                 onlyOnWifi: onlyOnWifi ?? AppSettings.downloads.downloadOnlyOnWifi.get(),
-                connection: connection ?? Reachability.getConnectionType()
+                connection: connection ?? connectionProvider?() ?? Reachability.getConnectionType()
             )
         }
         guard

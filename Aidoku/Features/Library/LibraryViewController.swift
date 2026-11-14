@@ -9,6 +9,7 @@ import UIKit
 import LocalAuthentication
 import SwiftUI
 import AidokuRunner
+import CoreData
 
 class LibraryViewController: OldMangaCollectionViewController {
     let viewModel = LibraryViewModel()
@@ -1626,6 +1627,20 @@ extension LibraryViewController {
         let categories: [String]
         /// «Descarga adelantada» setting, removed with the manga.
         let downloadAhead: Int
+
+        /// What undoing the removal needs, read before removing (pending: setting not captured).
+        nonisolated static func make(mangaId: MangaIdentifier, context: NSManagedObjectContext) -> Self? {
+            guard let manga = CoreDataManager.shared.getManga(mangaId: mangaId, context: context)?.toManga() else {
+                return nil
+            }
+            return .init(
+                manga: manga,
+                chapters: CoreDataManager.shared.getChapters(mangaId: mangaId, context: context).map { $0.toChapter() },
+                trackItems: CoreDataManager.shared.getTracks(mangaId: mangaId, context: context).map { $0.toItem() },
+                categories: CoreDataManager.shared.getCategories(mangaId: mangaId, context: context).compactMap { $0.title },
+                downloadAhead: 0
+            )
+        }
     }
 
     @discardableResult
@@ -1643,21 +1658,7 @@ extension LibraryViewController {
             guard let self else { return }
 
             let removedManga: [LibraryRemovalSnapshot] = await CoreDataManager.shared.container.performBackgroundTask { context in
-                ids.compactMap {
-                    guard let manga = CoreDataManager.shared.getManga(mangaId: $0, context: context)?.toManga() else {
-                        return nil
-                    }
-                    let chapters = CoreDataManager.shared.getChapters(mangaId: $0, context: context).map { $0.toChapter() }
-                    let trackItems = CoreDataManager.shared.getTracks(mangaId: $0, context: context).map { $0.toItem() }
-                    let categories = CoreDataManager.shared.getCategories(mangaId: $0, context: context).compactMap { $0.title }
-                    return LibraryRemovalSnapshot(
-                        manga: manga,
-                        chapters: chapters,
-                        trackItems: trackItems,
-                        categories: categories,
-                        downloadAhead: DownloadAheadSetting.get(for: $0)
-                    )
-                }
+                ids.compactMap { LibraryRemovalSnapshot.make(mangaId: $0, context: context) }
             }
 
             guard !Task.isCancelled else { return }
