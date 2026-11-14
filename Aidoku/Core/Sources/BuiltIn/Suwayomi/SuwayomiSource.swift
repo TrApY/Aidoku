@@ -342,10 +342,13 @@ actor SuwayomiSourceRunner: Runner {
         ]
         let isLoggedIn = UserDefaults.standard.value(forKey: "\(sourceKey).login") != nil
         var shouldShowLoginSetting = isLoggedIn
+        var serverAnswered = true
         if !shouldShowLoginSetting {
             let loginType = try await helper.getLoginType()
             if let loginType {
                 shouldShowLoginSetting = loginType != .none
+            } else {
+                serverAnswered = false
             }
         }
         if shouldShowLoginSetting {
@@ -368,6 +371,7 @@ actor SuwayomiSourceRunner: Runner {
         }
         // installed server sources; hidden if the server doesn't answer
         if
+            serverAnswered, // don't wait a second timeout when the login probe got no answer
             let sources = try? await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout),
             let setting = SuwayomiServerSources.setting(sources: sources)
         {
