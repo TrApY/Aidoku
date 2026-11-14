@@ -336,8 +336,8 @@ enum SuwayomiServerSources {
             id: searchInFilterId,
             title: NSLocalizedString("SUWAYOMI_SEARCH_IN"),
             value: .select(.init(
-                options: [NSLocalizedString("LIBRARY")] + sources.map(\.displayName),
-                ids: [""] + sources.map(\.id),
+                options: [NSLocalizedString("SUWAYOMI_SEARCH_ALL"), NSLocalizedString("LIBRARY")] + sources.map(\.displayName),
+                ids: ["", searchInLibraryId] + sources.map(\.id),
                 defaultValue: ""
             ))
         )
@@ -377,19 +377,42 @@ enum SuwayomiServerSources {
 
     static let libraryListingId = "library"
 
-    // MARK: search everywhere (pending)
+    // MARK: Search everywhere
 
     /// "Search in" value for the server library only ("" is everything).
     static let searchInLibraryId = "library"
     /// Max time per server source when searching everywhere.
     static let searchAllTimeout: TimeInterval = 20
 
+    /// Where to search: everything by default (also when the filter is absent, as in Aidoku's global search),
+    /// the library, or one source still selected in the settings (a deselected one → everything).
     static func searchTarget(filters: [AidokuRunner.FilterValue], selectedIds: [String]) -> SuwayomiSearchTarget {
-        .library
+        guard let value = searchSourceId(filters: filters) else { return .all }
+        if value == searchInLibraryId { return .library }
+        return selectedIds.contains(value) ? .source(value) : .all
     }
 
+    /// Library results first, then each source in order, skipping manga already listed (same server id).
     static func mergeSearchResults(library: [AidokuRunner.Manga], sources: [[AidokuRunner.Manga]]) -> [AidokuRunner.Manga] {
-        []
+        var seen = Set<String>()
+        return (library + sources.flatMap { $0 }).filter { seen.insert($0.key).inserted }
+    }
+
+    /// Runs `operation`, failing with a timeout after `seconds`.
+    static func withTimeout<T: Sendable>(
+        _ seconds: TimeInterval,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw SourceError.networkError
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw SourceError.networkError }
+            return result
+        }
     }
 
     /// First listing, always present: the server library (what the source showed before).

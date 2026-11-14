@@ -4,509 +4,642 @@
    "nodes": [
     {
      "id": "0",
-     "displayName": "Local source",
+     "name": "Local source",
      "lang": "localsourcelang",
+     "displayName": "Local source",
      "isNsfw": false,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.source.local"
     },
     {
      "id": "72800122520214493",
-     "displayName": "MangaDex (UR)",
+     "name": "MangaDex",
      "lang": "ur",
+     "displayName": "MangaDex (UR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "425785191804166217",
-     "displayName": "MangaDex (DA)",
+     "name": "MangaDex",
      "lang": "da",
+     "displayName": "MangaDex (DA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "737986167355114438",
-     "displayName": "MangaDex (LT)",
+     "name": "MangaDex",
      "lang": "lt",
+     "displayName": "MangaDex (LT)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "764587568075398530",
-     "displayName": "MangaDex (LA)",
+     "name": "MangaDex",
      "lang": "la",
+     "displayName": "MangaDex (LA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "954368055061084457",
-     "displayName": "MangaDex (NE)",
+     "name": "MangaDex",
      "lang": "ne",
+     "displayName": "MangaDex (NE)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "987803387023224960",
-     "displayName": "MangaDex (SQ)",
+     "name": "MangaDex",
      "lang": "sq",
+     "displayName": "MangaDex (SQ)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1145824452519314725",
-     "displayName": "MangaDex (SV)",
+     "name": "MangaDex",
      "lang": "sv",
+     "displayName": "MangaDex (SV)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1347402746269051958",
-     "displayName": "MangaDex (MY)",
+     "name": "MangaDex",
      "lang": "my",
+     "displayName": "MangaDex (MY)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1411768577036936240",
-     "displayName": "MangaDex (JA)",
+     "name": "MangaDex",
      "lang": "ja",
+     "displayName": "MangaDex (JA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1424273154577029558",
-     "displayName": "MangaDex (HE)",
+     "name": "MangaDex",
      "lang": "he",
+     "displayName": "MangaDex (HE)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1471784905273036181",
-     "displayName": "MangaDex (MS)",
+     "name": "MangaDex",
      "lang": "ms",
+     "displayName": "MangaDex (MS)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1493666528525752601",
-     "displayName": "MangaDex (ZH-HANT)",
+     "name": "MangaDex",
      "lang": "zh-Hant",
+     "displayName": "MangaDex (ZH-HANT)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1553736397938752611",
-     "displayName": "MangaDex (EU)",
+     "name": "MangaDex",
      "lang": "eu",
+     "displayName": "MangaDex (EU)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1573550798452063564",
-     "displayName": "MangaDex (JV)",
+     "name": "MangaDex",
      "lang": "jv",
+     "displayName": "MangaDex (JV)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1596411039134168890",
-     "displayName": "Olympus Scanlation (ES)",
+     "name": "Olympus Scanlation",
      "lang": "es",
+     "displayName": "Olympus Scanlation (ES)",
      "isNsfw": false,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.olympusscanlation"
     },
     {
      "id": "1713554459881080228",
-     "displayName": "MangaDex (TH)",
+     "name": "MangaDex",
      "lang": "th",
+     "displayName": "MangaDex (TH)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "1952071260038453057",
-     "displayName": "MangaDex (IT)",
+     "name": "MangaDex",
      "lang": "it",
+     "displayName": "MangaDex (IT)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2072928884077964642",
-     "displayName": "MangaDex (CV)",
+     "name": "MangaDex",
      "lang": "cv",
+     "displayName": "MangaDex (CV)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2098905203823335614",
-     "displayName": "MangaDex (RU)",
+     "name": "MangaDex",
      "lang": "ru",
+     "displayName": "MangaDex (RU)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2499283573021220255",
-     "displayName": "MangaDex (EN)",
+     "name": "MangaDex",
      "lang": "en",
+     "displayName": "MangaDex (EN)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2655149515337070132",
-     "displayName": "MangaDex (PT-BR)",
+     "name": "MangaDex",
      "lang": "pt-BR",
+     "displayName": "MangaDex (PT-BR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2819252027406613931",
-     "displayName": "MangaDex (EO)",
+     "name": "MangaDex",
      "lang": "eo",
+     "displayName": "MangaDex (EO)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2838715564514827672",
-     "displayName": "MangaDex (UZ)",
+     "name": "MangaDex",
      "lang": "uz",
+     "displayName": "MangaDex (UZ)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "2875503798326600410",
-     "displayName": "MangaDex (SK)",
+     "name": "MangaDex",
      "lang": "sk",
+     "displayName": "MangaDex (SK)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3260701926561129943",
-     "displayName": "MangaDex (EL)",
+     "name": "MangaDex",
      "lang": "el",
+     "displayName": "MangaDex (EL)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3285208643537017688",
-     "displayName": "MangaDex (KO)",
+     "name": "MangaDex",
      "lang": "ko",
+     "displayName": "MangaDex (KO)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3339599426223341161",
-     "displayName": "MangaDex (AR)",
+     "name": "MangaDex",
      "lang": "ar",
+     "displayName": "MangaDex (AR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3507378005483435886",
-     "displayName": "MangaDex (SR)",
+     "name": "MangaDex",
      "lang": "sr",
+     "displayName": "MangaDex (SR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3578612018159256808",
-     "displayName": "MangaDex (CS)",
+     "name": "MangaDex",
      "lang": "cs",
+     "displayName": "MangaDex (CS)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3601180820582582605",
-     "displayName": "MangaDex (BE)",
+     "name": "MangaDex",
      "lang": "be",
+     "displayName": "MangaDex (BE)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3686775439235747344",
-     "displayName": "MangaDex (GA)",
+     "name": "MangaDex",
      "lang": "ga",
+     "displayName": "MangaDex (GA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3781216447842245147",
-     "displayName": "MangaDex (FA)",
+     "name": "MangaDex",
      "lang": "fa",
+     "displayName": "MangaDex (FA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3807502156582598786",
-     "displayName": "MangaDex (ID)",
+     "name": "MangaDex",
      "lang": "id",
+     "displayName": "MangaDex (ID)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "3846770256925560569",
-     "displayName": "MangaDex (TR)",
+     "name": "MangaDex",
      "lang": "tr",
+     "displayName": "MangaDex (TR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4086183896761281232",
-     "displayName": "NexusScanlation (ES)",
+     "name": "NexusScanlation",
      "lang": "es",
+     "displayName": "NexusScanlation (ES)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.nexusscanlation"
     },
     {
      "id": "4150470519566206911",
-     "displayName": "MangaDex (BN)",
+     "name": "MangaDex",
      "lang": "bn",
+     "displayName": "MangaDex (BN)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4273071356706429527",
-     "displayName": "MangaDex (TA)",
+     "name": "MangaDex",
      "lang": "ta",
+     "displayName": "MangaDex (TA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4284949320785450865",
-     "displayName": "MangaDex (HU)",
+     "name": "MangaDex",
      "lang": "hu",
+     "displayName": "MangaDex (HU)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4505830566611664829",
-     "displayName": "MangaDex (FR)",
+     "name": "MangaDex",
      "lang": "fr",
+     "displayName": "MangaDex (FR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4562754350961964148",
-     "displayName": "Emperor Scan (ES)",
+     "name": "Emperor Scan",
      "lang": "es",
+     "displayName": "Emperor Scan (ES)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.emperorscan"
     },
     {
      "id": "4638673959522768501",
-     "displayName": "MangaDex (AF)",
+     "name": "MangaDex",
      "lang": "af",
+     "displayName": "MangaDex (AF)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4774459486579224459",
-     "displayName": "MangaDex (RO)",
+     "name": "MangaDex",
      "lang": "ro",
+     "displayName": "MangaDex (RO)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4872213291993424667",
-     "displayName": "MangaDex (NO)",
+     "name": "MangaDex",
      "lang": "no",
+     "displayName": "MangaDex (NO)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4938773340256184018",
-     "displayName": "MangaDex (ES-419)",
+     "name": "MangaDex",
      "lang": "es-419",
+     "displayName": "MangaDex (ES-419)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "4982291187322723927",
-     "displayName": "InsanosScan (ES)",
+     "name": "InsanosScan",
      "lang": "es",
+     "displayName": "InsanosScan (ES)",
      "isNsfw": false,
-     "supportsLatest": false
+     "supportsLatest": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.insanosscan"
     },
     {
      "id": "5098537545549490547",
-     "displayName": "MangaDex (DE)",
+     "name": "MangaDex",
      "lang": "de",
+     "displayName": "MangaDex (DE)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "5148895169070562838",
-     "displayName": "MangaDex (ZH-HANS)",
+     "name": "MangaDex",
      "lang": "zh-Hans",
+     "displayName": "MangaDex (ZH-HANS)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "5157867187592331768",
-     "displayName": "Taurus Fansub (ES)",
+     "name": "Taurus Fansub",
      "lang": "es",
+     "displayName": "Taurus Fansub (ES)",
      "isNsfw": false,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.taurusfansub"
     },
     {
      "id": "5189216366882819742",
-     "displayName": "MangaDex (PT)",
+     "name": "MangaDex",
      "lang": "pt",
+     "displayName": "MangaDex (PT)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "5463447640980279236",
-     "displayName": "MangaDex (BG)",
+     "name": "MangaDex",
      "lang": "bg",
+     "displayName": "MangaDex (BG)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "5779037855201976894",
-     "displayName": "MangaDex (UK)",
+     "name": "MangaDex",
      "lang": "uk",
+     "displayName": "MangaDex (UK)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "5860541308324630662",
-     "displayName": "MangaDex (CA)",
+     "name": "MangaDex",
      "lang": "ca",
+     "displayName": "MangaDex (CA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "5967745367608513818",
-     "displayName": "MangaDex (MN)",
+     "name": "MangaDex",
      "lang": "mn",
+     "displayName": "MangaDex (MN)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "6167683270485370369",
-     "displayName": "Manga Crab (ES)",
+     "name": "Manga Crab",
      "lang": "es",
+     "displayName": "Manga Crab (ES)",
      "isNsfw": false,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.mangacrab"
     },
     {
      "id": "6400665728063187402",
-     "displayName": "MangaDex (ES)",
+     "name": "MangaDex",
      "lang": "es",
+     "displayName": "MangaDex (ES)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "6404943692147160087",
-     "displayName": "MangaDex (ALL)",
+     "name": "MangaDex",
      "lang": "all",
+     "displayName": "MangaDex (ALL)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "6750440049024086587",
-     "displayName": "MangaDex (NL)",
+     "name": "MangaDex",
      "lang": "nl",
+     "displayName": "MangaDex (NL)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "6840513937945146538",
-     "displayName": "MangaDex (HI)",
+     "name": "MangaDex",
      "lang": "hi",
+     "displayName": "MangaDex (HI)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "6886894829142702925",
-     "displayName": "MangaDex (TE)",
+     "name": "MangaDex",
      "lang": "te",
+     "displayName": "MangaDex (TE)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8033579885162383068",
-     "displayName": "MangaDex (PL)",
+     "name": "MangaDex",
      "lang": "pl",
+     "displayName": "MangaDex (PL)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8254121249433835847",
-     "displayName": "MangaDex (FI)",
+     "name": "MangaDex",
      "lang": "fi",
+     "displayName": "MangaDex (FI)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8548374501079910130",
-     "displayName": "MangaDex (HR)",
+     "name": "MangaDex",
      "lang": "hr",
+     "displayName": "MangaDex (HR)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8578871918181236609",
-     "displayName": "MangaDex (FIL)",
+     "name": "MangaDex",
      "lang": "fil",
+     "displayName": "MangaDex (FIL)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8773024089257004344",
-     "displayName": "MangaDex (ET)",
+     "name": "MangaDex",
      "lang": "et",
+     "displayName": "MangaDex (ET)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8879875375160764811",
-     "displayName": "Inmortal Scan (ES)",
+     "name": "Inmortal Scan",
      "lang": "es",
+     "displayName": "Inmortal Scan (ES)",
      "isNsfw": false,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.inmortalscan"
     },
     {
      "id": "8884149958776527952",
-     "displayName": "MangaDex (KK)",
+     "name": "MangaDex",
      "lang": "kk",
+     "displayName": "MangaDex (KK)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "8952567078513962586",
-     "displayName": "MangaDex (KA)",
+     "name": "MangaDex",
      "lang": "ka",
+     "displayName": "MangaDex (KA)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "9008444898589746680",
-     "displayName": "MHScans (ES)",
+     "name": "MHScans",
      "lang": "es",
+     "displayName": "MHScans (ES)",
      "isNsfw": false,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.mhscans"
     },
     {
      "id": "9127464796236242233",
-     "displayName": "MangaDex (AZ)",
+     "name": "MangaDex",
      "lang": "az",
+     "displayName": "MangaDex (AZ)",
      "isNsfw": true,
-     "supportsLatest": true
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     },
     {
      "id": "9194073792736219759",
-     "displayName": "MangaDex (VI)",
+     "name": "MangaDex",
      "lang": "vi",
+     "displayName": "MangaDex (VI)",
      "isNsfw": true,
-     "supportsLatest": true
-    }
-   ]
-  },
-  "mangas": {
-   "nodes": [
-    {
-     "id": 156,
-     "title": "Guía De Supervivencia Del Cazador De Bestias Demoníacas",
-     "sourceId": "4562754350961964148"
+     "supportsLatest": true,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangadex"
     }
    ]
   }

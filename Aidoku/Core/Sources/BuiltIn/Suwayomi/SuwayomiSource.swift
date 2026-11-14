@@ -123,6 +123,30 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     func getSearchMangaList(query: String?, page: Int, filters: [AidokuRunner.FilterValue]) async throws -> AidokuRunner.MangaPageResult {
+        let baseUrl = try helper.getConfiguredServer()
+        let selectedIds = selectedServerSourceIds()
+        switch SuwayomiServerSources.searchTarget(filters: filters, selectedIds: selectedIds) {
+            case let .source(serverSourceId):
+                // searching an installed source: the library filters don't apply
+                let response: SuwayomiFetchSourceMangaResponse = try await helper.request(
+                    body: SuwayomiServerSources.searchPayload(sourceId: serverSourceId, query: query, page: page),
+                    timeout: SuwayomiServerSources.fetchTimeout
+                )
+                return SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl)
+            case .all:
+                let query = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                // without sources or without text, everything is the library (as before)
+                if !selectedIds.isEmpty && !query.isEmpty {
+                    return try await searchEverywhere(query: query, page: page, filters: filters, baseUrl: baseUrl)
+                }
+            case .library:
+                break
+        }
+        return .init(entries: try await searchLibrary(query: query, filters: filters, baseUrl: baseUrl), hasNextPage: false)
+    }
+
+    /// The server library, with the library filters (categories, status, tags, sort).
+    private func searchLibrary(query: String?, filters: [AidokuRunner.FilterValue], baseUrl: URL) async throws -> [AidokuRunner.Manga] {
         struct Payload: Encodable {
             let variables: Variables
             let query = """
@@ -161,15 +185,6 @@ actor SuwayomiSourceRunner: Runner {
             }
         }
 
-        let baseUrl = try helper.getConfiguredServer()
-        if let serverSourceId = SuwayomiServerSources.searchSourceId(filters: filters, selectedIds: selectedServerSourceIds()) {
-            // searching an installed source: the library filters don't apply
-            let response: SuwayomiFetchSourceMangaResponse = try await helper.request(
-                body: SuwayomiServerSources.searchPayload(sourceId: serverSourceId, query: query, page: page),
-                timeout: SuwayomiServerSources.fetchTimeout
-            )
-            return SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl)
-        }
         let searchFilter = getSearchFilter(query: query, filters: filters)
         let response: SuwayomiMangaResponse = try await helper.request(body: Payload(variables: .init(
             filter: searchFilter.filter,
@@ -177,9 +192,68 @@ actor SuwayomiSourceRunner: Runner {
             orderByType: searchFilter.serverSort?.orderByType
         )))
         let nodes = sort(response.data.mangas.nodes, sort: searchFilter.localSort) // todo
-        let entries = nodes.compactMap { $0.intoManga(sourceKey: sourceKey, baseUrl: baseUrl) }
+        return nodes.compactMap { $0.intoManga(sourceKey: sourceKey, baseUrl: baseUrl) }
+    }
 
-        return .init(entries: entries, hasNextPage: false)
+    /// «Todo»: the server library plus the first page of every selected source, in parallel.
+    /// Sources that fail or take longer than `searchAllTimeout` are skipped; the whole search only
+    /// fails when nothing answers.
+    private func searchEverywhere(
+        query: String,
+        page: Int,
+        filters: [AidokuRunner.FilterValue],
+        baseUrl: URL
+    ) async throws -> AidokuRunner.MangaPageResult {
+        guard page == 1 else { return .init(entries: [], hasNextPage: false) }
+
+        // settings order, as the listings (falls back to the stored order if the server doesn't list them)
+        let sourceIds = (try? await selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout))?.map(\.id)
+            ?? selectedServerSourceIds()
+
+        let helper = helper
+        let sourceKey = sourceKey
+        let timeout = searchAllTimeout
+        async let sourceResults = withTaskGroup(of: (Int, [AidokuRunner.Manga]?).self) { group in
+            for (index, sourceId) in sourceIds.enumerated() {
+                group.addTask {
+                    do {
+                        let response: SuwayomiFetchSourceMangaResponse = try await SuwayomiServerSources.withTimeout(timeout) {
+                            try await helper.request(
+                                body: SuwayomiServerSources.searchPayload(sourceId: sourceId, query: query, page: 1),
+                                timeout: timeout
+                            )
+                        }
+                        return (index, SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl).entries)
+                    } catch {
+                        LogManager.logger.warn("Suwayomi search in source \(sourceId) skipped: \(error)")
+                        return (index, nil)
+                    }
+                }
+            }
+            var results = [[AidokuRunner.Manga]?](repeating: nil, count: sourceIds.count)
+            for await (index, entries) in group {
+                results[index] = entries
+            }
+            return results
+        }
+
+        let library: [AidokuRunner.Manga]
+        var libraryError: Error?
+        do {
+            library = try await searchLibrary(query: query, filters: filters, baseUrl: baseUrl)
+        } catch {
+            LogManager.logger.warn("Suwayomi library search failed: \(error)")
+            library = []
+            libraryError = error
+        }
+        let perSource = await sourceResults
+        if let libraryError, perSource.allSatisfy({ $0 == nil }) {
+            throw libraryError
+        }
+        return .init(
+            entries: SuwayomiServerSources.mergeSearchResults(library: library, sources: perSource.compactMap { $0 }),
+            hasNextPage: false
+        )
     }
 
     func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
@@ -280,8 +354,9 @@ actor SuwayomiSourceRunner: Runner {
 
     func getMangaList(listing: AidokuRunner.Listing, page: Int) async throws -> AidokuRunner.MangaPageResult {
         if listing.id == SuwayomiServerSources.libraryListingId {
-            // the server library, as the search without text nor filters
-            return try await getSearchMangaList(query: nil, page: page, filters: [])
+            // the server library, as the library search without text nor filters
+            let baseUrl = try helper.getConfiguredServer()
+            return .init(entries: try await searchLibrary(query: nil, filters: [], baseUrl: baseUrl), hasNextPage: false)
         }
         guard let payload = SuwayomiServerSources.listingPayload(listingId: listing.id, page: page) else {
             return .init(entries: [], hasNextPage: false)
