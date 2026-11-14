@@ -22,8 +22,17 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
     }
 
     func register(trackId: String, highestChapterRead: Float?, earliestReadDate: Date?) async throws -> String? {
-        guard let highestChapterRead else { return nil }
         let (sourceKey, seriesId) = try getIdParts(from: trackId)
+
+        // called when the manga is added to the Aidoku library: keep it in the server library too
+        // (manga opened from a server source are not in it yet)
+        do {
+            try await api.addToLibrary(sourceKey: sourceKey, seriesId: seriesId)
+        } catch {
+            LogManager.logger.error("Unable to add suwayomi manga \(seriesId) to the server library: \(error)")
+        }
+
+        guard let highestChapterRead else { return nil }
 
         let state = try? await api.getState(sourceKey: sourceKey, seriesId: seriesId)
         if state?.lastReadChapter == nil || highestChapterRead > state?.lastReadChapter ?? 0 {

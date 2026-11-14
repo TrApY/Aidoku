@@ -32,12 +32,20 @@ struct SuwayomiHelper: Sendable {
         return server
     }
 
-    func request<T: Decodable & Sendable, U: Encodable>(body: U) async throws -> T {
-        let data = try await graphqlData(body: body)
-        return try JSONDecoder().decode(T.self, from: data)
+    func request<T: Decodable & Sendable, U: Encodable>(body: U, timeout: TimeInterval? = nil) async throws -> T {
+        let data = try await graphqlData(body: body, timeout: timeout)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            // surface the server's GraphQL error instead of a decoding error
+            if let graphQLError = SuwayomiServerSources.graphQLError(from: data) {
+                throw graphQLError
+            }
+            throw error
+        }
     }
 
-    private func graphqlData<U: Encodable>(body: U, retryOnUnauthorized: Bool = true) async throws -> Data {
+    private func graphqlData<U: Encodable>(body: U, timeout: TimeInterval? = nil, retryOnUnauthorized: Bool = true) async throws -> Data {
         guard let url = URL(string: "api/graphql", relativeTo: try getConfiguredServer()) else {
             throw SourceError.message("INVALID_SERVER_URL")
         }
@@ -47,6 +55,9 @@ struct SuwayomiHelper: Sendable {
         request.httpBody = try JSONEncoder().encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let timeout {
+            request.timeoutInterval = timeout
+        }
         authorize(request: &request)
 
         let data: Data
@@ -59,7 +70,7 @@ struct SuwayomiHelper: Sendable {
             guard retryOnUnauthorized, await recoverAuthentication() else {
                 throw SourceError.message("NOT_LOGGED_IN")
             }
-            return try await graphqlData(body: body, retryOnUnauthorized: false)
+            return try await graphqlData(body: body, timeout: timeout, retryOnUnauthorized: false)
         }
         return data
     }

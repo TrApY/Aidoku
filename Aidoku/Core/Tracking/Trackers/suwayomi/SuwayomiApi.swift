@@ -44,6 +44,19 @@ actor SuwayomiApi {
         )
     }
 
+    /// Marks the manga as in the server library if it isn't already.
+    func addToLibrary(sourceKey: String, seriesId: String) async throws {
+        guard let mangaId = Int(seriesId) else { throw SuwayomiTrackerError.invalidId }
+        let helper = SuwayomiHelper(sourceKey: sourceKey)
+        let state: SuwayomiInLibraryResponse = try await helper.request(
+            body: SuwayomiInLibraryPayload(variables: .init(id: mangaId))
+        )
+        guard !state.data.manga.inLibrary else { return }
+        let _: SuwayomiUpdateMangaResponse = try await helper.request(
+            body: SuwayomiAddToLibraryPayload(variables: .init(id: mangaId))
+        )
+    }
+
     func update(sourceKey: String, seriesId: String, update: TrackUpdate) async throws {
         guard
             let mangaId = Int(seriesId),

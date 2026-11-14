@@ -231,31 +231,177 @@ struct SuwayomiAddToLibraryPayload: Encodable, Sendable {
 
 // MARK: Logic
 
-/// Skeleton: signatures only, behaviour pending (tests must fail).
 enum SuwayomiServerSources {
+    /// Id of the server's built-in local source, never offered.
     static let localSourceId = "0"
+    /// Settings key (namespaced by the source key) holding the selected server source ids.
     static let settingKey = "serverSources"
+    /// Search filter id for choosing where to search.
     static let searchInFilterId = "searchIn"
+    /// Fetching from the origin websites can be slow.
     static let fetchTimeout: TimeInterval = 90
 
-    static func defaultsKey(sourceKey: String) -> String { "" }
-    static func allowsNsfw(contentRatings: Set<AidokuRunner.SourceContentRating>) -> Bool { false }
-    static func available(_ sources: [SuwayomiServerSource], allowNsfw: Bool) -> [SuwayomiServerSource] { [] }
-    static func selected(ids: [String], from available: [SuwayomiServerSource]) -> [SuwayomiServerSource] { [] }
-    static func listings(for sources: [SuwayomiServerSource]) -> [AidokuRunner.Listing] { [] }
-    static func parseListingId(_ id: String) -> (type: SuwayomiFetchSourceMangaType, sourceId: String)? { nil }
-    static func listingPayload(listingId: String, page: Int) -> SuwayomiFetchSourceMangaPayload? { nil }
+    static func defaultsKey(sourceKey: String) -> String {
+        "\(sourceKey).\(settingKey)"
+    }
+
+    /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",
+    /// the equivalent of Aidoku's `containsNsfw` rating.
+    static func allowsNsfw(contentRatings: Set<AidokuRunner.SourceContentRating>) -> Bool {
+        contentRatings.contains(.containsNsfw) || contentRatings.contains(.primarilyNsfw)
+    }
+
+    /// Sources that can be offered in the setting: everything but the local source,
+    /// and without NSFW sources when the app hides NSFW content.
+    static func available(_ sources: [SuwayomiServerSource], allowNsfw: Bool) -> [SuwayomiServerSource] {
+        sources.filter { $0.id != localSourceId && (allowNsfw || !$0.isNsfw) }
+    }
+
+    /// Selected sources, in the order they appear in the setting.
+    static func selected(ids: [String], from available: [SuwayomiServerSource]) -> [SuwayomiServerSource] {
+        let ids = Set(ids)
+        return available.filter { ids.contains($0.id) }
+    }
+
+    static func listings(for sources: [SuwayomiServerSource]) -> [AidokuRunner.Listing] {
+        sources.flatMap { source in
+            var listings: [AidokuRunner.Listing] = [
+                .init(
+                    id: "popular-\(source.id)",
+                    name: String(format: NSLocalizedString("SUWAYOMI_LISTING_POPULAR"), source.displayName),
+                    kind: .default
+                )
+            ]
+            if source.supportsLatest {
+                listings.append(.init(
+                    id: "latest-\(source.id)",
+                    name: String(format: NSLocalizedString("SUWAYOMI_LISTING_LATEST"), source.displayName),
+                    kind: .default
+                ))
+            }
+            return listings
+        }
+    }
+
+    /// Parses a listing id created by `listings(for:)`.
+    static func parseListingId(_ id: String) -> (type: SuwayomiFetchSourceMangaType, sourceId: String)? {
+        for (prefix, type) in [("popular-", SuwayomiFetchSourceMangaType.popular), ("latest-", .latest)]
+            where id.hasPrefix(prefix)
+        {
+            let sourceId = String(id.dropFirst(prefix.count))
+            return sourceId.isEmpty ? nil : (type, sourceId)
+        }
+        return nil
+    }
+
+    static func listingPayload(listingId: String, page: Int) -> SuwayomiFetchSourceMangaPayload? {
+        guard let (type, sourceId) = parseListingId(listingId) else { return nil }
+        return .init(variables: .init(source: sourceId, type: type, page: page, query: nil))
+    }
+
+    /// Search inside a server source; without text it shows the popular list.
     static func searchPayload(sourceId: String, query: String?, page: Int) -> SuwayomiFetchSourceMangaPayload {
-        .init(variables: .init(source: "", type: .search, page: 0, query: nil))
+        let query = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let query, !query.isEmpty {
+            return .init(variables: .init(source: sourceId, type: .search, page: page, query: query))
+        }
+        return .init(variables: .init(source: sourceId, type: .popular, page: page, query: nil))
     }
-    static func searchSourceId(filters: [AidokuRunner.FilterValue]) -> String? { nil }
-    static func searchInFilter(sources: [SuwayomiServerSource]) -> AidokuRunner.Filter? { nil }
-    static func setting(sources: [SuwayomiServerSource]) -> AidokuRunner.Setting? { nil }
-    static func mangaPage(_ response: SuwayomiFetchSourceMangaResponse, sourceKey: String, baseUrl: URL) -> AidokuRunner.MangaPageResult {
-        .init(entries: [], hasNextPage: false)
+
+    /// The server source chosen in the "search in" filter, or nil for the server library.
+    static func searchSourceId(filters: [AidokuRunner.FilterValue]) -> String? {
+        for filter in filters {
+            if case let .select(id, value) = filter, id == searchInFilterId, !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
-    static func needsRemoteFetch(_ response: SuwayomiMangaUpdateResponse, needsDetails: Bool, needsChapters: Bool) -> Bool { false }
-    static func readableMessage(_ message: String) -> String { message }
-    static func graphQLError(from data: Data) -> SourceError? { nil }
-    static func isNoChaptersFound(_ error: Error) -> Bool { false }
+
+    static func searchInFilter(sources: [SuwayomiServerSource]) -> AidokuRunner.Filter? {
+        guard !sources.isEmpty else { return nil }
+        return .init(
+            id: searchInFilterId,
+            title: NSLocalizedString("SUWAYOMI_SEARCH_IN"),
+            value: .select(.init(
+                options: [NSLocalizedString("LIBRARY")] + sources.map(\.displayName),
+                ids: [""] + sources.map(\.id),
+                defaultValue: ""
+            ))
+        )
+    }
+
+    static func setting(sources: [SuwayomiServerSource]) -> AidokuRunner.Setting? {
+        guard !sources.isEmpty else { return nil }
+        return .init(
+            title: "SUWAYOMI_SERVER_SOURCES",
+            value: .group(.init(
+                footer: "SUWAYOMI_SERVER_SOURCES_INFO",
+                items: [
+                    .init(
+                        key: settingKey,
+                        title: "SUWAYOMI_SERVER_SOURCES",
+                        refreshes: ["listings", "filters"],
+                        value: .multiselect(.init(
+                            values: sources.map(\.id),
+                            titles: sources.map(\.displayName)
+                        ))
+                    )
+                ]
+            ))
+        )
+    }
+
+    static func mangaPage(
+        _ response: SuwayomiFetchSourceMangaResponse,
+        sourceKey: String,
+        baseUrl: URL
+    ) -> AidokuRunner.MangaPageResult {
+        .init(
+            entries: response.data.fetchSourceManga.mangas.compactMap { $0.intoManga(sourceKey: sourceKey, baseUrl: baseUrl) },
+            hasNextPage: response.data.fetchSourceManga.hasNextPage
+        )
+    }
+
+    /// Whether the server has to fetch the manga from its origin before reading it:
+    /// no chapters stored yet, or details requested but never fetched.
+    static func needsRemoteFetch(
+        _ response: SuwayomiMangaUpdateResponse,
+        needsDetails: Bool,
+        needsChapters: Bool
+    ) -> Bool {
+        let missingChapters = needsChapters && response.data.chapters.nodes.isEmpty
+        let manga = response.data.manga
+        let missingDetails = needsDetails && manga.description == nil && manga.author == nil
+        return missingChapters || missingDetails
+    }
+
+    /// Readable message from a GraphQL error: the server prepends
+    /// "Exception while fetching data (/field) : " and appends a stack trace.
+    static func readableMessage(_ message: String) -> String {
+        var text = message.components(separatedBy: .newlines).first ?? message
+        if let range = text.range(of: ") : "), text.hasPrefix("Exception while fetching data") {
+            text = String(text[range.upperBound...])
+        }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty || text == "null" ? NSLocalizedString("SUWAYOMI_SERVER_ERROR") : text
+    }
+
+    /// The first GraphQL error of a response as a readable `SourceError`, if there is one.
+    static func graphQLError(from data: Data) -> SourceError? {
+        guard
+            let response = try? JSONDecoder().decode(SuwayomiGraphQLErrorResponse.self, from: data),
+            let message = response.errors.first?.message
+        else {
+            return nil
+        }
+        return .message(readableMessage(message))
+    }
+
+    static func isNoChaptersFound(_ error: Error) -> Bool {
+        if case let .message(message) = error as? SourceError {
+            return message.localizedCaseInsensitiveContains("No chapters found")
+        }
+        return false
+    }
 }

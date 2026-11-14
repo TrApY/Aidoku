@@ -327,6 +327,12 @@
 "SUWAYOMI_TAGLINE" = "Manga reader server";
 "SUWAYOMI_INFO" = "Suwayomi is a self-hosted manga reader server that runs extensions built for Mihon (Tachiyomi). You will need a Suwayomi server set up and running in order to use this source.";
 "SUWAYOMI_SETUP" = "Suwayomi Setup";
+"SUWAYOMI_SERVER_SOURCES" = "Server Sources";
+"SUWAYOMI_SERVER_SOURCES_INFO" = "Sources installed on the Suwayomi server to browse and search besides its library. Each one adds Popular and Latest lists.";
+"SUWAYOMI_LISTING_POPULAR" = "Popular · %@";
+"SUWAYOMI_LISTING_LATEST" = "Latest · %@";
+"SUWAYOMI_SEARCH_IN" = "Search In";
+"SUWAYOMI_SERVER_ERROR" = "The Suwayomi server couldn't complete the request.";
 "STATUS_LICENSED" = "Licensed";
 "STATUS_PUBLISHING_FINISHED" = "Publishing Finished";
 "AUTHOR_NAME" = "Author name";

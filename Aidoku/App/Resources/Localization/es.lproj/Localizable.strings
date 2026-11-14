@@ -746,3 +746,9 @@
 "NEW_CHAPTERS_AVAILABLE" = "Capítulos nuevos disponibles";
 "X_SERIES_HAVE_NEW_CHAPTERS" = "%d series tienen capítulos nuevos";
 "SUWAYOMI" = "Suwayomi";
+"SUWAYOMI_SERVER_SOURCES" = "Fuentes del servidor";
+"SUWAYOMI_SERVER_SOURCES_INFO" = "Fuentes instaladas en el servidor Suwayomi para explorar y buscar además de su biblioteca. Cada una añade las listas Populares y Recientes.";
+"SUWAYOMI_LISTING_POPULAR" = "Populares · %@";
+"SUWAYOMI_LISTING_LATEST" = "Recientes · %@";
+"SUWAYOMI_SEARCH_IN" = "Buscar en";
+"SUWAYOMI_SERVER_ERROR" = "El servidor Suwayomi no ha podido completar la petición.";
