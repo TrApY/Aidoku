@@ -36,8 +36,9 @@ actor DownloadManager {
     private var lastCacheUpdate: Date = .distantPast
     private let cacheValidityDuration: TimeInterval = 60 // 1 minute
 
-    init() {
-        self.queue = DownloadQueue(cache: cache)
+    /// - queueStateKey: where the queue is saved (nil: not saved, for tests).
+    init(queueStateKey: String? = "Data.downloadQueueState") {
+        self.queue = DownloadQueue(cache: cache, stateKey: queueStateKey)
         if !Self.directory.exists {
             Self.directory.createDirectory()
         }
@@ -213,9 +214,13 @@ extension DownloadManager {
     }
 
     /// Download given chapters from a manga.
-    /// - autoStart: false keeps a paused queue paused (automatic downloads).
-    func download(manga: AidokuRunner.Manga, chapters: [AidokuRunner.Chapter], autoStart: Bool = true) async {
-        let downloads = await queue.add(chapters: chapters, manga: manga, autoStart: autoStart)
+    /// - start: `.unlessUserPaused` for automatic downloads (checked inside the queue, right before starting).
+    func download(
+        manga: AidokuRunner.Manga,
+        chapters: [AidokuRunner.Chapter],
+        start: DownloadQueue.AutoStart = .always
+    ) async {
+        let downloads = await queue.add(chapters: chapters, manga: manga, start: start)
         NotificationCenter.default.post(
             name: .downloadsQueued,
             object: downloads
@@ -289,17 +294,21 @@ extension DownloadManager {
         !(await queue.isRunning())
     }
 
-    /// Paused by the user (or by the Wi-Fi rule), not just idle.
+    /// Paused from the download queue UI, not just idle or paused by the system.
     func isQueuePausedByUser() async -> Bool {
         await queue.isPausedByUser()
     }
+
+    /// For tests.
+    var downloadQueue: DownloadQueue { queue }
 
     func getDownloadQueue() async -> [String: [Download]] {
         await queue.queue
     }
 
-    func pauseDownloads() async {
-        await queue.pause()
+    /// - byUser: true only from the download queue UI (automatic downloads then keep the queue paused).
+    func pauseDownloads(byUser: Bool = false) async {
+        await queue.pause(byUser: byUser)
         NotificationCenter.default.post(name: .downloadsPaused, object: nil)
         // Invalidate cache since paused state may affect display
         invalidateDownloadedMangaCache()

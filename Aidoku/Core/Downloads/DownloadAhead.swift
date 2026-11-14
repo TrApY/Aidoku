@@ -58,6 +58,24 @@ enum DownloadAheadPlanner {
         case missing
     }
 
+    /// Downloaded and queued chapter keys from their download status. A failed chapter is missing (queued
+    /// again) unless this trigger already queued it once (`retried`): at most one retry per trigger (pending).
+    static func split(
+        statuses: [(key: String, status: DownloadStatus)],
+        retried: Set<String>
+    ) -> (downloaded: Set<String>, queued: Set<String>) {
+        var downloaded = Set<String>()
+        var queued = Set<String>()
+        for (key, status) in statuses {
+            switch state(for: status) {
+                case .downloaded: downloaded.insert(key)
+                case .queued: queued.insert(key)
+                case .missing: break
+            }
+        }
+        return (downloaded, queued)
+    }
+
     static func state(for status: DownloadStatus) -> ChapterState {
         switch status {
             case .finished: .downloaded
@@ -150,12 +168,13 @@ extension DownloadManager {
     @discardableResult
     func ensureAheadDownloaded(
         manga: AidokuRunner.Manga,
-        connection: NetworkDataType? = nil
+        connection: NetworkDataType? = nil,
+        onlyOnWifi: Bool? = nil
     ) async -> [AidokuRunner.Chapter] {
         let mangaId = manga.identifier
         let canQueue = {
             DownloadAheadPlanner.canQueue(
-                onlyOnWifi: AppSettings.downloads.downloadOnlyOnWifi.get(),
+                onlyOnWifi: onlyOnWifi ?? AppSettings.downloads.downloadOnlyOnWifi.get(),
                 connection: connection ?? Reachability.getConnectionType()
             )
         }
@@ -182,21 +201,12 @@ extension DownloadManager {
             let filters = await CoreDataManager.shared.container.performBackgroundTask { context in
                 CoreDataManager.shared.getMangaChapterFilters(mangaId: mangaId, context: context)
             }
-            var downloaded = Set<String>()
-            var queued = Set<String>()
-            for chapter in chapters {
-                let identifier = ChapterIdentifier(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key)
-                let status = getDownloadStatus(for: identifier)
-                switch DownloadAheadPlanner.state(for: status) {
-                    case .downloaded: downloaded.insert(chapter.key)
-                    case .queued: queued.insert(chapter.key)
-                    case .missing:
-                        // failed again after being queued by this trigger: leave it for the next one
-                        if status == .failed && retried.contains(chapter.key) {
-                            queued.insert(chapter.key)
-                        }
-                }
-            }
+            let (downloaded, queued) = DownloadAheadPlanner.split(
+                statuses: chapters.map {
+                    ($0.key, getDownloadStatus(for: .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0.key)))
+                },
+                retried: retried
+            )
             let toQueue = DownloadAheadPlanner.chaptersToQueue(
                 chapters: chapters,
                 readingHistory: readingHistory,
@@ -209,7 +219,7 @@ extension DownloadManager {
             if !toQueue.isEmpty {
                 retried.formUnion(toQueue.map(\.key))
                 // automatic: don't resume a queue the user paused
-                await download(manga: manga, chapters: toQueue, autoStart: !(await isQueuePausedByUser()))
+                await download(manga: manga, chapters: toQueue, start: .unlessUserPaused)
                 queuedNow += toQueue
             }
         } while await DownloadAheadRuns.shared.end(runKey)
@@ -218,12 +228,12 @@ extension DownloadManager {
 
     /// Same, for a library manga known only by its identifier (history, library refresh).
     @discardableResult
-    func ensureAheadDownloaded(mangaId: MangaIdentifier) async -> [AidokuRunner.Chapter] {
+    func ensureAheadDownloaded(mangaId: MangaIdentifier, onlyOnWifi: Bool? = nil) async -> [AidokuRunner.Chapter] {
         guard DownloadAheadSetting.get(for: mangaId) > 0 else { return [] }
         let manga = await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.getLibraryManga(mangaId: mangaId, context: context)?.manga?.toManga().toNew()
         }
         guard let manga else { return [] }
-        return await ensureAheadDownloaded(manga: manga)
+        return await ensureAheadDownloaded(manga: manga, onlyOnWifi: onlyOnWifi)
     }
 }

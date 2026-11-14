@@ -129,7 +129,7 @@ struct DownloadQueueView: View {
                                 if isPaused {
                                     await DownloadManager.shared.resumeDownloads()
                                 } else {
-                                    await DownloadManager.shared.pauseDownloads()
+                                    await DownloadManager.shared.pauseDownloads(byUser: true)
                                 }
                             }
                         } label: {

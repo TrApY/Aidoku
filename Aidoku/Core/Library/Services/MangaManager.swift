@@ -230,11 +230,13 @@ extension MangaManager {
         await UIApplication.shared.appDelegate?.hideLoadingIndicator()
     }
 
+    /// - downloadAhead: the manga's «descarga adelantada» setting when it was removed (pending).
     func restoreToLibrary(
         manga: Manga,
         chapters: [Chapter],
         trackItems: [TrackItem],
-        categories: [String]
+        categories: [String],
+        downloadAhead: Int = 0
     ) async {
         let newManga = manga.toNew()
         let newChapters = chapters.map { $0.toNew() }

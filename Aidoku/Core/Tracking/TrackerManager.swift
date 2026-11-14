@@ -368,10 +368,14 @@ actor TrackerManager {
     }
 
     /// Sync progress with all linked trackers that support page progress.
+    /// - trackerLookup, downloadManager: injectable for tests.
     func syncPageTrackerHistory(
         tracker: Tracker? = nil,
         manga: AidokuRunner.Manga,
-        chapters: [AidokuRunner.Chapter]? = nil
+        chapters: [AidokuRunner.Chapter]? = nil,
+        trackerLookup: (String) -> Tracker? = { TrackerManager.getTracker(id: $0) },
+        downloadManager: DownloadManager = .shared,
+        onlyOnWifi: Bool? = nil
     ) async {
         let chapters = if let chapters {
             chapters
@@ -391,7 +395,7 @@ actor TrackerManager {
         }
 
         for item in trackItems {
-            guard let targetTracker = Self.getTracker(id: item.trackerId) as? PageTracker else { continue }
+            guard let targetTracker = trackerLookup(item.trackerId) as? PageTracker else { continue }
             if let tracker, targetTracker.id != tracker.id {
                 continue // if a specific tracker is provided, only sync that one
             }
@@ -493,7 +497,7 @@ actor TrackerManager {
             // «descarga adelantada»: chapters read on another device move the window too
             let mangaId = manga.identifier
             Task {
-                await DownloadManager.shared.ensureAheadDownloaded(mangaId: mangaId)
+                await downloadManager.ensureAheadDownloaded(mangaId: mangaId, onlyOnWifi: onlyOnWifi)
             }
         }
         for (chapterKey, page) in progressed {

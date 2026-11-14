@@ -4,6 +4,7 @@
 //
 
 import AidokuRunner
+import CoreData
 import Foundation
 import Testing
 
@@ -164,71 +165,64 @@ import Testing
     // MARK: ensureAheadDownloaded
 
     /// A library manga of a fake source with chapters c1...c6, stored newest first (as sources give them),
-    /// and a paused queue so nothing really downloads. Cleans everything up afterwards.
+    /// and its own download manager (queue not saved) paused by the user, so nothing really downloads and
+    /// no global queue or setting is touched. Cleans everything up afterwards.
     private func withLibraryManga(
         key: String,
         target: Int,
-        _ body: (AidokuRunner.Manga, [AidokuRunner.Chapter]) async throws -> Void
+        _ body: (AidokuRunner.Manga, [AidokuRunner.Chapter], DownloadManager) async throws -> Void
     ) async throws {
         let manga = AidokuRunner.Manga(sourceKey: "downloadaheadtest", key: key, title: "Descarga adelantada \(key)")
         let newestFirst: [AidokuRunner.Chapter] = (1...6).reversed().map {
             .init(key: "c\($0)", chapterNumber: Float($0))
         }
-        let onlyOnWifi = AppSettings.downloads.downloadOnlyOnWifi.get()
-        let wasPaused = await DownloadManager.shared.isQueuePausedByUser()
+        let manager = DownloadManager(queueStateKey: nil)
         await MangaManager.shared.addToLibrary(manga: manga, chapters: newestFirst)
         DownloadAheadSetting.set(target, for: manga.identifier)
-        await DownloadManager.shared.pauseDownloads()
+        await manager.pauseDownloads(byUser: true)
         do {
-            try await body(manga, newestFirst)
+            try await body(manga, newestFirst, manager)
         } catch {
             Issue.record(error)
         }
-        await DownloadManager.shared.cancelDownloads(for: newestFirst.map {
+        await manager.cancelDownloads(for: newestFirst.map {
             ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: $0.key)
         })
         await MangaManager.shared.removeFromLibrary(mangaId: manga.identifier)
         #expect(DownloadAheadSetting.get(for: manga.identifier) == 0) // removed with the manga
-        DownloadManager.directory.appendingPathComponent(manga.sourceKey).removeItem()
-        AppSettings.downloads.downloadOnlyOnWifi.set(onlyOnWifi)
-        if !wasPaused {
-            await DownloadManager.shared.resumeDownloads()
-        }
+        DownloadManager.directory.appendingPathComponent(manga.sourceKey).appendingPathComponent(manga.key).removeItem()
     }
 
-    private func status(_ manga: AidokuRunner.Manga, _ chapterKey: String) -> DownloadStatus {
-        DownloadManager.shared.getDownloadStatus(for: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapterKey))
+    private func status(_ manager: DownloadManager, _ manga: AidokuRunner.Manga, _ chapterKey: String) -> DownloadStatus {
+        manager.getDownloadStatus(for: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapterKey))
     }
 
     @Test func ensureQueuesInReadingOrderWithWifi() async throws {
-        try await withLibraryManga(key: "44", target: 2) { manga, _ in
-            AppSettings.downloads.downloadOnlyOnWifi.set(true)
-            #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .cellular).isEmpty)
-            let queued = await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+        try await withLibraryManga(key: "44", target: 2) { manga, _, manager in
+            #expect(await manager.ensureAheadDownloaded(manga: manga, connection: .cellular, onlyOnWifi: true).isEmpty)
+            let queued = await manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: true)
             #expect(queued.map(\.key) == ["c1", "c2"]) // oldest first, though stored newest first
-            #expect(status(manga, "c1") == .queued)
-            #expect(status(manga, "c3") == .none)
+            #expect(status(manager, manga, "c1") == .queued)
+            #expect(status(manager, manga, "c3") == .none)
             // without the Wi-Fi rule, mobile data is fine; nothing new to queue now
-            AppSettings.downloads.downloadOnlyOnWifi.set(false)
             DownloadAheadSetting.set(3, for: manga.identifier)
-            #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .cellular).map(\.key) == ["c3"])
+            #expect(await manager.ensureAheadDownloaded(manga: manga, connection: .cellular, onlyOnWifi: false).map(\.key) == ["c3"])
         }
     }
 
-    @Test func automaticTriggerKeepsAPausedQueuePaused() async throws {
-        try await withLibraryManga(key: "45", target: 3) { manga, _ in
-            AppSettings.downloads.downloadOnlyOnWifi.set(false)
-            #expect(await DownloadManager.shared.isQueuePausedByUser())
-            let queued = await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+    @Test func automaticTriggerKeepsAUserPausedQueuePaused() async throws {
+        try await withLibraryManga(key: "45", target: 3) { manga, _, manager in
+            #expect(await manager.isQueuePausedByUser())
+            let queued = await manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: false)
             #expect(queued.count == 3)
-            #expect(await DownloadManager.shared.isQueuePausedByUser()) // queued, not resumed
-            #expect(status(manga, "c1") == .queued)
+            #expect(await manager.isQueuePausedByUser()) // queued, not resumed
+            #expect(await manager.downloadQueue.isPaused())
+            #expect(status(manager, manga, "c1") == .queued)
         }
     }
 
     @Test func failedDownloadIsQueuedAgain() async throws {
-        try await withLibraryManga(key: "46", target: 2) { manga, _ in
-            AppSettings.downloads.downloadOnlyOnWifi.set(false)
+        try await withLibraryManga(key: "46", target: 2) { manga, _, manager in
             // what DownloadQueue.downloadFailed leaves: out of the queue, a tmp folder with the failure marker
             let tmp = DownloadManager.directory
                 .appendingPathComponent(manga.sourceKey)
@@ -236,22 +230,35 @@ import Testing
                 .appendingPathComponent("\(DownloadCache.tmpDirectoryPrefix)c1")
             tmp.createDirectory()
             FileManager.default.createFile(atPath: tmp.appendingPathComponent(DownloadCache.failureMarkerName).path, contents: Data())
-            #expect(status(manga, "c1") == .failed)
-            let queued = await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            #expect(status(manager, manga, "c1") == .failed)
+            let queued = await manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: false)
             #expect(queued.map(\.key) == ["c1", "c2"])
-            #expect(status(manga, "c1") == .queued)
+            #expect(status(manager, manga, "c1") == .queued)
         }
     }
 
+    @Test func oneRetryPerTrigger() {
+        let statuses: [(key: String, status: DownloadStatus)] = [
+            ("c1", .failed), ("c2", .failed), ("c3", .queued), ("c4", .finished), ("c5", .none)
+        ]
+        // first pass of a trigger: both failed chapters are missing (queued again)
+        let first = DownloadAheadPlanner.split(statuses: statuses, retried: [])
+        #expect(first.queued == ["c3"])
+        #expect(first.downloaded == ["c4"])
+        // c1 was queued again by this trigger and failed again: not queued a second time
+        let second = DownloadAheadPlanner.split(statuses: statuses, retried: ["c1"])
+        #expect(second.queued == ["c1", "c3"])
+        #expect(!second.queued.contains("c2"))
+    }
+
     @Test func concurrentTriggersQueueEachChapterOnce() async throws {
-        try await withLibraryManga(key: "47", target: 3) { manga, _ in
-            AppSettings.downloads.downloadOnlyOnWifi.set(false)
-            async let first = DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
-            async let second = DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
-            async let third = DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+        try await withLibraryManga(key: "47", target: 3) { manga, _, manager in
+            async let first = manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: false)
+            async let second = manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: false)
+            async let third = manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: false)
             let all = await (first + second + third).map(\.key)
             #expect(all.sorted() == ["c1", "c2", "c3"])
-            let inQueue = await DownloadManager.shared.getDownloadQueue()[manga.sourceKey]?
+            let inQueue = await manager.getDownloadQueue()[manga.sourceKey]?
                 .filter { $0.chapterIdentifier.mangaKey == manga.key }
                 .map(\.chapterIdentifier.chapterKey) ?? []
             #expect(inQueue.sorted() == ["c1", "c2", "c3"])
@@ -259,10 +266,100 @@ import Testing
     }
 
     @Test func ensureDoesNothingWhenOff() async throws {
-        try await withLibraryManga(key: "48", target: 0) { manga, _ in
-            AppSettings.downloads.downloadOnlyOnWifi.set(false)
-            #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi).isEmpty)
-            #expect(status(manga, "c1") == .none)
+        try await withLibraryManga(key: "48", target: 0) { manga, _, manager in
+            #expect(await manager.ensureAheadDownloaded(manga: manga, connection: .wifi, onlyOnWifi: false).isEmpty)
+            #expect(status(manager, manga, "c1") == .none)
         }
     }
+
+    @Test func chaptersReadOnAnotherDeviceMoveTheWindow() async throws {
+        try await withLibraryManga(key: "49", target: 2) { manga, newestFirst, manager in
+            let tracker = FakePageTracker(progress: ["c1": .init(completed: true, page: 20, date: .now)])
+            await CoreDataManager.shared.container.performBackgroundTask { context in
+                _ = CoreDataManager.shared.createTrack(
+                    id: "fake-49", trackerId: tracker.id, mangaId: manga.identifier, title: nil, context: context
+                )
+                try? context.save()
+            }
+            await TrackerManager.shared.syncPageTrackerHistory(
+                manga: manga,
+                chapters: newestFirst,
+                trackerLookup: { $0 == tracker.id ? tracker : nil },
+                downloadManager: manager,
+                onlyOnWifi: false
+            )
+            // c1 read elsewhere: the window is c2, c3
+            #expect(status(manager, manga, "c2") == .queued)
+            #expect(status(manager, manga, "c3") == .queued)
+            #expect(status(manager, manga, "c1") == .none)
+            #expect(status(manager, manga, "c4") == .none)
+        }
+    }
+
+    @Test func settingIsRemovedWithSeveralMangaAndRestoredOnUndo() async throws {
+        let mangas = (60...61).map { AidokuRunner.Manga(sourceKey: "downloadaheadtest", key: "\($0)", title: "Descarga adelantada \($0)") }
+        let chapters: [AidokuRunner.Chapter] = [.init(key: "c1", chapterNumber: 1)]
+        for manga in mangas {
+            await MangaManager.shared.addToLibrary(manga: manga, chapters: chapters)
+            DownloadAheadSetting.set(3, for: manga.identifier)
+        }
+        let first = mangas[0].identifier
+        let snapshot = await CoreDataManager.shared.container.performBackgroundTask { context in
+            (
+                CoreDataManager.shared.getManga(mangaId: first, context: context)?.toManga(),
+                CoreDataManager.shared.getChapters(mangaId: first, context: context).map { $0.toChapter() }
+            )
+        }
+        await MangaManager.shared.removeFromLibrary(mangaIds: mangas.map(\.identifier))
+        #expect(DownloadAheadSetting.get(for: mangas[0].identifier) == 0)
+        #expect(DownloadAheadSetting.get(for: mangas[1].identifier) == 0)
+
+        let oldManga = try #require(snapshot.0)
+        await MangaManager.shared.restoreToLibrary(
+            manga: oldManga, chapters: snapshot.1, trackItems: [], categories: [], downloadAhead: 3
+        )
+        #expect(DownloadAheadSetting.get(for: first) == 3)
+        await MangaManager.shared.removeFromLibrary(mangaId: first)
+    }
+
+    @Test func migrationDoesNotOverwriteTheDestination() {
+        let old = MangaIdentifier(sourceKey: "downloadaheadtest", mangaKey: "70")
+        let new = MangaIdentifier(sourceKey: "downloadaheadtest2", mangaKey: "71")
+        defer {
+            DownloadAheadSetting.set(0, for: old)
+            DownloadAheadSetting.set(0, for: new)
+        }
+        DownloadAheadSetting.set(5, for: old)
+        DownloadAheadSetting.set(2, for: new)
+        DownloadAheadSetting.migrate(from: old, to: new, copy: false)
+        #expect(DownloadAheadSetting.get(for: new) == 2)
+        #expect(DownloadAheadSetting.get(for: old) == 0)
+    }
+}
+
+/// A page tracker that reports fixed progress.
+private final class FakePageTracker: PageTracker, @unchecked Sendable {
+    struct Unsupported: Error {}
+    let id = "test.fakepagetracker"
+    let name = "Fake"
+    let icon: PlatformImage? = nil
+    let isLoggedIn = true
+    let progress: [String: ChapterReadProgress]
+
+    init(progress: [String: ChapterReadProgress]) {
+        self.progress = progress
+    }
+
+    func setProgress(trackId: String, chapterId: ChapterIdentifier, progress: ChapterReadProgress) async throws {}
+    func getProgress(trackId: String, chapters: [AidokuRunner.Chapter]) async throws -> [String: ChapterReadProgress] {
+        progress
+    }
+    func getTrackerInfo() async throws -> TrackerInfo { throw Unsupported() }
+    func register(trackId: String, highestChapterRead: Float?, earliestReadDate: Date?) async throws -> String? { nil }
+    func update(trackId: String, update: TrackUpdate) async throws {}
+    func getState(trackId: String) async throws -> TrackState { throw Unsupported() }
+    func getUrl(trackId: String) async -> URL? { nil }
+    func search(for manga: AidokuRunner.Manga, includeNsfw: Bool) async throws -> [TrackSearchItem] { [] }
+    func search(title: String, includeNsfw: Bool) async throws -> [TrackSearchItem] { [] }
+    func logout() async throws {}
 }

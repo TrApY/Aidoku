@@ -13,7 +13,16 @@ import Foundation
 // creates a downloadtask for every source
 // only one chapter per source is downloaded at a time
 actor DownloadQueue {
+    /// When adding downloads: start the queue, leave it as it is, or start it unless the user paused it.
+    enum AutoStart: Sendable {
+        case always
+        case never
+        case unlessUserPaused
+    }
+
     private let cache: DownloadCache
+    /// UserDefaults key for the saved queue (nil: not saved, for tests).
+    private let stateKey: String?
     private var onCompletion: (() -> Void)?
 
     private(set) var queue: [String: [Download]] = [:] // all queued downloads stored under source id
@@ -21,6 +30,8 @@ actor DownloadQueue {
     private var progressBlocks: [ChapterIdentifier: (Int, Int) -> Void] = [:]
 
     private var paused = false
+    /// Paused from the download queue UI (not by the Wi-Fi rule or the background task expiring).
+    private var userPaused = false
     private var registeredTask = false
     private var totalDownloads: Int = 0
     private var completedDownloads: Int = 0
@@ -29,9 +40,31 @@ actor DownloadQueue {
 
     private static let taskIdentifier = (Bundle.main.bundleIdentifier ?? "") + ".download"
 
-    init(cache: DownloadCache, onCompletion: (() -> Void)? = nil) {
+    init(cache: DownloadCache, onCompletion: (() -> Void)? = nil, stateKey: String? = "Data.downloadQueueState") {
         self.cache = cache
         self.onCompletion = onCompletion
+        self.stateKey = stateKey
+    }
+
+    /// The task of a source, created if needed (pending).
+    @discardableResult
+    func makeTaskIfNeeded(sourceKey: String) async -> DownloadTask {
+        if tasks[sourceKey] == nil {
+            let task = DownloadTask(id: sourceKey, cache: cache, downloads: queue[sourceKey] ?? [])
+            await task.setDelegate(delegate: self)
+            tasks[sourceKey] = task
+        }
+        return tasks[sourceKey]!
+    }
+
+    /// Chapter keys the source's task holds (nil without a task). For tests.
+    func taskChapterKeys(sourceKey: String) async -> [String]? {
+        guard let task = tasks[sourceKey] else { return nil }
+        return await task.downloads.map(\.chapterIdentifier.chapterKey)
+    }
+
+    func isPaused() -> Bool {
+        paused
     }
 
     func setOnCompletion(_ onCompletion: (() -> Void)?) {
@@ -103,7 +136,7 @@ actor DownloadQueue {
         }
     }
 
-    func pause() async {
+    func pause(byUser: Bool = false) async {
         paused = true
 
         if #available(iOS 26.0, *) {
@@ -124,6 +157,11 @@ actor DownloadQueue {
 
     @discardableResult
     func add(chapters: [AidokuRunner.Chapter], manga: AidokuRunner.Manga, autoStart: Bool = true) async -> [Download] {
+        await add(chapters: chapters, manga: manga, start: autoStart ? .always : .never)
+    }
+
+    @discardableResult
+    func add(chapters: [AidokuRunner.Chapter], manga: AidokuRunner.Manga, start autoStart: AutoStart) async -> [Download] {
         var downloads: [Download] = []
         for chapter in chapters {
             let identifier = ChapterIdentifier(
@@ -151,7 +189,7 @@ actor DownloadQueue {
         }
         totalDownloads += downloads.count
         bgTask?.progress.totalUnitCount = Int64(totalDownloads)
-        if autoStart {
+        if autoStart != .never {
             await start()
         }
         saveQueueState()
@@ -224,13 +262,15 @@ actor DownloadQueue {
     }
 
     func saveQueueState() {
+        guard let stateKey else { return }
         let queueData = try? JSONEncoder().encode(queue)
-        UserDefaults.standard.set(queueData, forKey: "Data.downloadQueueState")
+        UserDefaults.standard.set(queueData, forKey: stateKey)
     }
 
     func loadQueueState() async {
         guard
-            let queueData = UserDefaults.standard.data(forKey: "Data.downloadQueueState"),
+            let stateKey,
+            let queueData = UserDefaults.standard.data(forKey: stateKey),
             let queueState = try? JSONDecoder().decode([String: [Download]].self, from: queueData)
         else {
             return
@@ -242,7 +282,7 @@ actor DownloadQueue {
     }
 
     func isPausedByUser() -> Bool {
-        paused
+        paused // pending
     }
 
     func hasQueuedDownloads() -> Bool {

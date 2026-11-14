@@ -26,7 +26,7 @@ actor DownloadTask: Identifiable {
     let id: String
 
     private let cache: DownloadCache
-    private var downloads: [Download]
+    private(set) var downloads: [Download]
     private weak var delegate: DownloadTaskDelegate?
 
     private var currentPage: Int = 0
@@ -46,10 +46,11 @@ actor DownloadTask: Identifiable {
         case pageProcessorFailed
     }
 
-    init(id: String, cache: DownloadCache, downloads: [Download]) {
+    init(id: String, cache: DownloadCache, downloads: [Download], delegate: DownloadTaskDelegate? = nil) {
         self.id = id
         self.cache = cache
         self.downloads = downloads
+        self.delegate = delegate
     }
 
     func setDelegate(delegate: DownloadTaskDelegate?) {
