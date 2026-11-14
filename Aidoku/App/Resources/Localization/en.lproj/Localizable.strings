@@ -332,6 +332,7 @@
 "SUWAYOMI_LISTING_POPULAR" = "Popular · %@";
 "SUWAYOMI_LISTING_LATEST" = "Latest · %@";
 "SUWAYOMI_SEARCH_IN" = "Search In";
+"SUWAYOMI_SEARCH_ALL" = "Everything";
 "SUWAYOMI_SERVER_ERROR" = "The Suwayomi server couldn't complete the request.";
 "STATUS_LICENSED" = "Licensed";
 "STATUS_PUBLISHING_FINISHED" = "Publishing Finished";

@@ -1,0 +1,514 @@
+{
+ "data": {
+  "sources": {
+   "nodes": [
+    {
+     "id": "0",
+     "displayName": "Local source",
+     "lang": "localsourcelang",
+     "isNsfw": false,
+     "supportsLatest": true
+    },
+    {
+     "id": "72800122520214493",
+     "displayName": "MangaDex (UR)",
+     "lang": "ur",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "425785191804166217",
+     "displayName": "MangaDex (DA)",
+     "lang": "da",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "737986167355114438",
+     "displayName": "MangaDex (LT)",
+     "lang": "lt",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "764587568075398530",
+     "displayName": "MangaDex (LA)",
+     "lang": "la",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "954368055061084457",
+     "displayName": "MangaDex (NE)",
+     "lang": "ne",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "987803387023224960",
+     "displayName": "MangaDex (SQ)",
+     "lang": "sq",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1145824452519314725",
+     "displayName": "MangaDex (SV)",
+     "lang": "sv",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1347402746269051958",
+     "displayName": "MangaDex (MY)",
+     "lang": "my",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1411768577036936240",
+     "displayName": "MangaDex (JA)",
+     "lang": "ja",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1424273154577029558",
+     "displayName": "MangaDex (HE)",
+     "lang": "he",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1471784905273036181",
+     "displayName": "MangaDex (MS)",
+     "lang": "ms",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1493666528525752601",
+     "displayName": "MangaDex (ZH-HANT)",
+     "lang": "zh-Hant",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1553736397938752611",
+     "displayName": "MangaDex (EU)",
+     "lang": "eu",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1573550798452063564",
+     "displayName": "MangaDex (JV)",
+     "lang": "jv",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1596411039134168890",
+     "displayName": "Olympus Scanlation (ES)",
+     "lang": "es",
+     "isNsfw": false,
+     "supportsLatest": true
+    },
+    {
+     "id": "1713554459881080228",
+     "displayName": "MangaDex (TH)",
+     "lang": "th",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "1952071260038453057",
+     "displayName": "MangaDex (IT)",
+     "lang": "it",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2072928884077964642",
+     "displayName": "MangaDex (CV)",
+     "lang": "cv",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2098905203823335614",
+     "displayName": "MangaDex (RU)",
+     "lang": "ru",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2499283573021220255",
+     "displayName": "MangaDex (EN)",
+     "lang": "en",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2655149515337070132",
+     "displayName": "MangaDex (PT-BR)",
+     "lang": "pt-BR",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2819252027406613931",
+     "displayName": "MangaDex (EO)",
+     "lang": "eo",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2838715564514827672",
+     "displayName": "MangaDex (UZ)",
+     "lang": "uz",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "2875503798326600410",
+     "displayName": "MangaDex (SK)",
+     "lang": "sk",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3260701926561129943",
+     "displayName": "MangaDex (EL)",
+     "lang": "el",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3285208643537017688",
+     "displayName": "MangaDex (KO)",
+     "lang": "ko",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3339599426223341161",
+     "displayName": "MangaDex (AR)",
+     "lang": "ar",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3507378005483435886",
+     "displayName": "MangaDex (SR)",
+     "lang": "sr",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3578612018159256808",
+     "displayName": "MangaDex (CS)",
+     "lang": "cs",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3601180820582582605",
+     "displayName": "MangaDex (BE)",
+     "lang": "be",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3686775439235747344",
+     "displayName": "MangaDex (GA)",
+     "lang": "ga",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3781216447842245147",
+     "displayName": "MangaDex (FA)",
+     "lang": "fa",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3807502156582598786",
+     "displayName": "MangaDex (ID)",
+     "lang": "id",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "3846770256925560569",
+     "displayName": "MangaDex (TR)",
+     "lang": "tr",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4086183896761281232",
+     "displayName": "NexusScanlation (ES)",
+     "lang": "es",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4150470519566206911",
+     "displayName": "MangaDex (BN)",
+     "lang": "bn",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4273071356706429527",
+     "displayName": "MangaDex (TA)",
+     "lang": "ta",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4284949320785450865",
+     "displayName": "MangaDex (HU)",
+     "lang": "hu",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4505830566611664829",
+     "displayName": "MangaDex (FR)",
+     "lang": "fr",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4562754350961964148",
+     "displayName": "Emperor Scan (ES)",
+     "lang": "es",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4638673959522768501",
+     "displayName": "MangaDex (AF)",
+     "lang": "af",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4774459486579224459",
+     "displayName": "MangaDex (RO)",
+     "lang": "ro",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4872213291993424667",
+     "displayName": "MangaDex (NO)",
+     "lang": "no",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4938773340256184018",
+     "displayName": "MangaDex (ES-419)",
+     "lang": "es-419",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "4982291187322723927",
+     "displayName": "InsanosScan (ES)",
+     "lang": "es",
+     "isNsfw": false,
+     "supportsLatest": false
+    },
+    {
+     "id": "5098537545549490547",
+     "displayName": "MangaDex (DE)",
+     "lang": "de",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "5148895169070562838",
+     "displayName": "MangaDex (ZH-HANS)",
+     "lang": "zh-Hans",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "5157867187592331768",
+     "displayName": "Taurus Fansub (ES)",
+     "lang": "es",
+     "isNsfw": false,
+     "supportsLatest": true
+    },
+    {
+     "id": "5189216366882819742",
+     "displayName": "MangaDex (PT)",
+     "lang": "pt",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "5463447640980279236",
+     "displayName": "MangaDex (BG)",
+     "lang": "bg",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "5779037855201976894",
+     "displayName": "MangaDex (UK)",
+     "lang": "uk",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "5860541308324630662",
+     "displayName": "MangaDex (CA)",
+     "lang": "ca",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "5967745367608513818",
+     "displayName": "MangaDex (MN)",
+     "lang": "mn",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "6167683270485370369",
+     "displayName": "Manga Crab (ES)",
+     "lang": "es",
+     "isNsfw": false,
+     "supportsLatest": true
+    },
+    {
+     "id": "6400665728063187402",
+     "displayName": "MangaDex (ES)",
+     "lang": "es",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "6404943692147160087",
+     "displayName": "MangaDex (ALL)",
+     "lang": "all",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "6750440049024086587",
+     "displayName": "MangaDex (NL)",
+     "lang": "nl",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "6840513937945146538",
+     "displayName": "MangaDex (HI)",
+     "lang": "hi",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "6886894829142702925",
+     "displayName": "MangaDex (TE)",
+     "lang": "te",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8033579885162383068",
+     "displayName": "MangaDex (PL)",
+     "lang": "pl",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8254121249433835847",
+     "displayName": "MangaDex (FI)",
+     "lang": "fi",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8548374501079910130",
+     "displayName": "MangaDex (HR)",
+     "lang": "hr",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8578871918181236609",
+     "displayName": "MangaDex (FIL)",
+     "lang": "fil",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8773024089257004344",
+     "displayName": "MangaDex (ET)",
+     "lang": "et",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8879875375160764811",
+     "displayName": "Inmortal Scan (ES)",
+     "lang": "es",
+     "isNsfw": false,
+     "supportsLatest": true
+    },
+    {
+     "id": "8884149958776527952",
+     "displayName": "MangaDex (KK)",
+     "lang": "kk",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "8952567078513962586",
+     "displayName": "MangaDex (KA)",
+     "lang": "ka",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "9008444898589746680",
+     "displayName": "MHScans (ES)",
+     "lang": "es",
+     "isNsfw": false,
+     "supportsLatest": true
+    },
+    {
+     "id": "9127464796236242233",
+     "displayName": "MangaDex (AZ)",
+     "lang": "az",
+     "isNsfw": true,
+     "supportsLatest": true
+    },
+    {
+     "id": "9194073792736219759",
+     "displayName": "MangaDex (VI)",
+     "lang": "vi",
+     "isNsfw": true,
+     "supportsLatest": true
+    }
+   ]
+  },
+  "mangas": {
+   "nodes": [
+    {
+     "id": 156,
+     "title": "Guía De Supervivencia Del Cazador De Bestias Demoníacas",
+     "sourceId": "4562754350961964148"
+    }
+   ]
+  }
+ }
+}

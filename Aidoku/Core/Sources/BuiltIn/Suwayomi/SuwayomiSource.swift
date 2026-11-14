@@ -70,8 +70,18 @@ actor SuwayomiSourceRunner: Runner {
     /// Last list of server sources that could be offered (used if the server stops answering).
     private var serverSourcesCache: [SuwayomiServerSource]?
 
-    init(sourceKey: String, name: String, server: String, transport: SuwayomiHelper.Transport? = nil) {
+    /// Max time per server source when searching everywhere (shorter in tests).
+    private let searchAllTimeout: TimeInterval
+
+    init(
+        sourceKey: String,
+        name: String,
+        server: String,
+        transport: SuwayomiHelper.Transport? = nil,
+        searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout
+    ) {
         self.sourceKey = sourceKey
+        self.searchAllTimeout = searchAllTimeout
         self.helper = if let transport {
             .init(sourceKey: sourceKey, transport: transport)
         } else {

@@ -1,0 +1,209 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 343,
+     "title": "Solo Swordmaster",
+     "thumbnailUrl": "/api/v1/manga/343/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 344,
+     "title": "Cambio de Clase Global: Invocador de Nigromantes, Yo Solo Soy un Desastre",
+     "thumbnailUrl": "/api/v1/manga/344/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 345,
+     "title": "Acumulo Vida infinita con mis ataques básicos: ¡Destruyo a los Dioses de un solo Golpe!",
+     "thumbnailUrl": "/api/v1/manga/345/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 346,
+     "title": "Talento Rango SSS: Solo Yo Asciendo Invocando",
+     "thumbnailUrl": "/api/v1/manga/346/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 347,
+     "title": "Artes Marciales Supremas: ¡Ser un Genio Es Solo el Inicio de Mi Ascensión!",
+     "thumbnailUrl": "/api/v1/manga/347/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 348,
+     "title": "Soy Quien Derriba Solo La Era Turbulenta",
+     "thumbnailUrl": "/api/v1/manga/348/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 349,
+     "title": "Conquistando la Academia con solo un Cuchillo de Sashimi",
+     "thumbnailUrl": "/api/v1/manga/349/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 350,
+     "title": "Solo Leveling: Ragnarok",
+     "thumbnailUrl": "/api/v1/manga/350/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 351,
+     "title": "!Eso fue solo una atracción superficial¡",
+     "thumbnailUrl": "/api/v1/manga/351/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 352,
+     "title": "Cultivar la inmortalidad solo a base de píldoras",
+     "thumbnailUrl": "/api/v1/manga/352/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 353,
+     "title": "Como inmortal, solo práctico artes prohibidas",
+     "thumbnailUrl": "/api/v1/manga/353/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 354,
+     "title": "Apocalipsis: Solo yo soy un jugador de la beta",
+     "thumbnailUrl": "/api/v1/manga/354/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 355,
+     "title": "Como alguien que busca convertirse en un inmortal a través del entrenamiento, solo quiero criar a una discípula mujer",
+     "thumbnailUrl": "/api/v1/manga/355/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 356,
+     "title": "Ascensión Inmortal: Puedo Multiplicar mis Habilidades por Diez Mil",
+     "thumbnailUrl": "/api/v1/manga/356/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 357,
+     "title": "Reencarnado con títulos divinos",
+     "thumbnailUrl": "/api/v1/manga/357/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 358,
+     "title": "Hice pasar este mundo en ruinas por un juego",
+     "thumbnailUrl": "/api/v1/manga/358/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 359,
+     "title": "La Espada del Descartado",
+     "thumbnailUrl": "/api/v1/manga/359/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 360,
+     "title": "Ascensión Divina: ¡Desperté un Talento doble al Inicio!",
+     "thumbnailUrl": "/api/v1/manga/360/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 361,
+     "title": "Creador de Finales",
+     "thumbnailUrl": "/api/v1/manga/361/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 362,
+     "title": "Reincarnation of the Suicidal Battle God",
+     "thumbnailUrl": "/api/v1/manga/362/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 363,
+     "title": "Heredero de dos Mundos: El Despertar del Camino Marcial",
+     "thumbnailUrl": "/api/v1/manga/363/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 364,
+     "title": "Mi Haren De Siete Villanas",
+     "thumbnailUrl": "/api/v1/manga/364/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 365,
+     "title": "El Mercenario Que Reencarno Entre Aristócratas",
+     "thumbnailUrl": "/api/v1/manga/365/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 366,
+     "title": "Tomb Raider King — End Line",
+     "thumbnailUrl": "/api/v1/manga/366/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 367,
+     "title": "No soy una leyenda marcial",
+     "thumbnailUrl": "/api/v1/manga/367/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    }
+   ],
+   "hasNextPage": true
+  }
+ }
+}

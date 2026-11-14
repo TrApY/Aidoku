@@ -182,8 +182,9 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
             Issue.record("expected a select")
             return
         }
-        #expect(select.options == [NSLocalizedString("LIBRARY"), "MangaDex (ES)"])
-        #expect(select.ids == ["", mangaDexEs])
+        #expect(select.options == [NSLocalizedString("SUWAYOMI_SEARCH_ALL"), NSLocalizedString("LIBRARY"), "MangaDex (ES)"])
+        #expect(select.ids == ["", "library", mangaDexEs])
+        #expect(!select.options[0].contains("SUWAYOMI_"))
         #expect(select.defaultValue == "")
         #expect(SuwayomiServerSources.searchInFilter(sources: []) == nil)
 
@@ -256,16 +257,27 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         #expect(SuwayomiServerSources.remoteFetchPlan(inLibrary, needsDetails: true, needsChapters: true).isEmpty)
     }
 
-    @Test func staleSearchSourceFallsBackToLibrary() {
-        let filters: [AidokuRunner.FilterValue] = [.select(id: "searchIn", value: "999")]
-        #expect(SuwayomiServerSources.searchSourceId(filters: filters, selectedIds: [mangaDexEs]) == nil)
-        #expect(SuwayomiServerSources.searchSourceId(filters: filters, selectedIds: []) == nil)
-        #expect(SuwayomiServerSources.searchSourceId(
-            filters: [.select(id: "searchIn", value: mangaDexEs)],
-            selectedIds: [mangaDexEs]
-        ) == mangaDexEs)
+    @Test func searchTargetDefaultsToEverything() {
+        let selected = [mangaDexEs]
+        #expect(SuwayomiServerSources.searchTarget(filters: [], selectedIds: selected) == .all) // global search
+        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: "")], selectedIds: selected) == .all)
+        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: "library")], selectedIds: selected) == .library)
+        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: mangaDexEs)], selectedIds: selected) == .source(mangaDexEs))
+        // a source no longer selected → everything
+        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: "999")], selectedIds: selected) == .all)
+        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: mangaDexEs)], selectedIds: []) == .all)
         #expect(SuwayomiServerSources.libraryListing().id == "library")
         #expect(SuwayomiServerSources.libraryListing().name == NSLocalizedString("LIBRARY"))
+    }
+
+    @Test func everythingResultsKeepOrderWithoutDuplicates() {
+        func manga(_ key: String) -> AidokuRunner.Manga { .init(sourceKey: "suwayomi", key: key, title: key) }
+        let merged = SuwayomiServerSources.mergeSearchResults(
+            library: [manga("156"), manga("7")],
+            sources: [[manga("234"), manga("156")], [], [manga("343"), manga("234"), manga("344")]]
+        )
+        #expect(merged.map(\.key) == ["156", "7", "234", "343", "344"])
+        #expect(SuwayomiServerSources.mergeSearchResults(library: [], sources: []).isEmpty)
     }
 
     @Test func noChaptersFoundIsRecognised() throws {

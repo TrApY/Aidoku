@@ -1,0 +1,17 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 156,
+     "title": "Guía De Supervivencia Del Cazador De Bestias Demoníacas",
+     "thumbnailUrl": "/api/v1/manga/156/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": true
+    }
+   ],
+   "hasNextPage": false
+  }
+ }
+}

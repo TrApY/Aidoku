@@ -231,6 +231,16 @@ struct SuwayomiAddToLibraryPayload: Encodable, Sendable {
 
 // MARK: Logic
 
+/// Where a search goes, from the "search in" filter.
+enum SuwayomiSearchTarget: Equatable, Sendable {
+    /// The server library and every source chosen in the settings (default).
+    case all
+    /// Only the server library, with its filters.
+    case library
+    /// One server source.
+    case source(String)
+}
+
 enum SuwayomiServerSources {
     /// Id of the server's built-in local source, never offered.
     static let localSourceId = "0"
@@ -366,6 +376,21 @@ enum SuwayomiServerSources {
     }
 
     static let libraryListingId = "library"
+
+    // MARK: search everywhere (pending)
+
+    /// "Search in" value for the server library only ("" is everything).
+    static let searchInLibraryId = "library"
+    /// Max time per server source when searching everywhere.
+    static let searchAllTimeout: TimeInterval = 20
+
+    static func searchTarget(filters: [AidokuRunner.FilterValue], selectedIds: [String]) -> SuwayomiSearchTarget {
+        .library
+    }
+
+    static func mergeSearchResults(library: [AidokuRunner.Manga], sources: [[AidokuRunner.Manga]]) -> [AidokuRunner.Manga] {
+        []
+    }
 
     /// First listing, always present: the server library (what the source showed before).
     static func libraryListing() -> AidokuRunner.Listing {

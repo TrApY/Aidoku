@@ -751,4 +751,5 @@
 "SUWAYOMI_LISTING_POPULAR" = "Populares · %@";
 "SUWAYOMI_LISTING_LATEST" = "Recientes · %@";
 "SUWAYOMI_SEARCH_IN" = "Buscar en";
+"SUWAYOMI_SEARCH_ALL" = "Todo";
 "SUWAYOMI_SERVER_ERROR" = "El servidor Suwayomi no ha podido completar la petición.";

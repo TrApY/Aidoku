@@ -27,15 +27,21 @@ private func fixture(_ name: String) throws -> Data {
 
 private let mangaDexEs = "6400665728063187402"
 
-/// Fake Suwayomi GraphQL endpoint: answers by operation name, records calls.
+/// Fake Suwayomi GraphQL endpoint: answers by operation name (and source, for
+/// fetchSourceManga), records calls.
 final class SuwayomiFakeServer: @unchecked Sendable {
     private let lock = NSLock()
     private var responses: [String: [Result<Data, Error>]] = [:]
+    private var delays: [String: TimeInterval] = [:]
     private var calls: [(operation: String, variables: [String: Any])] = []
 
     /// Queue of answers for an operation; the last one repeats.
-    func respond(_ operation: String, _ results: Result<Data, Error>...) {
-        lock.withLock { responses[operation] = results }
+    func respond(_ operation: String, source: String? = nil, delay: TimeInterval = 0, _ results: Result<Data, Error>...) {
+        let key = source.map { "\(operation)|\($0)" } ?? operation
+        lock.withLock {
+            responses[key] = results
+            delays[key] = delay
+        }
     }
 
     func count(_ operation: String) -> Int {
@@ -47,35 +53,47 @@ final class SuwayomiFakeServer: @unchecked Sendable {
     }
 
     var transport: SuwayomiHelper.Transport {
-        { [self] request in try self.handle(request) }
+        { [self] request in
+            let (result, delay) = self.answer(request)
+            if delay > 0 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            let data = try result.get()
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (data, response)
+        }
     }
 
-    private func handle(_ request: URLRequest) throws -> (Data, URLResponse) {
+    private func answer(_ request: URLRequest) -> (Result<Data, Error>, TimeInterval) {
         let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
         let query = (body["query"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let operation = query.split(whereSeparator: { $0 == " " || $0 == "(" || $0 == "{" }).dropFirst().first.map(String.init) ?? ""
-        let result: Result<Data, Error> = lock.withLock {
-            calls.append((operation, body["variables"] as? [String: Any] ?? [:]))
-            guard var queue = responses[operation], let first = queue.first else {
-                return .failure(URLError(.badServerResponse))
+        let variables = body["variables"] as? [String: Any] ?? [:]
+        return lock.withLock {
+            calls.append((operation, variables))
+            let sourceKey = (variables["source"] as? String).map { "\(operation)|\($0)" }
+            let key = sourceKey.flatMap { responses[$0] != nil ? $0 : nil } ?? operation
+            guard var queue = responses[key], let first = queue.first else {
+                return (.failure(URLError(.badServerResponse)), 0)
             }
             if queue.count > 1 {
                 queue.removeFirst()
-                responses[operation] = queue
+                responses[key] = queue
             }
-            return first
+            return (first, delays[key] ?? 0)
         }
-        let data = try result.get()
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-        return (data, response)
     }
 }
+
+private let olympus = "1596411039134168890"
+private let emperor = "4562754350961964148"
+private let taurus = "5157867187592331768"
 
 @Suite(.serialized) struct SuwayomiRunnerFlowTests {
     let key = "suwayomiflowtest"
     let server = SuwayomiFakeServer()
 
-    private func makeRunner(selected: [String]? = nil) -> SuwayomiSourceRunner {
+    private func makeRunner(selected: [String]? = nil, searchAllTimeout: TimeInterval = 20) -> SuwayomiSourceRunner {
         let defaults = UserDefaults.standard
         defaults.set("https://suwayomi.example:4567", forKey: "\(key).server")
         if let selected {
@@ -83,7 +101,13 @@ final class SuwayomiFakeServer: @unchecked Sendable {
         } else {
             defaults.removeObject(forKey: "\(key).serverSources")
         }
-        return SuwayomiSourceRunner(sourceKey: key, name: "Test", server: "https://suwayomi.example:4567", transport: server.transport)
+        return SuwayomiSourceRunner(
+            sourceKey: key,
+            name: "Test",
+            server: "https://suwayomi.example:4567",
+            transport: server.transport,
+            searchAllTimeout: searchAllTimeout
+        )
     }
 
     private func cleanUp() {
@@ -159,15 +183,88 @@ final class SuwayomiFakeServer: @unchecked Sendable {
         defer { cleanUp() }
         server.respond("SearchManga", .success(try fixture("library-search")))
         let runner = makeRunner(selected: [mangaDexEs])
-        for searchIn in ["", "999"] { // «Biblioteca» and a source no longer selected
-            let page = try await runner.getSearchMangaList(
-                query: "guía",
-                page: 1,
-                filters: [.select(id: "searchIn", value: searchIn)]
-            )
-            #expect(page.entries.map(\.key) == ["156"])
+        let page = try await runner.getSearchMangaList(
+            query: "guía",
+            page: 1,
+            filters: [.select(id: "searchIn", value: "library"), .select(id: "category", value: "3")]
+        )
+        #expect(page.entries.map(\.key) == ["156"])
+        #expect(server.count("SearchManga") == 1)
+        #expect(server.count("FetchSourceManga") == 0)
+        let variables = try #require(server.variables("SearchManga").first)
+        #expect(variables["filter"] is [String: Any])
+    }
+
+    // MARK: Search everything
+
+    private func respondSpanishSources() throws {
+        server.respond("GetServerSources", .success(try fixture("sources-es")))
+        server.respond("SearchManga", .success(try fixture("library-search")))
+        server.respond("FetchSourceManga", source: olympus, .success(try fixture("fetch-source-manga-olympus-search")))
+        server.respond("FetchSourceManga", source: emperor, .success(try fixture("fetch-source-manga-emperor-search")))
+        server.respond("FetchSourceManga", source: taurus, .success(try fixture("fetch-source-manga-taurus-search")))
+    }
+
+    @Test func everythingSearchesLibraryAndSelectedSources() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        // chosen in another order than the setting's: results follow the setting (Olympus, Emperor, Taurus)
+        let runner = makeRunner(selected: [taurus, emperor, olympus])
+        for filters in [[], [AidokuRunner.FilterValue.select(id: "searchIn", value: "")]] {
+            let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: filters)
+            let keys = page.entries.map(\.key)
+            try #require(keys.count == 1 + 10 + 25) // Emperor only returns 156, already in the library
+            #expect(keys.first == "156")
+            #expect(Array(keys[1...10]) == (234...243).map(String.init))
+            #expect(keys[11] == "343")
+            #expect(Set(keys).count == keys.count)
+            #expect(!page.hasNextPage)
         }
+        let searched = server.variables("FetchSourceManga")
+        #expect(searched.count == 6)
+        #expect(searched.allSatisfy { $0["type"] as? String == "SEARCH" && $0["query"] as? String == "solo" && $0["page"] as? Int == 1 })
         #expect(server.count("SearchManga") == 2)
+    }
+
+    @Test func everythingSkipsFailingAndSlowSources() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        server.respond("FetchSourceManga", source: olympus, .success(try fixture("fetch-source-manga-error")))
+        server.respond("FetchSourceManga", source: taurus, delay: 5, .success(try fixture("fetch-source-manga-taurus-search")))
+        let runner = makeRunner(selected: [olympus, emperor, taurus], searchAllTimeout: 0.5)
+        let start = Date()
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(Date().timeIntervalSince(start) < 3)
+        #expect(page.entries.map(\.key) == ["156"])
+    }
+
+    @Test func everythingWithoutSelectedSourcesIsTheLibrary() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner()
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(page.entries.map(\.key) == ["156"])
+        #expect(server.count("FetchSourceManga") == 0)
+        #expect(server.count("GetServerSources") == 0)
+    }
+
+    @Test func staleSearchSourceSearchesEverything() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus])
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [.select(id: "searchIn", value: "999")])
+        #expect(page.entries.count == 11)
+        #expect(server.variables("FetchSourceManga").map { $0["source"] as? String } == [olympus])
+    }
+
+    @Test func everythingWithoutTextIsTheLibraryAndListingStaysLibrary() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus, taurus])
+        let search = try await runner.getSearchMangaList(query: nil, page: 1, filters: [])
+        let listing = try await runner.getMangaList(listing: SuwayomiServerSources.libraryListing(), page: 1)
+        #expect(search.entries.map(\.key) == ["156"])
+        #expect(listing.entries.map(\.key) == ["156"])
         #expect(server.count("FetchSourceManga") == 0)
     }
 

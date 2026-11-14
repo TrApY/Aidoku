@@ -1,0 +1,89 @@
+{
+ "data": {
+  "fetchSourceManga": {
+   "mangas": [
+    {
+     "id": 234,
+     "title": "Subo de nivel solo",
+     "thumbnailUrl": "/api/v1/manga/234/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 235,
+     "title": "Solo Subiendo de level",
+     "thumbnailUrl": "/api/v1/manga/235/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 236,
+     "title": "El experto sin igual solo quiere ir a casa y cultivar",
+     "thumbnailUrl": "/api/v1/manga/236/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 237,
+     "title": "Cultivando solo en la torre",
+     "thumbnailUrl": "/api/v1/manga/237/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 238,
+     "title": "Solo quiero morir ",
+     "thumbnailUrl": "/api/v1/manga/238/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 239,
+     "title": "Solo Leveling: Ragnarok",
+     "thumbnailUrl": "/api/v1/manga/239/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 240,
+     "title": "Me Vuelvo Más Fuerte Con Solo Acostarme, Mientras Mis Discípulas Cultivan",
+     "thumbnailUrl": "/api/v1/manga/240/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 241,
+     "title": "Me hice cargo de la Academia con un solo cuchillo de sashimi ",
+     "thumbnailUrl": "/api/v1/manga/241/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 242,
+     "title": "El Profesor Genio solo Quiere una Vida Tranquila",
+     "thumbnailUrl": "/api/v1/manga/242/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    },
+    {
+     "id": 243,
+     "title": "Solo Swordmaster",
+     "thumbnailUrl": "/api/v1/manga/243/thumbnail",
+     "author": null,
+     "artist": null,
+     "inLibrary": false
+    }
+   ],
+   "hasNextPage": false
+  }
+ }
+}
