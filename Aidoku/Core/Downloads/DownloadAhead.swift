@@ -31,6 +31,10 @@ enum DownloadAheadSetting {
         max(0, UserDefaults.standard.integer(forKey: key(for: manga)))
     }
 
+    /// Carries the setting over when a manga is migrated to another source (pending).
+    static func migrate(from oldManga: MangaIdentifier, to newManga: MangaIdentifier, copy: Bool) {
+    }
+
     static func set(_ value: Int, for manga: MangaIdentifier) {
         if value > 0 {
             UserDefaults.standard.set(value, forKey: key(for: manga))
@@ -41,6 +45,21 @@ enum DownloadAheadSetting {
 }
 
 enum DownloadAheadPlanner {
+    /// How the planner counts a chapter's download status.
+    enum ChapterState: Equatable {
+        case downloaded
+        case queued
+        case missing
+    }
+
+    static func state(for status: DownloadStatus) -> ChapterState {
+        switch status {
+            case .finished: .downloaded
+            case .none: .missing
+            default: .queued // pending
+        }
+    }
+
     /// Chapters to queue so that the next `target` chapters after the last read one are downloaded or queued.
     /// - Parameters:
     ///   - chapters: in reading order, oldest first (as `downloadUnread` queues them).

@@ -234,6 +234,10 @@ actor DownloadQueue {
         }
     }
 
+    func isPausedByUser() -> Bool {
+        paused
+    }
+
     func hasQueuedDownloads() -> Bool {
         !queue.isEmpty
     }

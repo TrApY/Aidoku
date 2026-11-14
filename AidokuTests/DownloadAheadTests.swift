@@ -109,12 +109,15 @@ import Testing
         #expect(plan(all, target: 3) == ["1-en", "1-es-a", "1-es-b"])
     }
 
-    @Test func wifiRule() {
-        #expect(DownloadAheadPlanner.canQueue(onlyOnWifi: false, connection: .cellular))
-        #expect(DownloadAheadPlanner.canQueue(onlyOnWifi: false, connection: .wifi))
-        #expect(DownloadAheadPlanner.canQueue(onlyOnWifi: true, connection: .wifi))
-        #expect(!DownloadAheadPlanner.canQueue(onlyOnWifi: true, connection: .cellular))
-        #expect(!DownloadAheadPlanner.canQueue(onlyOnWifi: true, connection: .none))
+    @Test func downloadStatusMapping() {
+        #expect(DownloadAheadPlanner.state(for: .finished) == .downloaded)
+        #expect(DownloadAheadPlanner.state(for: .queued) == .queued)
+        #expect(DownloadAheadPlanner.state(for: .downloading) == .queued)
+        #expect(DownloadAheadPlanner.state(for: .paused) == .queued)
+        // a failed download is out of the queue (only its tmp folder is left): missing, queue it again
+        #expect(DownloadAheadPlanner.state(for: .failed) == .missing)
+        #expect(DownloadAheadPlanner.state(for: .cancelled) == .missing)
+        #expect(DownloadAheadPlanner.state(for: .none) == .missing)
     }
 
     // MARK: Setting
@@ -138,21 +141,128 @@ import Testing
         #expect(UserDefaults.standard.object(forKey: "DownloadAhead.downloadaheadtest.42") == nil)
     }
 
+    @Test func settingFollowsMigration() {
+        let old = MangaIdentifier(sourceKey: "downloadaheadtest", mangaKey: "50")
+        let new = MangaIdentifier(sourceKey: "downloadaheadtest2", mangaKey: "51")
+        defer {
+            DownloadAheadSetting.set(0, for: old)
+            DownloadAheadSetting.set(0, for: new)
+        }
+        DownloadAheadSetting.set(5, for: old)
+        DownloadAheadSetting.migrate(from: old, to: new, copy: true)
+        #expect(DownloadAheadSetting.get(for: new) == 5)
+        #expect(DownloadAheadSetting.get(for: old) == 5)
+        DownloadAheadSetting.set(0, for: new)
+        DownloadAheadSetting.migrate(from: old, to: new, copy: false)
+        #expect(DownloadAheadSetting.get(for: new) == 5)
+        #expect(DownloadAheadSetting.get(for: old) == 0)
+        // same manga: kept
+        DownloadAheadSetting.migrate(from: new, to: new, copy: false)
+        #expect(DownloadAheadSetting.get(for: new) == 5)
+    }
+
     // MARK: ensureAheadDownloaded
 
-    @Test func ensureDoesNothingWithoutWifiWhenRequired() async {
-        let manga = AidokuRunner.Manga(sourceKey: "downloadaheadtest", key: "44", title: "x")
-        let onlyOnWifi = AppSettings.downloads.downloadOnlyOnWifi.get()
-        defer {
-            AppSettings.downloads.downloadOnlyOnWifi.set(onlyOnWifi)
-            DownloadAheadSetting.set(0, for: manga.identifier)
+    /// A library manga of a fake source with chapters c1...c6, stored newest first (as sources give them),
+    /// and a paused queue so nothing really downloads. Cleans everything up afterwards.
+    private func withLibraryManga(
+        key: String,
+        target: Int,
+        _ body: (AidokuRunner.Manga, [AidokuRunner.Chapter]) async throws -> Void
+    ) async throws {
+        let manga = AidokuRunner.Manga(sourceKey: "downloadaheadtest", key: key, title: "Descarga adelantada \(key)")
+        let newestFirst: [AidokuRunner.Chapter] = (1...6).reversed().map {
+            .init(key: "c\($0)", chapterNumber: Float($0))
         }
-        DownloadAheadSetting.set(3, for: manga.identifier)
-        AppSettings.downloads.downloadOnlyOnWifi.set(true)
-        #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .cellular).isEmpty)
-        // setting off: nothing either
-        DownloadAheadSetting.set(0, for: manga.identifier)
-        AppSettings.downloads.downloadOnlyOnWifi.set(false)
-        #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi).isEmpty)
+        let onlyOnWifi = AppSettings.downloads.downloadOnlyOnWifi.get()
+        let wasPaused = await DownloadManager.shared.isQueuePausedByUser()
+        await MangaManager.shared.addToLibrary(manga: manga, chapters: newestFirst)
+        DownloadAheadSetting.set(target, for: manga.identifier)
+        await DownloadManager.shared.pauseDownloads()
+        do {
+            try await body(manga, newestFirst)
+        } catch {
+            Issue.record(error)
+        }
+        await DownloadManager.shared.cancelDownloads(for: newestFirst.map {
+            ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: $0.key)
+        })
+        await MangaManager.shared.removeFromLibrary(mangaId: manga.identifier)
+        #expect(DownloadAheadSetting.get(for: manga.identifier) == 0) // removed with the manga
+        DownloadManager.directory.appendingPathComponent(manga.sourceKey).removeItem()
+        AppSettings.downloads.downloadOnlyOnWifi.set(onlyOnWifi)
+        if !wasPaused {
+            await DownloadManager.shared.resumeDownloads()
+        }
+    }
+
+    private func status(_ manga: AidokuRunner.Manga, _ chapterKey: String) -> DownloadStatus {
+        DownloadManager.shared.getDownloadStatus(for: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapterKey))
+    }
+
+    @Test func ensureQueuesInReadingOrderWithWifi() async throws {
+        try await withLibraryManga(key: "44", target: 2) { manga, _ in
+            AppSettings.downloads.downloadOnlyOnWifi.set(true)
+            #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .cellular).isEmpty)
+            let queued = await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            #expect(queued.map(\.key) == ["c1", "c2"]) // oldest first, though stored newest first
+            #expect(status(manga, "c1") == .queued)
+            #expect(status(manga, "c3") == .none)
+            // without the Wi-Fi rule, mobile data is fine; nothing new to queue now
+            AppSettings.downloads.downloadOnlyOnWifi.set(false)
+            DownloadAheadSetting.set(3, for: manga.identifier)
+            #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .cellular).map(\.key) == ["c3"])
+        }
+    }
+
+    @Test func automaticTriggerKeepsAPausedQueuePaused() async throws {
+        try await withLibraryManga(key: "45", target: 3) { manga, _ in
+            AppSettings.downloads.downloadOnlyOnWifi.set(false)
+            #expect(await DownloadManager.shared.isQueuePausedByUser())
+            let queued = await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            #expect(queued.count == 3)
+            #expect(await DownloadManager.shared.isQueuePausedByUser()) // queued, not resumed
+            #expect(status(manga, "c1") == .queued)
+        }
+    }
+
+    @Test func failedDownloadIsQueuedAgain() async throws {
+        try await withLibraryManga(key: "46", target: 2) { manga, _ in
+            AppSettings.downloads.downloadOnlyOnWifi.set(false)
+            // what DownloadQueue.downloadFailed leaves: out of the queue, a tmp folder with the failure marker
+            let tmp = DownloadManager.directory
+                .appendingPathComponent(manga.sourceKey)
+                .appendingPathComponent(manga.key)
+                .appendingPathComponent("\(DownloadCache.tmpDirectoryPrefix)c1")
+            tmp.createDirectory()
+            FileManager.default.createFile(atPath: tmp.appendingPathComponent(DownloadCache.failureMarkerName).path, contents: Data())
+            #expect(status(manga, "c1") == .failed)
+            let queued = await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            #expect(queued.map(\.key) == ["c1", "c2"])
+            #expect(status(manga, "c1") == .queued)
+        }
+    }
+
+    @Test func concurrentTriggersQueueEachChapterOnce() async throws {
+        try await withLibraryManga(key: "47", target: 3) { manga, _ in
+            AppSettings.downloads.downloadOnlyOnWifi.set(false)
+            async let first = DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            async let second = DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            async let third = DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi)
+            let all = await (first + second + third).map(\.key)
+            #expect(all.sorted() == ["c1", "c2", "c3"])
+            let inQueue = await DownloadManager.shared.getDownloadQueue()[manga.sourceKey]?
+                .filter { $0.chapterIdentifier.mangaKey == manga.key }
+                .map(\.chapterIdentifier.chapterKey) ?? []
+            #expect(inQueue.sorted() == ["c1", "c2", "c3"])
+        }
+    }
+
+    @Test func ensureDoesNothingWhenOff() async throws {
+        try await withLibraryManga(key: "48", target: 0) { manga, _ in
+            AppSettings.downloads.downloadOnlyOnWifi.set(false)
+            #expect(await DownloadManager.shared.ensureAheadDownloaded(manga: manga, connection: .wifi).isEmpty)
+            #expect(status(manga, "c1") == .none)
+        }
     }
 }

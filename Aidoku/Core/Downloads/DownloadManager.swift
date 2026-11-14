@@ -213,8 +213,9 @@ extension DownloadManager {
     }
 
     /// Download given chapters from a manga.
-    func download(manga: AidokuRunner.Manga, chapters: [AidokuRunner.Chapter]) async {
-        let downloads = await queue.add(chapters: chapters, manga: manga, autoStart: true)
+    /// - autoStart: false keeps a paused queue paused (automatic downloads).
+    func download(manga: AidokuRunner.Manga, chapters: [AidokuRunner.Chapter], autoStart: Bool = true) async {
+        let downloads = await queue.add(chapters: chapters, manga: manga, autoStart: autoStart)
         NotificationCenter.default.post(
             name: .downloadsQueued,
             object: downloads
@@ -286,6 +287,11 @@ extension DownloadManager {
 extension DownloadManager {
     func isQueuePaused() async -> Bool {
         !(await queue.isRunning())
+    }
+
+    /// Paused by the user (or by the Wi-Fi rule), not just idle.
+    func isQueuePausedByUser() async -> Bool {
+        await queue.isPausedByUser()
     }
 
     func getDownloadQueue() async -> [String: [Download]] {
