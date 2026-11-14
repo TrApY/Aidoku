@@ -19,7 +19,8 @@ extension HistoryManager {
         progress: Int,
         totalPages: Int? = nil,
         scrollPosition: Double? = nil,
-        completed: Bool
+        completed: Bool,
+        updateTrackers: Bool = true
     ) async {
         let mangaId = chapterId.mangaIdentifier
         await CoreDataManager.shared.container.performBackgroundTask { context in
@@ -38,7 +39,7 @@ extension HistoryManager {
             }
         }
         NotificationCenter.default.post(name: .historySet, object: (chapterId, progress))
-        if !completed {
+        if !completed && updateTrackers {
             Task {
                 // update page trackers with progress
                 await TrackerManager.shared.setProgress(

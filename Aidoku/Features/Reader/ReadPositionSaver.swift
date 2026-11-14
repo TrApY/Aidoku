@@ -15,9 +15,9 @@ protocol ReadPositionTimer {
 }
 
 /// Runs an action after a delay. Injectable so tests can drive the clock.
+@MainActor
 protocol ReadPositionScheduler {
-    @MainActor
-    func schedule(after delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> ReadPositionTimer
+    func schedule(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> ReadPositionTimer
 }
 
 /// Main-queue scheduler used by the reader.
@@ -28,7 +28,7 @@ struct MainQueueReadPositionScheduler: ReadPositionScheduler {
         func cancel() { item.cancel() }
     }
 
-    func schedule(after delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> ReadPositionTimer {
+    func schedule(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> ReadPositionTimer {
         let item = DispatchWorkItem {
             MainActor.assumeIsolated { action() }
         }
@@ -51,18 +51,20 @@ final class ReadPositionSaver<Position> {
 
     private var localTimer: ReadPositionTimer?
     private var trackerTimer: ReadPositionTimer?
+    private var pendingLocal: Position?
+    /// Last position not yet sent to the trackers.
     private(set) var pending: Position?
 
     /// - isEnabled: false (incognito) schedules nothing.
     /// - saveLocal: progress only (no reading session, no tracker), ~2 s after the last change.
     /// - saveTracker: page trackers, ~10 s after the last change.
     init(
-        scheduler: ReadPositionScheduler = MainQueueReadPositionScheduler(),
+        scheduler: ReadPositionScheduler? = nil,
         isEnabled: @escaping () -> Bool,
         saveLocal: @escaping (Position) -> Void,
         saveTracker: @escaping (Position) -> Void
     ) {
-        self.scheduler = scheduler
+        self.scheduler = scheduler ?? MainQueueReadPositionScheduler()
         self.isEnabled = isEnabled
         self.saveLocal = saveLocal
         self.saveTracker = saveTracker
@@ -70,17 +72,44 @@ final class ReadPositionSaver<Position> {
 
     /// Call on every page change: the last position wins.
     func pageChanged(_ position: Position) {
-        // pending
+        guard isEnabled() else { return }
+        pending = position
+        pendingLocal = position
+
+        localTimer?.cancel()
+        localTimer = scheduler.schedule(after: Self.localDelay) { [weak self] in
+            guard let self else { return }
+            self.localTimer = nil
+            guard let position = self.pendingLocal else { return }
+            self.pendingLocal = nil
+            self.saveLocal(position)
+        }
+
+        trackerTimer?.cancel()
+        trackerTimer = scheduler.schedule(after: Self.trackerDelay) { [weak self] in
+            guard let self else { return }
+            self.trackerTimer = nil
+            guard let position = self.pending else { return }
+            self.pending = nil
+            self.saveTracker(position)
+        }
     }
 
     /// Drops what's pending (leaving the reader, changing chapter): the caller saves right away.
     func cancel() {
-        // pending
+        flush()
     }
 
     /// Cancels the delayed saves and returns the pending position (the caller saves it now).
     @discardableResult
     func flush() -> Position? {
-        nil // pending
+        localTimer?.cancel()
+        trackerTimer?.cancel()
+        localTimer = nil
+        trackerTimer = nil
+        pendingLocal = nil
+        let position = pending
+        pending = nil
+        return position
     }
 }

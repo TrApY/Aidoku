@@ -48,6 +48,37 @@ class ReaderViewController: BaseObservingViewController {
     private var sessionStartDate: Date?
     private var sessionLastInteraction: Date?
 
+    /// What a delayed save of the reading position needs.
+    private struct ReadPosition {
+        let chapter: AidokuRunner.Chapter
+        let page: Int
+        let totalPages: Int
+        let scrollPosition: Double?
+    }
+
+    /// Saves the page while reading (locally after ~2 s, page trackers after ~10 s), so it isn't lost
+    /// if the app is killed without leaving the reader.
+    private lazy var readPositionSaver = ReadPositionSaver<ReadPosition>(
+        isEnabled: { !AppSettings.general.incognitoMode.get() },
+        saveLocal: { [weak self] position in
+            Task {
+                await self?.updateReadPosition(
+                    currentPage: position.page,
+                    totalPages: position.totalPages,
+                    chapter: position.chapter,
+                    scrollPosition: position.scrollPosition,
+                    updateTrackers: false,
+                    saveSession: false
+                )
+            }
+        },
+        saveTracker: { [weak self] position in
+            Task {
+                await self?.updateTrackerProgress(page: position.page, chapter: position.chapter)
+            }
+        }
+    )
+
     weak var reader: ReaderReaderDelegate?
 
     // Dictionary popup state
@@ -378,13 +409,14 @@ class ReaderViewController: BaseObservingViewController {
         }
         addObserver(forName: UIScene.willDeactivateNotification) { [weak self] _ in
             guard let self else { return }
-            Task {
-                await self.updateReadPosition()
-            }
+            self.saveReadPositionNow()
 
             if #available(iOS 26.0, *) {
                 statusBarHidden = false
             }
+        }
+        addObserver(forName: UIScene.didEnterBackgroundNotification) { [weak self] _ in
+            self?.saveReadPositionNow()
         }
         addObserver(forName: UIScene.didActivateNotification) { [weak self] _ in
             guard let self else { return }
@@ -449,6 +481,7 @@ class ReaderViewController: BaseObservingViewController {
             }
         }
 
+        readPositionSaver.cancel()
         guard currentPage >= 1 else { return }
         Task {
             await updateReadPosition()
@@ -493,10 +526,50 @@ extension ReaderViewController {
         }
     }
 
+    /// Saves the position now (local + page trackers, awaited), even if the app goes to the background.
+    private func saveReadPositionNow() {
+        readPositionSaver.flush()
+        var backgroundTask = UIBackgroundTaskIdentifier.invalid
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Reader.saveReadPosition") {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+        let page = currentPage
+        let chapter = chapter
+        Task {
+            await updateReadPosition(currentPage: page, chapter: chapter, updateTrackers: false)
+            await updateTrackerProgress(page: page, chapter: chapter)
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask)
+                backgroundTask = .invalid
+            }
+        }
+    }
+
+    /// Sends the page to the page trackers, if the chapter has history and isn't completed.
+    private func updateTrackerProgress(page: Int, chapter: AidokuRunner.Chapter) async {
+        guard !AppSettings.general.incognitoMode.get(), page >= 1 else { return }
+        let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+        let (completed, progress) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
+            CoreDataManager.shared.getProgress(chapterId: chapterId, context: context)
+        }
+        guard !completed, progress != nil else { return }
+        await TrackerManager.shared.setProgress(
+            mangaId: chapterId.mangaIdentifier,
+            chapter: chapter,
+            progress: .init(completed: false, page: page)
+        )
+    }
+
+    /// - updateTrackers: false for the delayed local save (trackers get their own delayed update).
+    /// - saveSession: false for the delayed save (reading sessions are saved as before).
     func updateReadPosition(
         currentPage: Int? = nil,
         totalPages: Int? = nil,
-        chapter: AidokuRunner.Chapter? = nil
+        chapter: AidokuRunner.Chapter? = nil,
+        scrollPosition: Double? = nil,
+        updateTrackers: Bool = true,
+        saveSession: Bool = true
     ) async {
         let effectiveTotalPages = totalPages ?? toolbarView.totalPages ?? 0
         let effectiveCurrentPage = currentPage ?? self.currentPage
@@ -530,10 +603,13 @@ extension ReaderViewController {
             chapter: chapter,
             progress: currentPage,
             totalPages: totalPages,
-            scrollPosition: currentPosition,
-            completed: completed
+            scrollPosition: scrollPosition ?? currentPosition,
+            completed: completed,
+            updateTrackers: updateTrackers
         )
-        await saveReadingSession(chapter: chapter)
+        if saveSession {
+            await saveReadingSession(chapter: chapter)
+        }
     }
 
     private func saveReadingSession(chapter: AidokuRunner.Chapter? = nil) async {
@@ -1043,6 +1119,9 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     func setChapter(_ chapter: AidokuRunner.Chapter) {
         guard chapter != self.chapter else { return }
 
+        // the old chapter is saved right away below; nothing delayed may write it later
+        readPositionSaver.cancel()
+
         // store current history data since it will change when new chapter loads
         let currentPage = currentPage
         let totalPages = toolbarView.totalPages
@@ -1085,6 +1164,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         let page = max(1, min(pages.lowerBound, totalPages))
         currentPage = page
         currentPosition = position
+        readPositionSaver.pageChanged(.init(chapter: chapter, page: page, totalPages: totalPages, scrollPosition: position))
         toolbarView.currentPage = page
         toolbarView.updateSliderPosition()
         // Mark as completed when reaching the last page

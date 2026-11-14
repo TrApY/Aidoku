@@ -17,10 +17,10 @@ private final class FakeScheduler: ReadPositionScheduler {
     }
 
     private(set) var now: TimeInterval = 0
-    private var items: [(fire: TimeInterval, order: Int, timer: Timer, action: @MainActor () -> Void)] = []
+    private var items: [(fire: TimeInterval, order: Int, timer: Timer, action: @MainActor @Sendable () -> Void)] = []
     private var order = 0
 
-    func schedule(after delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> ReadPositionTimer {
+    func schedule(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> ReadPositionTimer {
         let timer = Timer()
         order += 1
         items.append((now + delay, order, timer, action))
