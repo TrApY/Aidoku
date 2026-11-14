@@ -753,3 +753,9 @@
 "SUWAYOMI_SEARCH_IN" = "Buscar en";
 "SUWAYOMI_SEARCH_ALL" = "Todo";
 "SUWAYOMI_SERVER_ERROR" = "El servidor Suwayomi no ha podido completar la petición.";
+
+// Download ahead
+"DOWNLOAD_AHEAD" = "Descarga adelantada";
+"DOWNLOAD_AHEAD_OFF" = "Desactivada";
+"DOWNLOAD_AHEAD_ONE" = "1 capítulo";
+"DOWNLOAD_AHEAD_CHAPTERS" = "%i capítulos";

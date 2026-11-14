@@ -881,3 +881,9 @@
 "TOGGLE_BARS" = "Toggle bar visibility";
 "CLOSE_READER" = "Close reader";
 "TOGGLE_PAGE_OFFSET" = "Toggle page offset";
+
+// Download ahead
+"DOWNLOAD_AHEAD" = "Download ahead";
+"DOWNLOAD_AHEAD_OFF" = "Off";
+"DOWNLOAD_AHEAD_ONE" = "1 chapter";
+"DOWNLOAD_AHEAD_CHAPTERS" = "%i chapters";

@@ -108,6 +108,10 @@ extension HistoryManager {
                 ChapterIdentifier(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0.key)
             }
         )
+        // «descarga adelantada»: the window moves once the history is saved (reader or marked as read)
+        Task {
+            await DownloadManager.shared.ensureAheadDownloaded(mangaId: mangaId)
+        }
         Task {
             if AppSettings.tracking.updateAfterReading.get() {
                 // update tracker with chapter with largest number

@@ -613,7 +613,8 @@ extension MangaManager {
                 let mangaId = manga.identifier
                 let mangaTitle = manga.title
 
-                let summary = await CoreDataManager.shared.container.performBackgroundTask { context -> NotificationManager.NewChaptersSummary? in
+                let (summary, foundNewChapters) = await CoreDataManager.shared.container.performBackgroundTask {
+                    context -> (NotificationManager.NewChaptersSummary?, Bool) in
                     guard
                         let libraryObject = CoreDataManager.shared.getLibraryManga(
                             mangaId: mangaId,
@@ -621,7 +622,7 @@ extension MangaManager {
                         ),
                         let mangaObject = libraryObject.manga
                     else {
-                        return nil
+                        return (nil, false)
                     }
 
                     // update details
@@ -630,7 +631,7 @@ extension MangaManager {
                     }
 
                     // update chapters
-                    guard let chapters = newManga.chapters, !chapters.isEmpty else { return nil }
+                    guard let chapters = newManga.chapters, !chapters.isEmpty else { return (nil, false) }
 
                     let newChapters = CoreDataManager.shared.setChapters(
                         chapters,
@@ -665,13 +666,18 @@ extension MangaManager {
                         try? context.save()
                     }
 
-                    guard notifiableCount > 0 else { return nil }
+                    guard notifiableCount > 0 else { return (nil, !newChapters.isEmpty) }
                     let title = mangaObject.title.isEmpty ? (mangaTitle ?? "") : mangaObject.title
-                    return NotificationManager.NewChaptersSummary(
+                    return (NotificationManager.NewChaptersSummary(
                         mangaIdentifier: mangaId,
                         mangaTitle: title,
                         chapterCount: notifiableCount
-                    )
+                    ), true)
+                }
+
+                if foundNewChapters {
+                    // «descarga adelantada»: queue the new chapters that fall in the window
+                    await DownloadManager.shared.ensureAheadDownloaded(manga: manga.toNew())
                 }
 
                 if notificationsEnabled, let summary {

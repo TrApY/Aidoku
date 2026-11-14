@@ -588,6 +588,19 @@ extension MangaView {
             removeDownloads: {
                 showRemoveAllConfirm = true
             },
+            setDownloadAhead: { value in
+                DownloadAheadSetting.set(value, for: viewModel.manga.identifier)
+                guard value > 0 else { return }
+                let onlyOnWifi = AppSettings.downloads.downloadOnlyOnWifi.get()
+                if DownloadAheadPlanner.canQueue(onlyOnWifi: onlyOnWifi, connection: Reachability.getConnectionType()) {
+                    Task {
+                        await DownloadManager.shared.ensureAheadDownloaded(manga: viewModel.manga)
+                    }
+                } else {
+                    // chosen by hand: say why nothing is downloading yet (automatic triggers stay silent)
+                    showConnectionAlert = true
+                }
+            },
             editMode: $editMode
         ).equatable()
     }
@@ -863,6 +876,7 @@ private struct RightNavbarButton: View, Equatable {
     private let url: URL?
     private let hasDownloads: Bool
     private let isEditing: Bool
+    private let canDownloadAhead: Bool
     private let refresh: () async -> Void
 
     let markAllRead: () -> Void
@@ -871,8 +885,10 @@ private struct RightNavbarButton: View, Equatable {
     let migrate: () -> Void
     let showShareSheet: (URL) -> Void
     let removeDownloads: () -> Void
+    let setDownloadAhead: (Int) -> Void
 
     @Binding var editMode: EditMode
+    @State private var downloadAhead: Int
 
     init(
         viewModel: MangaView.ViewModel,
@@ -883,12 +899,16 @@ private struct RightNavbarButton: View, Equatable {
         migrate: @escaping () -> Void,
         showShareSheet: @escaping (URL) -> Void,
         removeDownloads: @escaping () -> Void,
+        setDownloadAhead: @escaping (Int) -> Void,
         editMode: Binding<EditMode>
     ) {
         self.bookmarked = viewModel.bookmarked
         self.hasCategories = viewModel.hasCategories
         self.url = viewModel.manga.url
         self.hasDownloads = viewModel.downloadStatus.contains(where: { $0.value == .finished || $0.value == .failed })
+        // per manga, for library manga of a source that can download (as the library's download menu)
+        self.canDownloadAhead = viewModel.bookmarked && viewModel.source != nil && !viewModel.manga.isLocal()
+        self._downloadAhead = State(initialValue: DownloadAheadSetting.get(for: viewModel.manga.identifier))
         self.refresh = refreshController.refresh
 
         self.markAllRead = markAllRead
@@ -897,6 +917,7 @@ private struct RightNavbarButton: View, Equatable {
         self.migrate = migrate
         self.showShareSheet = showShareSheet
         self.removeDownloads = removeDownloads
+        self.setDownloadAhead = setDownloadAhead
 
         self.isEditing = editMode.wrappedValue == .active
         self._editMode = editMode
@@ -960,6 +981,29 @@ private struct RightNavbarButton: View, Equatable {
                     }
                 }
 
+                if canDownloadAhead {
+                    Section {
+                        Menu {
+                            Picker(
+                                NSLocalizedString("DOWNLOAD_AHEAD"),
+                                selection: Binding(
+                                    get: { downloadAhead },
+                                    set: { value in
+                                        downloadAhead = value
+                                        setDownloadAhead(value)
+                                    }
+                                )
+                            ) {
+                                ForEach(DownloadAheadSetting.options, id: \.self) { option in
+                                    Text(DownloadAheadSetting.title(for: option)).tag(option)
+                                }
+                            }
+                        } label: {
+                            Label(NSLocalizedString("DOWNLOAD_AHEAD"), systemImage: "arrow.down.circle")
+                        }
+                    }
+                }
+
                 if hasDownloads {
                     Section {
                         Button(role: .destructive) {
@@ -991,6 +1035,7 @@ private struct RightNavbarButton: View, Equatable {
             && lhs.url == rhs.url
             && lhs.hasDownloads == rhs.hasDownloads
             && lhs.isEditing == rhs.isEditing
+            && lhs.canDownloadAhead == rhs.canDownloadAhead
     }
 }
 
