@@ -88,12 +88,17 @@ final class SuwayomiFakeServer: @unchecked Sendable {
 private let olympus = "1596411039134168890"
 private let emperor = "4562754350961964148"
 private let taurus = "5157867187592331768"
+private let nexus = "4086183896761281232" // flagged NSFW
 
 @Suite(.serialized) struct SuwayomiRunnerFlowTests {
     let key = "suwayomiflowtest"
     let server = SuwayomiFakeServer()
 
-    private func makeRunner(selected: [String]? = nil, searchAllTimeout: TimeInterval = 20) -> SuwayomiSourceRunner {
+    private func makeRunner(
+        selected: [String]? = nil,
+        searchAllTimeout: TimeInterval = 20,
+        serverSourcesMaxAge: TimeInterval = 5 * 60
+    ) -> SuwayomiSourceRunner {
         let defaults = UserDefaults.standard
         defaults.set("https://suwayomi.example:4567", forKey: "\(key).server")
         if let selected {
@@ -106,7 +111,8 @@ private let taurus = "5157867187592331768"
             name: "Test",
             server: "https://suwayomi.example:4567",
             transport: server.transport,
-            searchAllTimeout: searchAllTimeout
+            searchAllTimeout: searchAllTimeout,
+            serverSourcesMaxAge: serverSourcesMaxAge
         )
     }
 
@@ -253,6 +259,110 @@ private let taurus = "5157867187592331768"
         try #require(keys.count == 1 + 10 + 25)
         #expect(keys[1] == "234") // Olympus before Taurus, as in the settings
         #expect(keys[11] == "343")
+        await runner.waitForServerSourcesRefresh()
+    }
+
+    // MARK: Source list cache
+
+    @Test func concurrentSearchesRefreshTheListOnce() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus, taurus], serverSourcesMaxAge: 0) // always old
+        _ = try await runner.getListings()
+        server.respond("GetServerSources", delay: 0.5, .success(try fixture("sources-es")))
+        async let first = runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        async let second = runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        let results = try await [first, second]
+        #expect(results.allSatisfy { $0.entries.count == 1 + 10 + 25 })
+        await runner.waitForServerSourcesRefresh()
+        #expect(server.count("GetServerSources") == 2) // listings + one background refresh
+    }
+
+    @Test func listIsRefreshedOnceItExpires() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus], serverSourcesMaxAge: 0.3)
+        _ = try await runner.getListings()
+        _ = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        await runner.waitForServerSourcesRefresh()
+        #expect(server.count("GetServerSources") == 1) // still fresh
+        try await Task.sleep(nanoseconds: 400_000_000)
+        _ = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        await runner.waitForServerSourcesRefresh()
+        #expect(server.count("GetServerSources") == 2)
+    }
+
+    @Test func failedRefreshCoolsDown() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus], serverSourcesMaxAge: 0)
+        _ = try await runner.getListings()
+        server.respond("GetServerSources", .failure(URLError(.timedOut)))
+        for _ in 0..<3 {
+            let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+            #expect(page.entries.count == 11) // the known list keeps working
+            await runner.waitForServerSourcesRefresh()
+        }
+        #expect(server.count("GetServerSources") == 2) // listings + one failed refresh, then cooling down
+    }
+
+    @Test func unknownListCoolsDownAfterFailing() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        server.respond("GetServerSources", delay: 0.5, .failure(URLError(.timedOut)))
+        let runner = makeRunner(selected: [olympus])
+        _ = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        let start = Date()
+        for _ in 0..<2 {
+            let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+            #expect(page.entries.map(\.key) == ["156"]) // only the library, as before
+        }
+        #expect(Date().timeIntervalSince(start) < 0.4) // no new wait for the list
+        #expect(server.count("GetServerSources") == 1)
+    }
+
+    @Test func serverChangeForgetsTheListAndTheMarks() async throws {
+        defer {
+            cleanUp()
+            TrackerManager.suwayomi.markedInLibrary.removeAll(withPrefix: "suwayomiotherserver|")
+        }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus])
+        _ = try await runner.getListings()
+        #expect(UserDefaults.standard.data(forKey: "\(key).serverSourcesSnapshot") != nil)
+        TrackerManager.suwayomi.markedInLibrary.insert("\(key)|56")
+        TrackerManager.suwayomi.markedInLibrary.insert("suwayomiotherserver|56")
+
+        UserDefaults.standard.set("https://otro.example:4567", forKey: "\(key).server")
+        try await runner.handleNotification(notification: "server_change")
+
+        #expect(UserDefaults.standard.data(forKey: "\(key).serverSourcesSnapshot") == nil)
+        #expect(!TrackerManager.suwayomi.markedInLibrary.contains("\(key)|56"))
+        #expect(TrackerManager.suwayomi.markedInLibrary.contains("suwayomiotherserver|56"))
+        // the old list isn't used for the new server
+        server.respond("GetServerSources", .failure(URLError(.timedOut)))
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(page.entries.map(\.key) == ["156"])
+        #expect(server.count("FetchSourceManga") == 0)
+    }
+
+    @Test func hiddenNsfwSourcesAreNotSearched() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        server.respond("FetchSourceManga", source: nexus, .success(try fixture("fetch-source-manga-nexus-search")))
+        let ratings = AppSettings.browse.contentRatings.get()
+        defer { AppSettings.browse.contentRatings.set(ratings) }
+
+        AppSettings.browse.contentRatings.set([.safe, .containsNsfw])
+        let shown = try await makeRunner(selected: [olympus, nexus]).getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(shown.entries.count == 1 + 10 + 20)
+        #expect(shown.entries.contains { $0.key == "244" })
+
+        AppSettings.browse.contentRatings.set([.safe])
+        let hidden = try await makeRunner(selected: [olympus, nexus]).getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(hidden.entries.count == 1 + 10)
+        #expect(!hidden.entries.contains { $0.key == "244" })
+        #expect(server.variables("FetchSourceManga").filter { $0["source"] as? String == nexus }.count == 1)
     }
 
     @Test func everythingSkipsFailingAndSlowSources() async throws {

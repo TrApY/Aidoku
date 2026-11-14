@@ -74,6 +74,8 @@ actor SuwayomiSourceRunner: Runner {
     private var refreshingServerSources = false
     /// «Todo» refreshes the cached source list in the background after this time.
     private static let serverSourcesMaxAge: TimeInterval = 5 * 60
+    private let serverSourcesMaxAgeSetting: TimeInterval
+    private let serverSourcesRetryDelay: TimeInterval
 
     /// Max time per server source when searching everywhere (shorter in tests).
     private let searchAllTimeout: TimeInterval
@@ -83,10 +85,14 @@ actor SuwayomiSourceRunner: Runner {
         name: String,
         server: String,
         transport: SuwayomiHelper.Transport? = nil,
-        searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout
+        searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout,
+        serverSourcesMaxAge: TimeInterval = 5 * 60,
+        serverSourcesRetryDelay: TimeInterval = 60
     ) {
         self.sourceKey = sourceKey
         self.searchAllTimeout = searchAllTimeout
+        self.serverSourcesMaxAgeSetting = serverSourcesMaxAge
+        self.serverSourcesRetryDelay = serverSourcesRetryDelay
         self.helper = if let transport {
             .init(sourceKey: sourceKey, transport: transport)
         } else {
@@ -591,6 +597,11 @@ actor SuwayomiSourceRunner: Runner {
             _ = try? await self.fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
             self.finishRefreshingServerSources()
         }
+    }
+
+    /// Waits for a background refresh of the source list, if any (tests).
+    func waitForServerSourcesRefresh() async {
+        // pending
     }
 
     private func finishRefreshingServerSources() {
