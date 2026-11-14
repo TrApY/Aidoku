@@ -270,6 +270,15 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         #expect(SuwayomiServerSources.libraryListing().name == NSLocalizedString("LIBRARY"))
     }
 
+    @Test func searchSourcesFollowSettingOrderAndNsfw() throws {
+        let known = try JSONDecoder().decode(SuwayomiSourcesResponse.self, from: fixture("sources-es")).data.sources.nodes
+        let olympus = "1596411039134168890", emperor = "4562754350961964148", taurus = "5157867187592331768"
+        let selected = [taurus, emperor, olympus, "0", "999"]
+        #expect(SuwayomiServerSources.searchSources(selectedIds: selected, known: known, allowNsfw: true).map(\.id) == [olympus, emperor, taurus])
+        #expect(SuwayomiServerSources.searchSources(selectedIds: selected, known: known, allowNsfw: false).map(\.id) == [olympus, taurus])
+        #expect(SuwayomiServerSources.searchSources(selectedIds: [], known: known, allowNsfw: true).isEmpty)
+    }
+
     @Test func everythingResultsKeepOrderWithoutDuplicates() {
         func manga(_ key: String) -> AidokuRunner.Manga { .init(sourceKey: "suwayomi", key: key, title: key) }
         let merged = SuwayomiServerSources.mergeSearchResults(

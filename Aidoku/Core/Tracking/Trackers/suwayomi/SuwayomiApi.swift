@@ -8,6 +8,20 @@
 import Foundation
 
 actor SuwayomiApi {
+    private let transport: SuwayomiHelper.Transport?
+
+    init(transport: SuwayomiHelper.Transport? = nil) {
+        self.transport = transport
+    }
+
+    private func makeHelper(sourceKey: String) -> SuwayomiHelper {
+        if let transport {
+            .init(sourceKey: sourceKey, transport: transport)
+        } else {
+            .init(sourceKey: sourceKey)
+        }
+    }
+
     func getState(sourceKey: String, seriesId: String) async throws -> TrackState? {
         guard let mangaId = Int(seriesId) else { throw SuwayomiTrackerError.invalidId }
 
@@ -34,7 +48,7 @@ actor SuwayomiApi {
             }
         }
 
-        let helper = SuwayomiHelper(sourceKey: sourceKey)
+        let helper = makeHelper(sourceKey: sourceKey)
         let response: SuwayomiTrackStateResponse = try await helper.request(body: Payload(variables: .init(mangaId: mangaId)))
 
         return .init(
@@ -47,7 +61,7 @@ actor SuwayomiApi {
     /// Marks the manga as in the server library if it isn't already.
     func addToLibrary(sourceKey: String, seriesId: String) async throws {
         guard let mangaId = Int(seriesId) else { throw SuwayomiTrackerError.invalidId }
-        let helper = SuwayomiHelper(sourceKey: sourceKey)
+        let helper = makeHelper(sourceKey: sourceKey)
         let state: SuwayomiInLibraryResponse = try await helper.request(
             body: SuwayomiInLibraryPayload(variables: .init(id: mangaId))
         )
@@ -83,7 +97,7 @@ actor SuwayomiApi {
             }
         }
 
-        let helper = SuwayomiHelper(sourceKey: sourceKey)
+        let helper = makeHelper(sourceKey: sourceKey)
         let chapters: SuwayomiTrackChaptersResponse = try await helper.request(
             body: GetChaptersPayload(variables: .init(mangaId: mangaId))
         )
@@ -144,7 +158,7 @@ actor SuwayomiApi {
             isRead: progress.completed,
             lastPageRead: lastPageRead
         )
-        let helper = SuwayomiHelper(sourceKey: sourceKey)
+        let helper = makeHelper(sourceKey: sourceKey)
         let _: SuwayomiUpdateChapterResponse = try await helper.request(body: Payload(variables: .init(chapterId: chapterId, patch: patch)))
     }
 
@@ -172,7 +186,7 @@ actor SuwayomiApi {
             }
         }
 
-        let helper = SuwayomiHelper(sourceKey: sourceKey)
+        let helper = makeHelper(sourceKey: sourceKey)
         let response: SuwayomiReadProgressResponse = try await helper.request(body: Payload(variables: .init(mangaId: mangaId)))
 
         var result: [String: ChapterReadProgress] = [:]

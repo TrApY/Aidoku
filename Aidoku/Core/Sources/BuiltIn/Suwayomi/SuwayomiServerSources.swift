@@ -13,7 +13,7 @@ import Foundation
 // MARK: Models
 
 /// A source (extension language) installed on the Suwayomi server.
-struct SuwayomiServerSource: Decodable, Sendable, Hashable {
+struct SuwayomiServerSource: Codable, Sendable, Hashable {
     let id: String
     let name: String
     let lang: String
@@ -255,6 +255,20 @@ enum SuwayomiServerSources {
 
     static func defaultsKey(sourceKey: String) -> String {
         "\(sourceKey).\(settingKey)"
+    }
+
+    /// Last list of installed sources received from the server (all of them, unfiltered).
+    static func snapshotKey(sourceKey: String) -> String {
+        "\(sourceKey).serverSourcesSnapshot"
+    }
+
+    /// Sources to search in «Todo»: the selected ones, in the settings order and without NSFW if hidden.
+    static func searchSources(
+        selectedIds: [String],
+        known: [SuwayomiServerSource],
+        allowNsfw: Bool
+    ) -> [SuwayomiServerSource] {
+        [] // pending
     }
 
     /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",

@@ -14,7 +14,11 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
     let icon = PlatformImage(named: "suwayomi")
     let isLoggedIn = true
 
-    private let api = SuwayomiApi()
+    private let api: SuwayomiApi
+
+    init(api: SuwayomiApi = .init()) {
+        self.api = api
+    }
     private let idSeparator: Character = "|"
 
     func getTrackerInfo() -> TrackerInfo {

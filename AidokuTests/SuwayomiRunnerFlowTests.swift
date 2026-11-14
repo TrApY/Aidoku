@@ -113,6 +113,7 @@ private let taurus = "5157867187592331768"
     private func cleanUp() {
         UserDefaults.standard.removeObject(forKey: "\(key).server")
         UserDefaults.standard.removeObject(forKey: "\(key).serverSources")
+        UserDefaults.standard.removeObject(forKey: "\(key).serverSourcesSnapshot")
     }
 
     // MARK: Listings
@@ -226,6 +227,34 @@ private let taurus = "5157867187592331768"
         #expect(server.count("SearchManga") == 2)
     }
 
+    @Test func everythingUsesTheCachedSourceList() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [olympus, taurus])
+        _ = try await runner.getListings() // the source list is now known
+        #expect(server.count("GetServerSources") == 1)
+        server.respond("GetServerSources", delay: 3, .success(try fixture("sources-es")))
+        let start = Date()
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(Date().timeIntervalSince(start) < 1.5) // no wait for the source list before searching
+        #expect(page.entries.count == 1 + 10 + 25)
+        #expect(server.count("GetServerSources") == 1)
+    }
+
+    @Test func everythingWithoutAnswerUsesTheStoredListInSettingsOrder() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        _ = try await makeRunner(selected: [taurus, emperor, olympus]).getListings()
+        // app relaunched (no list in memory) and the server doesn't list its sources now
+        server.respond("GetServerSources", .failure(URLError(.timedOut)))
+        let runner = makeRunner(selected: [taurus, emperor, olympus])
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
+        let keys = page.entries.map(\.key)
+        try #require(keys.count == 1 + 10 + 25)
+        #expect(keys[1] == "234") // Olympus before Taurus, as in the settings
+        #expect(keys[11] == "343")
+    }
+
     @Test func everythingSkipsFailingAndSlowSources() async throws {
         defer { cleanUp() }
         try respondSpanishSources()
@@ -306,21 +335,47 @@ private let taurus = "5157867187592331768"
         #expect(manga.chapters?.count == 26)
     }
 
-    @Test func failedRemoteFetchReturnsWhatTheServerHas() async throws {
+    @Test func failedChapterFetchIsAnError() async throws {
         defer { cleanUp() }
+        // initialized, outside the server library, no chapters stored: a network failure is not «no chapters»
         server.respond("GetMangaUpdate", .success(try fixture("manga-update-initialized-no-chapters")))
         server.respond("FetchChapters", .failure(URLError(.timedOut)))
         let runner = makeRunner()
+        await #expect(throws: SourceError.self) {
+            _ = try await runner.getMangaUpdate(
+                manga: .init(sourceKey: key, key: "35", title: "x"),
+                needsDetails: true,
+                needsChapters: true
+            )
+        }
+        #expect(server.count("FetchChapters") == 1)
+
+        // details only: nothing to fetch, what the server has
         let manga = try await runner.getMangaUpdate(
             manga: .init(sourceKey: key, key: "35", title: "x"),
             needsDetails: true,
-            needsChapters: true
+            needsChapters: false
         )
         #expect(manga.title == "One Piece Omake")
-        #expect(manga.description?.isEmpty == false)
-        #expect(manga.chapters?.isEmpty == true)
-        #expect(server.count("FetchManga") == 0)
         #expect(server.count("FetchChapters") == 1)
+        #expect(server.count("FetchManga") == 0)
+    }
+
+    @Test func failedDetailsFetchKeepsStoredChapters() async throws {
+        defer { cleanUp() }
+        let stored = String(decoding: try fixture("manga-update-initialized"), as: UTF8.self)
+            .replacingOccurrences(of: "\"initialized\": true", with: "\"initialized\": false")
+        server.respond("GetMangaUpdate", .success(Data(stored.utf8)))
+        server.respond("FetchManga", .failure(URLError(.timedOut)))
+        let runner = makeRunner()
+        let manga = try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "54", title: "x"),
+            needsDetails: true,
+            needsChapters: true
+        )
+        #expect(manga.chapters?.count == 26)
+        #expect(server.count("FetchManga") == 1)
+        #expect(server.count("FetchChapters") == 0)
     }
 
     @Test func noChaptersFoundIsAnEmptyList() async throws {
@@ -349,5 +404,46 @@ private let taurus = "5157867187592331768"
                 needsChapters: true
             )
         }
+    }
+}
+
+@Suite(.serialized) struct SuwayomiTrackerLibraryTests {
+    let key = "suwayomitrackertest"
+    let server = SuwayomiFakeServer()
+
+    private let notInLibrary = Data(#"{"data":{"manga":{"inLibrary":false}}}"#.utf8)
+    private let added = Data(#"{"data":{"updateManga":{"manga":{"id":56,"inLibrary":true}}}}"#.utf8)
+
+    private func makeTracker() -> SuwayomiTracker {
+        UserDefaults.standard.set("https://suwayomi.example:4567", forKey: "\(key).server")
+        return SuwayomiTracker(api: SuwayomiApi(transport: server.transport))
+    }
+
+    @Test func serverLibraryIsMarkedOnlyOnce() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        server.respond("GetInLibrary", .success(notInLibrary))
+        server.respond("AddToServerLibrary", .success(added))
+        let tracker = makeTracker()
+        _ = try await tracker.register(trackId: "\(key)|56", highestChapterRead: nil, earliestReadDate: nil)
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate())
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate())
+        #expect(server.count("GetInLibrary") == 1)
+        #expect(server.count("AddToServerLibrary") == 1)
+
+        // another manga is still checked
+        try await tracker.update(trackId: "\(key)|57", update: TrackUpdate())
+        #expect(server.count("GetInLibrary") == 2)
+    }
+
+    @Test func failedMarkIsRetried() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        server.respond("GetInLibrary", .failure(URLError(.timedOut)), .success(notInLibrary))
+        server.respond("AddToServerLibrary", .success(added))
+        let tracker = makeTracker()
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate()) // fails, logged
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate()) // retried, marked
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate()) // remembered
+        #expect(server.count("GetInLibrary") == 2)
+        #expect(server.count("AddToServerLibrary") == 1)
     }
 }
