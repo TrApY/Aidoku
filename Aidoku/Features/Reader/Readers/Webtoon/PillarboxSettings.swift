@@ -51,12 +51,19 @@ enum PillarboxSettings {
     }
 
     /// After restoring a backup's settings: a backup from before the two amounts brings the old amount and
-    /// orientation but not the new keys, so migrate again from what it brought (pending).
+    /// orientation but not the new keys, so migrate again from what it brought.
     static func restoredFromBackup(
         keys: Set<String>,
         defaults: UserDefaults = .standard,
         domain: String? = Bundle.main.bundleIdentifier
     ) {
+        let bringsOld = keys.contains("Reader.pillarboxAmount") || keys.contains("Reader.pillarboxOrientation")
+        let bringsNew = keys.contains(portraitKey) || keys.contains(landscapeKey)
+        guard bringsOld && !bringsNew else { return }
+        defaults.removeObject(forKey: migratedKey)
+        defaults.removeObject(forKey: portraitKey)
+        defaults.removeObject(forKey: landscapeKey)
+        migrate(defaults: defaults, domain: domain)
     }
 
     /// New value from a settings notification (the stepper posts a Double).
