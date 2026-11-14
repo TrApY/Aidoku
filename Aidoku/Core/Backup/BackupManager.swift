@@ -694,6 +694,8 @@ extension BackupManager {
                 UIApplication.shared.appDelegate?.migrateSettings()
             }
         }
+        // a backup from before the pillarbox margin per orientation
+        PillarboxSettings.restoredFromBackup(keys: Set(settings.keys))
     }
 
     private func confirmExternalSourceRestore(keys: Set<String>) async -> Bool {

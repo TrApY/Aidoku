@@ -50,6 +50,15 @@ enum PillarboxSettings {
         defaults.set(true, forKey: migratedKey)
     }
 
+    /// After restoring a backup's settings: a backup from before the two amounts brings the old amount and
+    /// orientation but not the new keys, so migrate again from what it brought (pending).
+    static func restoredFromBackup(
+        keys: Set<String>,
+        defaults: UserDefaults = .standard,
+        domain: String? = Bundle.main.bundleIdentifier
+    ) {
+    }
+
     /// New value from a settings notification (the stepper posts a Double).
     static func value(from object: Any?, key: String) -> CGFloat {
         if let double = object as? Double { return CGFloat(double) }

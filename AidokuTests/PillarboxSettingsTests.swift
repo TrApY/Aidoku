@@ -84,4 +84,80 @@ import Testing
             #expect(defaults.persistentDomain(forName: domain)?[PillarboxSettings.landscapeKey] == nil)
         }
     }
+
+    /// Registered defaults live in the process-wide registration domain: only stored values must count.
+    @Test func migrationIgnoresRegisteredDefaults() {
+        let registration = UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain)
+        defer { UserDefaults.standard.setVolatileDomain(registration, forName: UserDefaults.registrationDomain) }
+        withDefaults { defaults, domain in
+            defaults.register(defaults: [
+                PillarboxSettings.portraitKey: 50,
+                PillarboxSettings.landscapeKey: 60,
+                "Reader.pillarboxAmount": 70,
+                "Reader.pillarboxOrientation": "landscape"
+            ])
+            defaults.set(25.0, forKey: "Reader.pillarboxAmount")
+            defaults.set("portrait", forKey: "Reader.pillarboxOrientation")
+            PillarboxSettings.migrate(defaults: defaults, domain: domain)
+            let stored = defaults.persistentDomain(forName: domain) ?? [:]
+            #expect((stored[PillarboxSettings.portraitKey] as? NSNumber)?.intValue == 25)
+            #expect((stored[PillarboxSettings.landscapeKey] as? NSNumber)?.intValue == 0)
+        }
+        withDefaults { defaults, domain in
+            defaults.register(defaults: [
+                PillarboxSettings.portraitKey: 50,
+                PillarboxSettings.landscapeKey: 60,
+                "Reader.pillarboxAmount": 70,
+                "Reader.pillarboxOrientation": "landscape"
+            ])
+            // nothing stored: the old defaults (15, both), not the registered values
+            PillarboxSettings.migrate(defaults: defaults, domain: domain)
+            let stored = defaults.persistentDomain(forName: domain) ?? [:]
+            #expect((stored[PillarboxSettings.portraitKey] as? NSNumber)?.intValue == 15)
+            #expect((stored[PillarboxSettings.landscapeKey] as? NSNumber)?.intValue == 15)
+        }
+    }
+
+    // MARK: Backup restore
+
+    @Test func restoringAnOldBackupMigratesItsValues() {
+        withDefaults { defaults, domain in
+            // current install, already migrated
+            defaults.set(10.0, forKey: PillarboxSettings.portraitKey)
+            defaults.set(30.0, forKey: PillarboxSettings.landscapeKey)
+            defaults.set(true, forKey: PillarboxSettings.migratedKey)
+            // the old backup restored over it
+            defaults.set(40.0, forKey: "Reader.pillarboxAmount")
+            defaults.set("landscape", forKey: "Reader.pillarboxOrientation")
+            PillarboxSettings.restoredFromBackup(
+                keys: ["Reader.pillarbox", "Reader.pillarboxAmount", "Reader.pillarboxOrientation"],
+                defaults: defaults,
+                domain: domain
+            )
+            #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 0)
+            #expect(defaults.integer(forKey: PillarboxSettings.landscapeKey) == 40)
+            #expect(defaults.bool(forKey: PillarboxSettings.migratedKey))
+        }
+    }
+
+    @Test func restoringANewBackupChangesNothing() {
+        withDefaults { defaults, domain in
+            defaults.set(10.0, forKey: PillarboxSettings.portraitKey)
+            defaults.set(30.0, forKey: PillarboxSettings.landscapeKey)
+            defaults.set(true, forKey: PillarboxSettings.migratedKey)
+            defaults.set(40.0, forKey: "Reader.pillarboxAmount")
+            defaults.set("landscape", forKey: "Reader.pillarboxOrientation")
+            PillarboxSettings.restoredFromBackup(
+                keys: ["Reader.pillarboxAmount", "Reader.pillarboxOrientation",
+                       PillarboxSettings.portraitKey, PillarboxSettings.landscapeKey],
+                defaults: defaults,
+                domain: domain
+            )
+            #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 10)
+            #expect(defaults.integer(forKey: PillarboxSettings.landscapeKey) == 30)
+            // a backup without any pillarbox key: nothing either
+            PillarboxSettings.restoredFromBackup(keys: ["Reader.readingMode"], defaults: defaults, domain: domain)
+            #expect(defaults.integer(forKey: PillarboxSettings.portraitKey) == 10)
+        }
+    }
 }
