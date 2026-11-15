@@ -27,6 +27,8 @@ private final class FakeScheduler: ReadPositionScheduler {
         return timer
     }
 
+    var pendingCount: Int { items.filter { !$0.timer.cancelled }.count }
+
     func advance(by seconds: TimeInterval) {
         let end = now + seconds
         while let next = items.filter({ !$0.timer.cancelled && $0.fire <= end + 0.000_001 }).min(by: { ($0.fire, $0.order) < ($1.fire, $1.order) }) {
@@ -118,7 +120,7 @@ struct ReadPositionSaverTests {
 
     @Test func theOpeningPageIsNotSaved() {
         let h = Harness()
-        h.saver.chapterOpened()
+        h.saver.chapterOpened(pageKey: "c1#5") // the stored page loadCurrentChapter starts at
         h.turn(5) // the reader reports where it opened
         h.scheduler.advance(by: 30)
         h.turn(5) // same page again (scrolling within it)
@@ -132,6 +134,89 @@ struct ReadPositionSaverTests {
         h.scheduler.advance(by: 30)
         #expect(h.local.map(\.position.page) == [6])
         #expect(h.tracker.map(\.position.page) == [6])
+    }
+
+    @Test func aReaderThatDoesNotReportTheOpeningPage() {
+        // webtoon opening at the page number the last chapter had: it reports nothing until the user moves
+        let h = Harness()
+        h.saver.chapterOpened(pageKey: "c2#5")
+        h.turn(6, chapter: "c2") // the user's first change
+        h.scheduler.advance(by: 30)
+        #expect(h.local.map(\.position) == [.init(chapter: "c2", page: 6)])
+        #expect(h.tracker.map(\.position) == [.init(chapter: "c2", page: 6)])
+    }
+
+    @Test func aReaderThatSettlesBackOnTheOpeningPage() {
+        // webtoon re-centering while images load (4, then 5) or text paging (provisional, then the real one)
+        let h = Harness()
+        h.saver.chapterOpened(pageKey: "c1#5")
+        h.turn(4)
+        h.scheduler.advance(by: 0.5)
+        h.turn(5)
+        h.scheduler.advance(by: 30)
+        #expect(h.local.isEmpty)
+        #expect(h.tracker.isEmpty)
+    }
+
+    @Test func backToAPageAfterAnotherWasSaved() {
+        let h = Harness()
+        h.saver.chapterOpened(pageKey: "c1#5")
+        h.turn(6)
+        h.scheduler.advance(by: 30) // 6 saved and sent
+        h.turn(5)
+        h.scheduler.advance(by: 30)
+        #expect(h.local.map(\.position.page) == [6, 5])
+        #expect(h.tracker.map(\.position.page) == [6, 5])
+    }
+
+    @Test func theSamePageAgainSchedulesNothing() {
+        let h = Harness()
+        h.turn(6)
+        h.scheduler.advance(by: 30) // saved and sent
+        h.turn(6) // reported again (not the opening page)
+        #expect(h.scheduler.pendingCount == 0)
+        // and back to it before another page is saved: the pending saves are dropped
+        h.turn(7)
+        h.scheduler.advance(by: 0.5)
+        h.turn(6)
+        #expect(h.scheduler.pendingCount == 0)
+        h.scheduler.advance(by: 30)
+        #expect(h.local.map(\.position.page) == [6])
+    }
+
+    @Test func backgroundWithLocalSavedButNotSent() {
+        let h = Harness()
+        h.turn(6)
+        h.scheduler.advance(by: 3) // saved locally, not sent yet
+        #expect(h.local.count == 1)
+        #expect(h.tracker.isEmpty)
+        #expect(h.saver.claimImmediateSave(pageKey: "c1#6")) // still needs sending
+        #expect(!h.saver.claimImmediateSave(pageKey: "c1#6"))
+    }
+
+    @Test func aDiscardedSaveIsNotCountedAsSaved() {
+        let h = Harness()
+        h.turn(6)
+        h.scheduler.advance(by: 11) // local and tracker saves fired (running, async)
+        let local = h.local.first?.generation ?? -1
+        // the same page saved right away (deactivate): nothing to discard, the running saves write it
+        #expect(!h.saver.claimImmediateSave(pageKey: "c1#6"))
+        #expect(h.saver.isCurrent(local))
+        // something else dropped them (e.g. leaving the reader) before they wrote
+        h.saver.cancel()
+        #expect(!h.saver.isCurrent(local))
+        h.saver.discarded(pageKey: "c1#6")
+        // the background notice then must save it
+        #expect(h.saver.claimImmediateSave(pageKey: "c1#6"))
+    }
+
+    @Test func pageKeyIncludesTheScrollPosition() {
+        #expect(ReadPositionKey.make(chapterKey: "c1", page: 5, position: nil) == "c1#5")
+        let a = ReadPositionKey.make(chapterKey: "c1", page: 5, position: 0.421)
+        let b = ReadPositionKey.make(chapterKey: "c1", page: 5, position: 0.459)
+        #expect(a != b) // moving within one virtual page of the text reader is a change
+        #expect(a == ReadPositionKey.make(chapterKey: "c1", page: 5, position: 0.4204)) // rounded (1 %)
+        #expect(a != "c1#5")
     }
 
     @Test func thePageLastSavedIsNotSavedAgain() {

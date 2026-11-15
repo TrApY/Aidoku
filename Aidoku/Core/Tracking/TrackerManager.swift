@@ -49,9 +49,17 @@ actor TrackerManager {
     }
     private var trackingState: TrackingState
     private var pageUpdateTask: Task<(), Never>?
+    /// Where pending page updates are saved (nil: not saved, for tests).
+    private let stateKey: String?
+    private let pageTrackerLookup: @Sendable (String) -> Tracker?
 
-    init() {
-        self.trackingState = UserDefaults.standard.data(forKey: "Tracker.pageTrackingState")
+    init(
+        stateKey: String? = "Tracker.pageTrackingState",
+        pageTrackerLookup: @escaping @Sendable (String) -> Tracker? = { TrackerManager.getTracker(id: $0) }
+    ) {
+        self.stateKey = stateKey
+        self.pageTrackerLookup = pageTrackerLookup
+        self.trackingState = stateKey.flatMap { UserDefaults.standard.data(forKey: $0) }
             .flatMap { try? JSONDecoder().decode(TrackingState.self, from: $0) } ?? .init()
     }
 
@@ -722,7 +730,7 @@ extension TrackerManager {
             let batch = trackingState.pendingPageUpdates
 
             for var update in batch {
-                guard let tracker = TrackerManager.getTracker(id: update.trackerId) as? PageTracker else {
+                guard let tracker = pageTrackerLookup(update.trackerId) as? PageTracker else {
                     continue // tracker no longer exists, remove the update
                 }
                 do {
@@ -760,11 +768,25 @@ extension TrackerManager {
     }
 
     private func savePageTrackingState() {
+        guard let stateKey else { return }
         let data = try? JSONEncoder().encode(trackingState)
         if let data {
-            UserDefaults.standard.set(data, forKey: "Tracker.pageTrackingState")
+            UserDefaults.standard.set(data, forKey: stateKey)
         }
     }
+
+    /// Waits for the page updates being sent (the reader's immediate save, inside a background task).
+    func waitForPendingPageUpdates() async {
+        await pageUpdateTask?.value
+    }
+
+    /// Queues and sends page updates. For tests.
+    func sendPageUpdates(_ updates: [PageTrackUpdate]) async {
+        queuePageUpdates(updates)
+        await processPendingUpdates()
+    }
+
+    var pendingPageUpdates: [PageTrackUpdate] { trackingState.pendingPageUpdates }
 
     private func queuePageUpdates(_ updates: [PageTrackUpdate]) {
         // merge new updates into existing failed updates, preserving the latest ones

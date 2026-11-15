@@ -3,6 +3,7 @@
 //  AidokuTests
 //
 
+import AidokuRunner
 import Foundation
 import Testing
 
@@ -45,4 +46,55 @@ struct PageTrackerQueueTests {
         let remaining = TrackerManager.remainingPageUpdates(current: current, sent: sent, failed: failed)
         #expect(pages(remaining) == ["c1:9:0"])
     }
+
+    @Test func aCallThatWaitedSendsWhatWasQueuedMeanwhile() async throws {
+        let tracker = SlowPageTracker()
+        let manager = TrackerManager(stateKey: nil, pageTrackerLookup: { $0 == tracker.id ? tracker : nil })
+        let first = PageTrackUpdate(
+            trackerId: tracker.id, trackId: "1",
+            chapterId: .init(sourceKey: "s", mangaKey: "m", chapterKey: "c1"),
+            progress: .init(completed: false, page: 3)
+        )
+        let second = PageTrackUpdate(
+            trackerId: tracker.id, trackId: "1",
+            chapterId: .init(sourceKey: "s", mangaKey: "m", chapterKey: "c1"),
+            progress: .init(completed: false, page: 7)
+        )
+        await manager.sendPageUpdates([first]) // a batch on the network (slow)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        await manager.sendPageUpdates([second]) // queued meanwhile: waits for the batch, then sends it
+        await manager.waitForPendingPageUpdates()
+        #expect(await tracker.sentPages == [3, 7])
+        #expect(await manager.pendingPageUpdates.isEmpty)
+    }
+}
+
+/// A page tracker whose updates take a while.
+private final class SlowPageTracker: PageTracker, @unchecked Sendable {
+    struct Unsupported: Error {}
+    let id = "test.slowpagetracker"
+    let name = "Slow"
+    let icon: PlatformImage? = nil
+    let isLoggedIn = true
+    private let log = SentLog()
+    var sentPages: [Int] { get async { await log.pages } }
+
+    func setProgress(trackId: String, chapterId: ChapterIdentifier, progress: ChapterReadProgress) async throws {
+        try await Task.sleep(nanoseconds: 300_000_000)
+        await log.add(progress.page)
+    }
+    func getProgress(trackId: String, chapters: [AidokuRunner.Chapter]) async throws -> [String: ChapterReadProgress] { [:] }
+    func getTrackerInfo() async throws -> TrackerInfo { throw Unsupported() }
+    func register(trackId: String, highestChapterRead: Float?, earliestReadDate: Date?) async throws -> String? { nil }
+    func update(trackId: String, update: TrackUpdate) async throws {}
+    func getState(trackId: String) async throws -> TrackState { throw Unsupported() }
+    func getUrl(trackId: String) async -> URL? { nil }
+    func search(for manga: AidokuRunner.Manga, includeNsfw: Bool) async throws -> [TrackSearchItem] { [] }
+    func search(title: String, includeNsfw: Bool) async throws -> [TrackSearchItem] { [] }
+    func logout() async throws {}
+}
+
+private actor SentLog {
+    private(set) var pages: [Int] = []
+    func add(_ page: Int) { pages.append(page) }
 }

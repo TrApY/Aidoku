@@ -381,10 +381,12 @@ extension ReaderWebtoonViewController {
             if chapterIndex > 0 && pageSection < chapterIndex {
                 movePreviousChapter()
                 needsInfoRefresh = true
+                previousPage = 0
             } else if chapterIndex < chapters.count - 1 {
                 if pageSection > chapterIndex {
                     moveNextChapter()
                     needsInfoRefresh = true
+                    previousPage = 0
                 }
             }
         }
@@ -926,6 +928,8 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
 
     func setChapter(_ chapter: AidokuRunner.Chapter, startPage: Int) {
         self.chapter = chapter
+        // a new chapter: its first page is reported even if it has the number the last one had
+        previousPage = 0
         updateDoubleTapZoomSetting()
         chapters = [chapter]
 

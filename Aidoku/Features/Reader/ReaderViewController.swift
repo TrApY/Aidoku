@@ -55,10 +55,10 @@ class ReaderViewController: BaseObservingViewController {
         let totalPages: Int
         let scrollPosition: Double?
 
-        var pageKey: String { Self.pageKey(chapter: chapter, page: page) }
+        var pageKey: String { Self.pageKey(chapter: chapter, page: page, position: scrollPosition) }
 
-        static func pageKey(chapter: AidokuRunner.Chapter, page: Int) -> String {
-            "\(chapter.key)#\(page)"
+        static func pageKey(chapter: AidokuRunner.Chapter, page: Int, position: Double?) -> String {
+            ReadPositionKey.make(chapterKey: chapter.key, page: page, position: position)
         }
     }
 
@@ -75,13 +75,19 @@ class ReaderViewController: BaseObservingViewController {
                     scrollPosition: position.scrollPosition,
                     updateTrackers: false,
                     saveSession: false,
-                    generation: generation
+                    generation: generation,
+                    pageKey: position.pageKey
                 )
             }
         },
         saveTracker: { [weak self] position, generation in
             Task {
-                await self?.updateTrackerProgress(page: position.page, chapter: position.chapter, generation: generation)
+                await self?.updateTrackerProgress(
+                    page: position.page,
+                    chapter: position.chapter,
+                    generation: generation,
+                    pageKey: position.pageKey
+                )
             }
         }
     )
@@ -538,7 +544,9 @@ extension ReaderViewController {
     private func saveReadPositionNow() {
         let page = currentPage
         let chapter = chapter
-        let needsSave = readPositionSaver.claimImmediateSave(pageKey: ReadPosition.pageKey(chapter: chapter, page: page))
+        let needsSave = readPositionSaver.claimImmediateSave(
+            pageKey: ReadPosition.pageKey(chapter: chapter, page: page, position: currentPosition)
+        )
         let needsSession = sessionStartDate != nil && !AppSettings.general.incognitoMode.get()
         guard needsSave || needsSession else { return }
         var backgroundTask = UIBackgroundTaskIdentifier.invalid
@@ -553,6 +561,8 @@ extension ReaderViewController {
             } else {
                 await saveReadingSession(chapter: chapter)
             }
+            // the page tracker update goes out before the background time ends
+            await TrackerManager.shared.waitForPendingPageUpdates()
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid
@@ -562,14 +572,22 @@ extension ReaderViewController {
 
     /// Sends the page to the page trackers, if the chapter has history and isn't completed.
     /// - generation: for a delayed update, dropped if the saver moved on meanwhile.
-    private func updateTrackerProgress(page: Int, chapter: AidokuRunner.Chapter, generation: Int? = nil) async {
+    private func updateTrackerProgress(
+        page: Int,
+        chapter: AidokuRunner.Chapter,
+        generation: Int? = nil,
+        pageKey: String? = nil
+    ) async {
         guard !AppSettings.general.incognitoMode.get(), page >= 1 else { return }
         let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
         let (completed, progress) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
             CoreDataManager.shared.getProgress(chapterId: chapterId, context: context)
         }
         guard !completed, progress != nil else { return }
-        if let generation, !readPositionSaver.isCurrent(generation) { return }
+        if let generation, !readPositionSaver.isCurrent(generation) {
+            if let pageKey { readPositionSaver.discarded(pageKey: pageKey) }
+            return
+        }
         await TrackerManager.shared.setProgress(
             mangaId: chapterId.mangaIdentifier,
             chapter: chapter,
@@ -586,7 +604,8 @@ extension ReaderViewController {
         scrollPosition: Double? = nil,
         updateTrackers: Bool = true,
         saveSession: Bool = true,
-        generation: Int? = nil
+        generation: Int? = nil,
+        pageKey: String? = nil
     ) async {
         let effectiveTotalPages = totalPages ?? toolbarView.totalPages ?? 0
         let effectiveCurrentPage = currentPage ?? self.currentPage
@@ -617,6 +636,7 @@ extension ReaderViewController {
 
         // a delayed save that started before the position was saved right away (or the chapter changed)
         if let generation, !readPositionSaver.isCurrent(generation) {
+            if let pageKey { readPositionSaver.discarded(pageKey: pageKey) }
             return
         }
 
@@ -657,6 +677,20 @@ extension ReaderViewController {
         chapterList = updatedManga?.chapters ?? []
     }
 
+    /// Where the chapter starts, as the reader will report it: the stored page (the first one without
+    /// history or when completed) and, for text readers, the stored scroll position.
+    private func openingPageKey() -> String {
+        let page = max(1, currentPage)
+        var position: Double?
+        if reader is ReaderTextViewController || reader is ReaderPagedTextViewController {
+            position = CoreDataManager.shared.getHistory(
+                chapterId: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key),
+                context: CoreDataManager.shared.context
+            )?.scrollPosition?.doubleValue
+        }
+        return ReadPosition.pageKey(chapter: chapter, page: page, position: position)
+    }
+
     func loadCurrentChapter() {
         if chapterList.isEmpty {
             Task {
@@ -682,7 +716,7 @@ extension ReaderViewController {
             }
         }
         // the page it opens at is not a change: nothing is saved until the user turns a page
-        readPositionSaver.chapterOpened()
+        readPositionSaver.chapterOpened(pageKey: openingPageKey())
         reader?.setChapter(chapter, startPage: currentPage)
     }
 

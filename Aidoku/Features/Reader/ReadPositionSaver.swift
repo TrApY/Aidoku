@@ -46,6 +46,14 @@ protocol ReadPositionKeyed {
     var pageKey: String { get }
 }
 
+enum ReadPositionKey {
+    /// Chapter + page, plus the scroll position (rounded to 1 %) when the reader reports one (text reader),
+    /// so moving within one virtual page is a change too (pending: position ignored).
+    static func make(chapterKey: String, page: Int, position: Double?) -> String {
+        "\(chapterKey)#\(page)"
+    }
+}
+
 /// Debounces read position saves. `Position` carries everything a save needs (chapter, page...),
 /// so a save always writes the chapter it was scheduled for.
 @MainActor
@@ -145,11 +153,16 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
         }
     }
 
-    /// A chapter was loaded: its first page is where reading starts, not a change.
-    func chapterOpened() {
+    /// A chapter was loaded at `pageKey` (the stored position it starts at): reports of that page are
+    /// not a change (pending: the first report is taken instead).
+    func chapterOpened(pageKey: String) {
         cancel()
         awaitingOpeningPage = true
         openingKey = nil
+    }
+
+    /// A delayed save of `pageKey` was dropped (old generation) without writing: it's not saved (pending).
+    func discarded(pageKey: String) {
     }
 
     /// Drops what's pending (leaving the reader, changing chapter): the caller saves right away.
