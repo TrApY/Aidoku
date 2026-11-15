@@ -383,11 +383,6 @@ class NewSourceViewController: UIViewController {
             originalNavbarAppearance = navigationBar.standardAppearance
             originalNavbarEdgeAppearance = navigationBar.scrollEdgeAppearance
         }
-        if !searchOverlayView.isHidden {
-            // set navbar back to opaque if we entered the view while still searching
-            // e.g. returned to search page after exiting manga page
-            self.setNavigationBarOpaque(true)
-        }
     }
 }
 
@@ -442,7 +437,6 @@ extension NewSourceViewController {
         UIView.animate(withDuration: 0.2) {
             self.searchOverlayView.alpha = 1
             self.searchFilterController.view.alpha = 1
-            self.setNavigationBarOpaque(true)
 
             // show search bar drawer if it was hidden
             if !self.source.hasListings {
@@ -532,8 +526,6 @@ extension NewSourceViewController {
             UIView.animate(withDuration: 0.2) {
                 // fade out search background
                 self.searchOverlayView.alpha = 0
-                // reset navigation bar background
-                self.setNavigationBarOpaque(false)
             } completion: { _ in
                 self.searchOverlayView.isHidden = true
 
@@ -686,11 +678,6 @@ extension NewSourceViewController {
         self.searchController.searchBar.subviews.first?.subviews.forEach {
             $0.isHidden = hidden
         }
-    }
-
-    // toggles the navigation bar background to opaque or transparent
-    private func setNavigationBarOpaque(_ opaque: Bool) {
-        // navigation bar should remain clear on ios 26 and later
     }
 
     private func handleFilterHeaderVisibility() {

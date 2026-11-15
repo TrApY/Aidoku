@@ -56,7 +56,6 @@ struct MigrateSelectDestinationView: View {
                         SourceCell(source: source)
                     }
                     .disabled(isSelected(source: source))
-                    .cellButtonFix()
                 }
             }
         }
@@ -139,14 +138,5 @@ extension MigrateSelectDestinationView {
                 Spacer(minLength: 0) // for ios 15
             }
         }
-    }
-}
-
-// fixes buttons not being selectable in lists pre-ios 16
-// if BorderlessButtonStyle is enabled on ios 16+, only the text becomes selectable and not the entire cell (smh apple)
-private extension View {
-    @ViewBuilder
-    func cellButtonFix() -> some View {
-        self
     }
 }

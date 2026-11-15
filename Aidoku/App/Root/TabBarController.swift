@@ -223,9 +223,6 @@ extension TabBarController: UITabBarControllerDelegate {
         checkForSettingsPop()
     }
 
-    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-    }
-
     func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
         if tab === tabBarController.selectedTab {
             checkForHistoryReselection()
