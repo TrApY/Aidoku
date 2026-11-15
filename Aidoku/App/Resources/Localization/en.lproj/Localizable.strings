@@ -326,12 +326,6 @@
 "SUWAYOMI_TAGLINE" = "Manga reader server";
 "SUWAYOMI_INFO" = "Suwayomi is a self-hosted manga reader server that runs extensions built for Mihon (Tachiyomi). You will need a Suwayomi server set up and running in order to use this source.";
 "SUWAYOMI_SETUP" = "Suwayomi Setup";
-"SUWAYOMI_SERVER_SOURCES" = "Server Sources";
-"SUWAYOMI_SERVER_SOURCES_INFO" = "Sources installed on the Suwayomi server to browse and search besides its library. Each one adds Popular and Latest lists.";
-"SUWAYOMI_LISTING_POPULAR" = "Popular · %@";
-"SUWAYOMI_LISTING_LATEST" = "Latest · %@";
-"SUWAYOMI_SEARCH_IN" = "Search In";
-"SUWAYOMI_SEARCH_ALL" = "Everything";
 "SUWAYOMI_SERVER_ERROR" = "The Suwayomi server couldn't complete the request.";
 "STATUS_LICENSED" = "Licensed";
 "STATUS_PUBLISHING_FINISHED" = "Publishing Finished";
@@ -891,7 +885,6 @@
 "PILLARBOX_AMOUNTS_INFO" = "Margin (percent of the width) for each orientation. 0 turns pillarboxing off in that orientation.";
 
 // SUWA-11: global search and migration
-"SUWAYOMI_LIBRARY_ROW_%@" = "Library (%@)";
 "GLOBAL_SEARCH" = "Global Search";
 "WEBVIEW" = "WebView";
 "MANGA_SOURCE_ERROR_HINT" = "This source isn't responding. You can retry, open it on the web or migrate the series to another source.";
@@ -922,3 +915,7 @@
 // SUWA-11 ronda final
 "SEARCH_SOURCE_NO_RESPONSE" = "Didn't respond";
 "MANGA_SOURCE_NOT_INSTALLED_HINT_WEB" = "You can open it on the web.";
+
+// SUWA-12
+"SUWAYOMI_POPULAR" = "Popular";
+"SUWAYOMI_LATEST" = "Latest";

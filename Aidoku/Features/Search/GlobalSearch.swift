@@ -73,13 +73,22 @@ enum GlobalSearch {
     /// first the rows of a source other than the manga's own, then its own source; in each group the same
     /// normalized title before the first result.
     static func bestMatch(for manga: AidokuRunner.Manga, rows: [GlobalSearchRow]) -> AidokuRunner.Manga? {
-        // pending: the first result that isn't itself
-        rows.lazy.compactMap { $0.result.entries.first(where: { $0.identifier != manga.identifier }) }.first
+        let notItself: (AidokuRunner.Manga) -> Bool = { $0.identifier != manga.identifier }
+        let title = normalizedTitle(manga.title)
+        let others = rows.filter { $0.source.key != manga.sourceKey }
+        let own = rows.filter { $0.source.key == manga.sourceKey }
+        for group in [others, own] {
+            let candidates = group.flatMap(\.result.entries).filter(notItself)
+            if let match = candidates.first(where: { normalizedTitle($0.title) == title }) ?? candidates.first {
+                return match
+            }
+        }
+        return nil
     }
 
     /// The target sources of a bulk migration in the order they are tried for `manga`: its own source last
     /// (a match in another source is preferred).
     static func targetOrder(_ sources: [AidokuRunner.Source], for manga: AidokuRunner.Manga) -> [AidokuRunner.Source] {
-        sources // pending
+        sources.filter { $0.key != manga.sourceKey } + sources.filter { $0.key == manga.sourceKey }
     }
 }

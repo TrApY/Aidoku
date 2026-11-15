@@ -133,7 +133,7 @@ final class SuwayomiConnections: @unchecked Sendable {
     /// The key whose `.server`, `.login*`, `.cookie`, `.token` are used: the parent for a child, the key
     /// itself otherwise (the parent, an old track id `<parent>|<id>`, another self-hosted source).
     func connectionKey(for sourceKey: String) -> String {
-        sourceKey // pending
+        lock.withLock { children[sourceKey]?.parentKey ?? sourceKey }
     }
 
     func child(_ key: String) -> SuwayomiServerSourceConfig? {
@@ -151,7 +151,11 @@ final class SuwayomiConnections: @unchecked Sendable {
     /// False for what must not be offered as a source (Explorar, search, migration targets): a connection,
     /// and a child the server doesn't have anymore.
     func isListed(_ key: String) -> Bool {
-        true // pending
+        lock.withLock {
+            if connections.contains(key) { return false }
+            if let child = children[key] { return child.available }
+            return true
+        }
     }
 
     /// Tests.
@@ -209,7 +213,12 @@ actor SuwayomiSearchLimiter {
     }
 
     private func acquire() async {
-        running += 1 // pending: no limit
+        if running < limit {
+            running += 1
+            return
+        }
+        // the slot is handed over by `release` (running stays the same)
+        await withCheckedContinuation { waiting.append($0) }
     }
 
     private func release() {

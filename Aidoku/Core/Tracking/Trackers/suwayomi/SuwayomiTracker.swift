@@ -84,7 +84,7 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
         // a server source follows its connection's switch (Ajustes › Seguimiento lists the connections)
         mangaId.sourceKey.hasPrefix(SuwayomiSourceRunner.sourceKeyPrefix)
             && !UserDefaults.standard.bool(
-                forKey: "\(mangaId.sourceKey).disableTracking" // pending
+                forKey: "\(SuwayomiConnections.shared.connectionKey(for: mangaId.sourceKey)).disableTracking"
             )
     }
 

@@ -792,7 +792,7 @@ extension SourceManager {
         // the key's own settings (`<key>.…`), not those of another key that only starts the same
         // (`suwayomi.todo-1` when removing `suwayomi.todo`); a Suwayomi connection's server sources
         // (`<key>.<id>.…`) go with it
-        for key in keys where key.hasPrefix(sourceKey) { // pending
+        for key in keys where key == sourceKey || key.hasPrefix("\(sourceKey).") {
             userDefaults.removeObject(forKey: key)
         }
     }

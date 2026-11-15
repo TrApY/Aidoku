@@ -743,12 +743,6 @@
 "NEW_CHAPTERS_AVAILABLE" = "Capítulos nuevos disponibles";
 "X_SERIES_HAVE_NEW_CHAPTERS" = "%d series tienen capítulos nuevos";
 "SUWAYOMI" = "Suwayomi";
-"SUWAYOMI_SERVER_SOURCES" = "Fuentes del servidor";
-"SUWAYOMI_SERVER_SOURCES_INFO" = "Fuentes instaladas en el servidor Suwayomi para explorar y buscar además de su biblioteca. Cada una añade las listas Populares y Recientes.";
-"SUWAYOMI_LISTING_POPULAR" = "Populares · %@";
-"SUWAYOMI_LISTING_LATEST" = "Recientes · %@";
-"SUWAYOMI_SEARCH_IN" = "Buscar en";
-"SUWAYOMI_SEARCH_ALL" = "Todo";
 "SUWAYOMI_SERVER_ERROR" = "El servidor Suwayomi no ha podido completar la petición.";
 
 // Download ahead
@@ -764,7 +758,6 @@
 "PILLARBOX_AMOUNTS_INFO" = "Margen (porcentaje del ancho) para cada orientación. Con 0 no hay pillarbox en esa orientación.";
 
 // SUWA-11: global search and migration
-"SUWAYOMI_LIBRARY_ROW_%@" = "Biblioteca (%@)";
 "GLOBAL_SEARCH" = "Búsqueda global";
 "WEBVIEW" = "WebView";
 "MANGA_SOURCE_ERROR_HINT" = "Esta fuente no responde. Puedes reintentar, abrirla en la web o migrar el manga a otra fuente.";
@@ -795,3 +788,7 @@
 // SUWA-11 ronda final
 "SEARCH_SOURCE_NO_RESPONSE" = "No respondió";
 "MANGA_SOURCE_NOT_INSTALLED_HINT_WEB" = "Puedes abrirla en la web.";
+
+// SUWA-12
+"SUWAYOMI_POPULAR" = "Populares";
+"SUWAYOMI_LATEST" = "Recientes";
