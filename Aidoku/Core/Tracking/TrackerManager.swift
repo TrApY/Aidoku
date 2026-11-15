@@ -471,7 +471,8 @@ actor TrackerManager {
                             detail: "fecha \(progress.date.map { "\($0)" } ?? "ninguna"), local \(existingHistory.map { "pág \($0.progress)/\($0.total)" } ?? "sin historial")"
                         )
                         completed.append(chapterKey)
-                        let readDate = progress.date ?? Date.now // pendiente[H4#13]
+                        // without the server's date the manga isn't «read recently» (SUWA-12 H4)
+                        let readDate = progress.date ?? Date.distantPast
                         lastRead = readDate > lastRead ? readDate : lastRead
                         CoreDataManager.shared.setCompleted(
                             chapterIds: [chapterId],
