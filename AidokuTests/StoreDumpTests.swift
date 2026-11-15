@@ -585,7 +585,8 @@ func expectMetadataListed(_ dump: StoreDump) {
             try (tables.joined(separator: "\n") + "\n")
                 .write(to: URL(fileURLWithPath: out).appendingPathComponent("restaurado-tablas.txt"), atomically: true, encoding: .utf8)
         }
-        #expect(original.differences(to: restored, metadataTables: []) == [])
+        // entities and metadata tables (Z_METADATA key by key, see StoreDump.metadataKeysThatChange)
+        #expect(original.differences(to: restored) == [])
         #expect(restored.entities == original.entities)
         try restored.write(label: "restaurado-\(device)")
     }
