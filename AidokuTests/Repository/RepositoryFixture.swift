@@ -37,7 +37,7 @@ struct HistorySeed: Sendable {
     /// nil: as a new row starts (0)
     var total: Int?
     var completed = false
-    /// a new row starts at .distantPast; nil on purpose is kept
+    /// a new row starts at .distantPast (the model requires a date: nil does not save)
     var dateRead: Date? = .distantPast
     var scrollPosition: Double?
     /// linked to its stored chapter (if there is one)
@@ -84,7 +84,12 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
             if seed.linked {
                 history.chapter = CoreDataManager.shared.getChapter(chapterId: seed.chapter, context: context)
             }
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                Issue.record("the seed was not saved: \(error)")
+                context.rollback()
+            }
         }
     }
 

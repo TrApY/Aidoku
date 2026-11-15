@@ -66,28 +66,29 @@ import Testing
         let history = store.repos.history
         await store.seed.addHistory(HistorySeed(chapter: id("c1")))
         await store.seed.addHistory(HistorySeed(chapter: id("c2"), progress: 12, total: 38, dateRead: date(812_345_678.5), scrollPosition: 0.0))
-        await store.seed.addHistory(HistorySeed(chapter: id("c3"), progress: Int(Int16.max), total: Int(Int16.max), completed: true, dateRead: nil, scrollPosition: -1.5))
+        await store.seed.addHistory(HistorySeed(chapter: id("c3"), progress: Int(Int16.max), total: Int(Int16.max), completed: true, dateRead: date(-0.25), scrollPosition: -1.5))
         #expect(await history.record(of: id("c1")) == HistoryRecord(chapterId: id("c1"), progress: -1, total: 0, completed: false, dateRead: .distantPast, scrollPosition: nil))
         #expect(await history.record(of: id("c2")) == HistoryRecord(chapterId: id("c2"), progress: 12, total: 38, completed: false, dateRead: date(812_345_678.5), scrollPosition: 0.0))
-        #expect(await history.record(of: id("c3")) == HistoryRecord(chapterId: id("c3"), progress: 32767, total: 32767, completed: true, dateRead: nil, scrollPosition: -1.5))
+        #expect(await history.record(of: id("c3")) == HistoryRecord(chapterId: id("c3"), progress: 32767, total: 32767, completed: true, dateRead: date(-0.25), scrollPosition: -1.5))
         #expect(await history.record(of: id("c2", sameKeyOtherSource)) == nil)
         await store.tearDown()
     }
 
-    /// page -1 if completed (else the page, -1 included); date in whole seconds since 1970, -1 without date.
+    /// page -1 if completed (else the page, -1 included); date in whole seconds since 1970 (the model requires a
+    /// read date, so the -1 of «no date» cannot be stored).
     @Test(arguments: repositoryFixtures)
     func theReadingHistoryGivesPageAndDate(fixture: any RepositoryFixture) async throws {
         let store = try await fixture.make()
         let history = store.repos.history
         await store.seed.addHistory(HistorySeed(chapter: id("c1"), progress: 5, dateRead: Date(timeIntervalSince1970: 1000.9)))
         await store.seed.addHistory(HistorySeed(chapter: id("c2"), progress: 9, completed: true, dateRead: Date(timeIntervalSince1970: 2000)))
-        await store.seed.addHistory(HistorySeed(chapter: id("c3"), progress: 3, dateRead: nil))
+        await store.seed.addHistory(HistorySeed(chapter: id("c3"), progress: 3, dateRead: Date(timeIntervalSince1970: -5.5)))
         await store.seed.addHistory(HistorySeed(chapter: id("c4")))
         await store.seed.addHistory(HistorySeed(chapter: id("c1", sameKeyOtherSource), progress: 1))
         #expect(await history.readingHistory(of: manga) == [
             "c1": ReadingHistoryEntry(page: 5, date: 1000),
             "c2": ReadingHistoryEntry(page: -1, date: 2000),
-            "c3": ReadingHistoryEntry(page: 3, date: -1),
+            "c3": ReadingHistoryEntry(page: 3, date: -5),
             "c4": ReadingHistoryEntry(page: -1, date: Int(Date.distantPast.timeIntervalSince1970))
         ])
         #expect(await history.readingHistory(of: sameKeyOtherSource) == ["c1": ReadingHistoryEntry(page: 1, date: Int(Date.distantPast.timeIntervalSince1970))])

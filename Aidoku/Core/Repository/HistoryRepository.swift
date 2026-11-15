@@ -19,7 +19,7 @@ protocol HistoryRepository: Sendable {
     func hasHistory(of manga: MangaIdentifier) async -> Bool
     /// The earliest read date of the manga's completed chapters.
     func earliestReadDate(of manga: MangaIdentifier) async -> Date?
-    /// The highest number read (completed) as `mode` counts it; the caller gives the mode (it used to be read from
-    /// UserDefaults inside, §1.5 nº 5: ChapterTitleDisplayMode.stored(for:)).
+    /// The highest number read (completed) as `mode` counts it; the caller gives the mode (it used to be read from the
+    /// settings inside, §1.5 nº 5; ChapterTitleDisplayMode.stored(for:) gives the stored one).
     func highestReadNumber(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> Float?
 }
