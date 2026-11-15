@@ -25,7 +25,20 @@ enum CompletionJournal {
     }()
 
     static func record(_ chapter: ChapterIdentifier, reason: String, detail: String = "", date: Date = Date(), fileUrl: URL? = nil) {
-         // pendiente[B#3]
+        guard !AppSettings.general.incognitoMode.get() else { return }
+        let url = fileUrl ?? defaultUrl
+        let line = [formatter.string(from: date), chapter.sourceKey, chapter.mangaKey, chapter.chapterKey, reason, detail]
+            .joined(separator: "\t")
+            .replacingOccurrences(of: "\n", with: " ")
+        lock.withLock {
+            var all = lines(fileUrl: url)
+            all.append(line)
+            if all.count > maxLines {
+                all = Array(all.suffix(keptLines))
+            }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? (all.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     static func lines(fileUrl: URL? = nil) -> [String] {
