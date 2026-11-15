@@ -197,10 +197,10 @@ final class DeletedDownloads: @unchecked Sendable {
         await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.setCompleted(chapterIds: [.init(sourceKey: oldId.sourceKey, mangaKey: oldId.mangaKey, chapterKey: "o1")], context: context)
             CoreDataManager.shared.setProgress(4, chapterId: .init(sourceKey: oldId.sourceKey, mangaKey: oldId.mangaKey, chapterKey: "o2"), totalPages: 20, context: context)
-            _ = CoreDataManager.shared.createCategory(title: category, context: context)
-            CoreDataManager.shared.addCategoriesToManga(mangaId: oldId, categories: [category], context: context)
             try? context.save()
         }
+        await DataRepositories.shared.categories.create(title: category)
+        await DataRepositories.shared.categories.assign([oldId], add: [category])
         await DataRepositories.shared.tracks.add(TrackItem(id: "track-1", trackerId: trackerId, mangaId: oldId, title: "Viejo", chapterOffset: 0))
     }
 
@@ -212,11 +212,7 @@ final class DeletedDownloads: @unchecked Sendable {
                 try? context.save()
             }
         }
-        let category = category
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.removeCategory(title: category, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.categories.remove(title: category)
     }
 
     private struct State {
@@ -229,11 +225,12 @@ final class DeletedDownloads: @unchecked Sendable {
     private func state(_ id: MangaIdentifier) async -> State {
         let history = await CoreDataManager.shared.getReadingHistory(mangaId: id).mapValues(\.page)
         let tracks = await DataRepositories.shared.tracks.items(of: id).map(\.id)
+        let categories = await DataRepositories.shared.categories.categories(of: id)
         return await CoreDataManager.shared.container.performBackgroundTask { context in
             State(
                 inLibrary: CoreDataManager.shared.hasLibraryManga(mangaId: id, context: context),
                 history: history,
-                categories: CoreDataManager.shared.getCategories(mangaId: id, context: context).compactMap(\.title),
+                categories: categories,
                 tracks: tracks
             )
         }
