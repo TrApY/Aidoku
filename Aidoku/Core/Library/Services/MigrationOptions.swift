@@ -144,6 +144,20 @@ extension MigrationOptions {
         tracking: Bool,
         canTrackNew: Bool
     ) -> MigrationTrackAction {
-        .keep // pending
+        let replacing = !keepOriginal && !sameEntry
+        if isSuwayomi {
+            // the server tracks each manga by its own id: it follows the new manga if that's a server one
+            guard let newId = suwayomiNewTrackId, !sameEntry else {
+                return replacing ? .delete : .keep
+            }
+            if keepOriginal {
+                return newHasTrack ? .keep : .copy(id: newId)
+            }
+            return newHasTrack ? .delete : .move(id: newId)
+        }
+        guard tracking, !newHasTrack, canTrackNew, !sameEntry else {
+            return replacing ? .delete : .keep
+        }
+        return keepOriginal ? .copy(id: trackId) : .move(id: nil)
     }
 }

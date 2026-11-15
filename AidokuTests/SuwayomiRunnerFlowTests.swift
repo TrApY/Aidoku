@@ -317,7 +317,7 @@ private let nexus = "4086183896761281232" // flagged NSFW
         server.respond("GetServerSources", .failure(URLError(.timedOut)))
         for _ in 0..<3 {
             let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
-            #expect(page.entries.count == 11) // the known list keeps working
+            #expect(page.entries.count == 36) // the known list keeps working (every Spanish source: 1 + 10 + 25)
             await runner.waitForServerSourcesRefresh()
         }
         #expect(server.count("GetServerSources") == 2) // listings + one failed refresh, then cooling down

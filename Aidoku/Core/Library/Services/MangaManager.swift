@@ -871,9 +871,7 @@ extension MangaManager {
                         progressReport(Float(counter) / Float(fromSeries.count * 2))
                     }
                     if let result {
-                        if environment.bindEnhancedTrackers {
-                            await TrackerManager.shared.bindEnhancedTrackers(manga: result.to)
-                        }
+                        // the enhanced trackers are bound with the server work, after the migration
                         if !options.keepOriginal {
                             NotificationCenter.default.post(name: .migratedManga, object: result)
                         }
@@ -1088,65 +1086,42 @@ extension MangaManager {
                 )
 
                 for item in trackItems {
-                    if let suwayomiTrackerId, item.trackerId == suwayomiTrackerId {
-                        // the server tracks each manga by its own id: move it to the new manga's id
-                        let newHasTrack = CoreDataManager.shared.hasTrack(
-                            trackerId: suwayomiTrackerId,
-                            mangaId: newManga.identifier,
-                            context: context
-                        )
-                        if let newTrackId = suwayomiPlan.newTrackId {
-                            if !copy {
-                                if newHasTrack {
-                                    context.delete(item)
-                                } else {
-                                    item.id = newTrackId
-                                    item.sourceId = newManga.sourceKey
-                                    item.mangaId = newManga.key
-                                }
-                            } else if !newHasTrack {
-                                CoreDataManager.shared.createTrack(
-                                    id: newTrackId,
-                                    trackerId: suwayomiTrackerId,
-                                    mangaId: newManga.identifier,
-                                    title: item.title,
-                                    context: context
-                                )
-                            }
-                        } else if !copy && newManga.identifier != oldManga.identifier {
-                            context.delete(item) // the new one isn't a server manga: nothing to point at
-                        }
-                        continue
-                    }
-                    guard
-                        options.tracking, // the user's trackers only if asked
-                        let trackId = item.id,
-                        let trackerId = item.trackerId,
-                        !CoreDataManager.shared.hasTrack(
-                            trackerId: trackerId,
-                            mangaId: newManga.identifier,
-                            context: context
-                        ),
-                        let tracker = environment.trackerLookup(trackerId),
-                        tracker.canRegister(mangaId: newManga.identifier)
-                    else {
+                    guard let trackId = item.id, let trackerId = item.trackerId else {
                         if !copy && newManga.identifier != oldManga.identifier {
-                            context.delete(item)
+                            context.delete(item) // a broken item doesn't stay behind
                         }
                         continue
                     }
-
-                    if copy {
-                        CoreDataManager.shared.createTrack(
-                            id: trackId,
-                            trackerId: trackerId,
-                            mangaId: newManga.identifier,
-                            title: item.title,
-                            context: context
-                        )
-                    } else {
-                        item.sourceId = newManga.sourceKey
-                        item.mangaId = newManga.key
+                    let isSuwayomi = trackerId == suwayomiTrackerId
+                    let action = MigrationOptions.trackAction(
+                        isSuwayomi: isSuwayomi,
+                        trackId: trackId,
+                        suwayomiNewTrackId: suwayomiPlan.newTrackId,
+                        keepOriginal: copy,
+                        sameEntry: newManga.identifier == oldManga.identifier,
+                        newHasTrack: CoreDataManager.shared.hasTrack(trackerId: trackerId, mangaId: newManga.identifier, context: context),
+                        tracking: options.tracking,
+                        canTrackNew: !isSuwayomi && environment.trackerLookup(trackerId)?.canRegister(mangaId: newManga.identifier) == true
+                    )
+                    switch action {
+                        case .keep:
+                            break
+                        case .delete:
+                            context.delete(item)
+                        case let .move(id):
+                            if let id {
+                                item.id = id
+                            }
+                            item.sourceId = newManga.sourceKey
+                            item.mangaId = newManga.key
+                        case let .copy(id):
+                            CoreDataManager.shared.createTrack(
+                                id: id,
+                                trackerId: trackerId,
+                                mangaId: newManga.identifier,
+                                title: item.title,
+                                context: context
+                            )
                     }
                 }
 
@@ -1163,14 +1138,28 @@ extension MangaManager {
             DownloadAheadSetting.migrate(from: oldManga.identifier, to: newManga.identifier, copy: copy)
         }
 
-        if result != nil, let suwayomiTracker, suwayomiPlan != .none {
-            // best effort on the server: failures are logged and don't undo the migration on the device
+        if result != nil, (suwayomiTracker != nil && suwayomiPlan != .none) || environment.bindEnhancedTrackers {
+            // the server (Suwayomi library, enhanced trackers) after the migration, in a task of its own: the
+            // loading screen doesn't wait for it, every request has a short timeout, failures are logged and
+            // never undo the migration on the device
             let newId = newManga.identifier
             // without the read chapters, the server gets no last read chapter
             let highestRead = options.readChapters ? await CoreDataManager.shared.container.performBackgroundTask { context in
                 CoreDataManager.shared.getHighestReadNumber(mangaId: newId, context: context)
             } : nil
-            await suwayomiTracker.applyMigration(suwayomiPlan, old: oldManga.identifier, highestChapterRead: highestRead)
+            let oldId = oldManga.identifier
+            let bind = environment.bindEnhancedTrackers
+            let task = Task {
+                await SuwayomiHelper.$requestTimeout.withValue(SuwayomiTracker.migrationRequestTimeout) {
+                    if let suwayomiTracker, suwayomiPlan != .none {
+                        await suwayomiTracker.applyMigration(suwayomiPlan, old: oldId, highestChapterRead: highestRead)
+                    }
+                    if bind {
+                        await TrackerManager.shared.bindEnhancedTrackers(manga: newManga)
+                    }
+                }
+            }
+            environment.serverTasks?.add(task)
         }
 
         // the original's downloads, only once the migration went well

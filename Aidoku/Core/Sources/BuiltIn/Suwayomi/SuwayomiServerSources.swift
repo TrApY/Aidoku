@@ -265,14 +265,28 @@ enum SuwayomiServerSources {
     }
 
     /// Sources to search in «Todo»: the selected ones, in the settings order and without NSFW if hidden.
-    /// Sources a search covers (pending: still only the selected ones).
+    /// Sources a search covers (global search, migration, «Todo», «Buscar en»): EVERY source installed on
+    /// the server in the languages enabled in Aidoku (none enabled: any language; «multi» also takes the
+    /// all-languages ones), without the local source and without NSFW if hidden. The ones marked in the
+    /// setting first, in the setting order, then the rest by name. The marks are only for the listings.
     static func searchSources(
         selectedIds: [String],
         known: [SuwayomiServerSource],
         allowNsfw: Bool,
         languages: Set<String>
     ) -> [SuwayomiServerSource] {
-        selected(ids: selectedIds, from: available(known, allowNsfw: allowNsfw))
+        let enabled = Set(languages.map(SourceLanguage.normalized))
+        let inLanguages = available(known, allowNsfw: allowNsfw).filter { source in
+            guard !enabled.isEmpty else { return true }
+            let lang = source.lang.lowercased() == "all" ? SourceLanguage.multi : SourceLanguage.normalized(source.lang)
+            return enabled.contains(lang)
+        }
+        let marked = selected(ids: selectedIds, from: inLanguages)
+        let markedIds = Set(marked.map(\.id))
+        let rest = inLanguages
+            .filter { !markedIds.contains($0.id) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        return marked + rest
     }
 
     /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",
@@ -417,8 +431,9 @@ enum SuwayomiServerSources {
         return (library + sources.flatMap { $0 }).filter { seen.insert($0.key).inserted }
     }
 
-    /// Sections of a grouped search: the library (when it found something), then every source that
-    /// answered (failed or too slow: left out), in order. A manga in the library also stays in its source.
+    /// Sections of a grouped search: the library (when it found something), then every source in order,
+    /// also those without results («Sin resultados») and those that failed or were too slow («No respondió»).
+    /// A manga in the library also stays in its source.
     static func groupedSections(
         library: [AidokuRunner.Manga],
         sources: [(source: SuwayomiServerSource, entries: [AidokuRunner.Manga]?)],
@@ -430,7 +445,16 @@ enum SuwayomiServerSources {
             sections.append(.init(id: searchInLibraryId, title: libraryTitle, iconUrl: nil, entries: library))
         }
         for (source, entries) in sources {
-            guard let entries else { continue }
+            guard let entries else {
+                sections.append(.init(
+                    id: source.id,
+                    title: source.displayName,
+                    iconUrl: iconUrl(source.iconUrl, baseUrl: baseUrl),
+                    entries: [],
+                    failed: true
+                ))
+                continue
+            }
             var seen = Set<String>()
             sections.append(.init(
                 id: source.id,

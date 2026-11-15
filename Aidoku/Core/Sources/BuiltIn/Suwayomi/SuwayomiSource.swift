@@ -147,8 +147,13 @@ actor SuwayomiSourceRunner: Runner {
 
     func getSearchMangaList(query: String?, page: Int, filters: [AidokuRunner.FilterValue]) async throws -> AidokuRunner.MangaPageResult {
         let baseUrl = try helper.getConfiguredServer()
-        let selectedIds = selectedServerSourceIds()
-        switch SuwayomiServerSources.searchTarget(filters: filters, selectedIds: selectedIds) {
+        // «Buscar en» = a marked source, or any other source a search covers
+        var searchableIds = selectedServerSourceIds()
+        if let value = SuwayomiServerSources.searchSourceId(filters: filters),
+           value != SuwayomiServerSources.searchInLibraryId, !searchableIds.contains(value) {
+            searchableIds += await serverSourcesForSearch().map(\.id)
+        }
+        switch SuwayomiServerSources.searchTarget(filters: filters, selectedIds: searchableIds) {
             case let .source(serverSourceId):
                 // searching an installed source: the library filters don't apply
                 let response: SuwayomiFetchSourceMangaResponse = try await helper.request(
@@ -158,8 +163,8 @@ actor SuwayomiSourceRunner: Runner {
                 return SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl)
             case .all:
                 let query = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                // without sources or without text, everything is the library (as before)
-                if !selectedIds.isEmpty && !query.isEmpty {
+                // without text, everything is the library (as before); with it, every source of the server
+                if !query.isEmpty {
                     return try await searchEverywhere(query: query, page: page, filters: filters, baseUrl: baseUrl)
                 }
             case .library:
@@ -676,7 +681,6 @@ actor SuwayomiSourceRunner: Runner {
     /// Sources to search in «Todo», without waiting for the server when the list is already known.
     private func serverSourcesForSearch() async -> [SuwayomiServerSource] {
         let ids = selectedServerSourceIds()
-        guard !ids.isEmpty else { return [] }
         if let known = knownServerSources() {
             refreshServerSourcesInBackground()
             return SuwayomiServerSources.searchSources(selectedIds: ids, known: known, allowNsfw: allowsNsfw(), languages: searchLanguages())
@@ -686,11 +690,25 @@ actor SuwayomiSourceRunner: Runner {
         guard !isCoolingDown() else { return [] }
         do {
             let sources = try await fetchServerSourcesForSearch()
-            return SuwayomiServerSources.selected(ids: ids, from: sources)
+            return SuwayomiServerSources.searchSources(selectedIds: ids, known: sources, allowNsfw: allowsNsfw(), languages: searchLanguages())
         } catch {
             LogManager.logger.warn("Suwayomi server sources unknown, searching only the library: \(error)")
             return []
         }
+    }
+
+    /// The sources of «Buscar en» (as `selectedServerSources`: asked to the server, the known list if it fails).
+    private func searchSourcesForFilter() async throws -> [SuwayomiServerSource] {
+        let known: [SuwayomiServerSource]
+        do {
+            known = try await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+        } catch {
+            guard let stored = knownServerSources() else { throw error }
+            known = stored
+        }
+        return SuwayomiServerSources.searchSources(
+            selectedIds: selectedServerSourceIds(), known: known, allowNsfw: allowsNsfw(), languages: searchLanguages()
+        )
     }
 
     /// Server sources chosen in the settings, in the settings order.
@@ -759,7 +777,8 @@ actor SuwayomiSourceRunner: Runner {
 // MARK: Search Filters
 extension SuwayomiSourceRunner {
     func getSearchFilters() async throws -> [AidokuRunner.Filter] {
-        async let serverSources = try? selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
+        // «Buscar en»: every source a search covers, the marked ones first
+        async let serverSources = try? searchSourcesForFilter()
         let (categoryItems, tagItems) = try await filterData()
 
         var filters: [AidokuRunner.Filter] = []
@@ -988,8 +1007,8 @@ extension SuwayomiSourceRunner: GroupedSearchRunner {
     func groupedSearch(query: String) async throws -> [GroupedSearchSection] {
         let baseUrl = try helper.getConfiguredServer()
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // without sources or without text, only the library (as «Todo»)
-        guard !selectedServerSourceIds().isEmpty, !query.isEmpty else {
+        // without text, only the library (as «Todo»)
+        guard !query.isEmpty else {
             let library = try await searchLibrary(query: query, filters: [], baseUrl: baseUrl)
             return SuwayomiServerSources.groupedSections(library: library, sources: [], baseUrl: baseUrl, libraryTitle: libraryRowTitle)
         }

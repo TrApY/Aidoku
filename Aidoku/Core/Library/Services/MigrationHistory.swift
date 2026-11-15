@@ -77,13 +77,26 @@ enum MigrationHistory {
             }
         }
 
+        // An unfinished chapter whose number is up to the highest completed one is already marked as read
+        // above (JoTa reads in order: everything up to there was read), so it isn't carried as unfinished.
         var carried: [String: InProgress] = [:]
         for entry in old where !entry.completed && entry.progress > 0 {
-            guard let number = entry.chapter else { continue }
-            let target = newChapters.first { chapter in
-                !marked.contains(chapter.key)
-                    && same(chapter.chapterNumber, number)
-                    && (entry.volume == nil || chapter.volumeNumber == nil || same(entry.volume, chapter.volumeNumber))
+            let target: AidokuRunner.Chapter?
+            if let number = entry.chapter, number >= 0 {
+                target = newChapters.first { chapter in
+                    !marked.contains(chapter.key)
+                        && same(chapter.chapterNumber, number)
+                        && (entry.volume == nil || chapter.volumeNumber == nil || same(entry.volume, chapter.volumeNumber))
+                }
+            } else if let volume = entry.volume {
+                // only a volume: the new chapter of that volume that has no number either
+                target = newChapters.first { chapter in
+                    !marked.contains(chapter.key)
+                        && (chapter.chapterNumber == nil || chapter.chapterNumber ?? 0 < 0)
+                        && same(chapter.volumeNumber, volume)
+                }
+            } else {
+                target = nil
             }
             guard let target else { continue }
             if let kept = carried[target.key], (kept.date ?? .distantPast) >= (entry.dateRead ?? .distantPast) {
