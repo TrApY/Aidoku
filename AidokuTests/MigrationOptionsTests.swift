@@ -226,9 +226,10 @@ final class DeletedDownloads: @unchecked Sendable {
         let history = await CoreDataManager.shared.getReadingHistory(mangaId: id).mapValues(\.page)
         let tracks = await DataRepositories.shared.tracks.items(of: id).map(\.id)
         let categories = await DataRepositories.shared.categories.categories(of: id)
+        let inLibrary = await DataRepositories.shared.library.contains(id)
         return await CoreDataManager.shared.container.performBackgroundTask { context in
             State(
-                inLibrary: CoreDataManager.shared.hasLibraryManga(mangaId: id, context: context),
+                inLibrary: inLibrary,
                 history: history,
                 categories: categories,
                 tracks: tracks
