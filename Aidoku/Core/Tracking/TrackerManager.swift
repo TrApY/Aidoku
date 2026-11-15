@@ -440,6 +440,7 @@ actor TrackerManager {
         let (completed, progressed) = await CoreDataManager.shared.container.performBackgroundTask { [result] context in
             var completed: [String] = []
             var progressed: [String: Int] = [:]
+            var journal: [(ChapterIdentifier, String)] = [] // written once saved (SUWA-12 H3)
 
             var lastRead = Date.distantPast
 
@@ -465,11 +466,10 @@ actor TrackerManager {
                 // mark chapters as read
                 if progress.completed {
                     if !(existingHistory?.completed ?? false) {
-                        CompletionJournal.record(
+                        journal.append((
                             chapterId,
-                            reason: "sincronización \(trackerIdsForJournal)",
-                            detail: "fecha \(progress.date.map { "\($0)" } ?? "ninguna"), local \(existingHistory.map { "pág \($0.progress)/\($0.total)" } ?? "sin historial")"
-                        )
+                            "fecha \(progress.date.map { "\($0)" } ?? "ninguna"), local \(existingHistory.map { "pág \($0.progress)/\($0.total)" } ?? "sin historial")"
+                        ))
                         completed.append(chapterKey)
                         // without the server's date the manga isn't «read recently» (SUWA-12 H4)
                         let readDate = progress.date ?? Date.distantPast
@@ -503,7 +503,14 @@ actor TrackerManager {
                 )
             }
 
-            try? context.save()
+            do {
+                try context.save()
+                for (chapterId, detail) in journal {
+                    CompletionJournal.record(chapterId, reason: "sincronización \(trackerIdsForJournal)", detail: detail)
+                }
+            } catch {
+                LogManager.logger.error("TrackerManager.syncPageTrackerHistory: \(error)")
+            }
 
             return (completed, progressed)
         }

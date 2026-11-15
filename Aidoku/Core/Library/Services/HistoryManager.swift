@@ -90,12 +90,6 @@ extension HistoryManager {
                 context: context
             )
             if success {
-                for chapter in chapters {
-                    CompletionJournal.record(
-                        .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key),
-                        reason: reason
-                    )
-                }
                 CoreDataManager.shared.setRead(
                     mangaId: mangaId,
                     date: date,
@@ -103,6 +97,13 @@ extension HistoryManager {
                 )
                 do {
                     try context.save()
+                    // only what was saved goes in the journal (SUWA-12 H3)
+                    for chapter in chapters {
+                        CompletionJournal.record(
+                            .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key),
+                            reason: reason
+                        )
+                    }
                 } catch {
                     LogManager.logger.error("HistoryManager.addHistory: \(error.localizedDescription)")
                 }
