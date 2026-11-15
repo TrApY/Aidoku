@@ -347,7 +347,12 @@ actor DownloadQueue {
     /// Once the background task's downloads are done: lets go of the task (only if it is still the
     /// current one) and completes it (unless the expiry completed it first).
     func completeWhenEmpty(_ task: AnyObject, completion: BackgroundTaskCompletion) async {
-        guard await waitUntilEmpty(for: task, completion: completion) else { return } // expired: already completed
+        guard await waitUntilEmpty(for: task, completion: completion) else {
+            // expired (already completed), maybe before the task was registered: don't keep it as the
+            // current task, or start() would never ask for a new one
+            _ = finishBackgroundTask(task)
+            return
+        }
         _ = finishBackgroundTask(task) // not a newer one
         completion.complete(success: true) // always: a task that is no longer current must end too
     }
@@ -371,7 +376,8 @@ actor DownloadQueue {
     }
 
     /// Runs a system background task. The task holds its expiration handler, which holds the completion:
-    /// both refer back to the task weakly, and the handler is dropped once the task is completed.
+    /// both refer back to the task weakly. The handler is dropped when the downloads are done (not from
+    /// inside the handler itself, on expiry: with the weak references there is no cycle to break).
     @discardableResult
     nonisolated func handleBackgroundTask<T: SystemBackgroundTask>(
         _ task: T,
@@ -380,7 +386,9 @@ actor DownloadQueue {
     ) -> Task<Void, Never> {
         // completed exactly once: by the expiry or when the downloads are done, whichever is first
         let completion = BackgroundTaskCompletion { [weak task] success in
-            task?.expirationHandler = nil
+            if success {
+                task?.expirationHandler = nil
+            }
             task?.setTaskCompleted(success: success)
         }
         task.expirationHandler = { [weak self, weak task] in
