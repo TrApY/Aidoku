@@ -317,9 +317,7 @@ extension ReaderPagedViewController {
             temporaryPageStore: viewModel.temporaryPageStore
         )
         page.pageView?.imageView.addInteraction(UIContextMenuInteraction(delegate: self))
-        if #available(iOS 18.0, *) {
-            bindDictionaryOverlayTap(to: page)
-        }
+        bindDictionaryOverlayTap(to: page)
         if hasImageCallbacks {
             page.onImageisWideImage = { [weak self, weak page] isWide in
                 guard let self, let page, isWide else { return }
@@ -1178,7 +1176,6 @@ extension ReaderPagedViewController: UIPageViewControllerDataSource {
 }
 
 // MARK: - Dictionary Lookup
-@available(iOS 18.0, *)
 extension ReaderPagedViewController: @MainActor ReaderDictionaryReader {
     func recognizedText(at point: CGPoint) -> TextRecognizer.Result? {
         for pageVC in visiblePageControllers() {
@@ -1272,7 +1269,6 @@ extension ReaderPagedViewController: UIContextMenuInteractionDelegate {
         }
         // disable when live text highlighting is active
         if
-            #available(iOS 16.0, *),
             let imageAnalaysisInteraction = pageView.interactions.first as? ImageAnalysisInteraction,
             imageAnalaysisInteraction.selectableItemsHighlighted
         {

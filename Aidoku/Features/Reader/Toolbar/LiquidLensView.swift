@@ -9,7 +9,6 @@ import UIKit
 
 // a wrapper for the private _UILiquidLensView class, which UISlider uses on ios 26 for the fancy glass lifting effect
 
-@available(iOS 26.0, *)
 class LiquidLensView: UIView {
     private let _lensView: UIView
 

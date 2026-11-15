@@ -80,19 +80,13 @@ class ReaderSliderView: UIControl {
 
     private lazy var grabberView: UIView = {
         let grabberView: UIView
-        if #available(iOS 26.0, *) {
-            // same aspect ratio as a UISlider knob
-            grabberView = {
-                let grabberView = LiquidLensView(frame: .init(x: 0, y: 0, width: 18.5, height: 12))
-                grabberView.restingBackgroundColor = .white
-                return grabberView as UIView
-            }()
-            grabberView.layer.shadowPath = UIBezierPath(roundedRect: grabberView.bounds, cornerRadius: 6).cgPath
-        } else {
-            grabberView = UIView(frame: .init(x: 0, y: 0, width: 10, height: 10))
-            grabberView.backgroundColor = .white
-            grabberView.layer.shadowPath = UIBezierPath(roundedRect: grabberView.bounds, cornerRadius: 5).cgPath
-        }
+        // same aspect ratio as a UISlider knob
+        grabberView = {
+            let grabberView = LiquidLensView(frame: .init(x: 0, y: 0, width: 18.5, height: 12))
+            grabberView.restingBackgroundColor = .white
+            return grabberView as UIView
+        }()
+        grabberView.layer.shadowPath = UIBezierPath(roundedRect: grabberView.bounds, cornerRadius: 6).cgPath
         grabberView.layer.shadowRadius = 1.5
         grabberView.layer.shadowOffset = CGSize(width: 0, height: 1)
         grabberView.layer.shadowColor = UIColor.black.cgColor
@@ -198,9 +192,7 @@ extension ReaderSliderView {
             thumbView.tag = 1
             UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseInOut) {
                 self.grabberView.transform = CGAffineTransform(scaleX: 3/2, y: 3/2)
-                if #available(iOS 26.0, *) {
-                    (self.grabberView as? LiquidLensView)?.setLifted(true, animated: true)
-                }
+                (self.grabberView as? LiquidLensView)?.setLifted(true, animated: true)
             }
             return true
         }
@@ -240,9 +232,7 @@ extension ReaderSliderView {
         thumbView.tag = 0
         UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseInOut) {
             self.grabberView.transform = .identity
-            if #available(iOS 26.0, *) {
-                (self.grabberView as? LiquidLensView)?.setLifted(false, animated: true)
-            }
+            (self.grabberView as? LiquidLensView)?.setLifted(false, animated: true)
         }
         sendActions(for: .editingDidEnd)
     }

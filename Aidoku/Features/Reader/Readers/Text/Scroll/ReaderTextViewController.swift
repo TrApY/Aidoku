@@ -83,9 +83,7 @@ class ReaderTextViewController: BaseViewController {
         scrollView.delegate = self
         scrollView.alwaysBounceVertical = true
         scrollView.contentInsetAdjustmentBehavior = .never
-        if #available(iOS 27.0, *) {
-            scrollView.topEdgeEffect.style = .soft
-        }
+        scrollView.topEdgeEffect.style = .soft
         return scrollView
     }()
 
@@ -123,12 +121,8 @@ class ReaderTextViewController: BaseViewController {
                 textColor: Color(uiColor: ReaderTextTheme.getCurrentText())
             )
         )
-        if #available(iOS 16.0, *) {
-            hc.sizingOptions = .intrinsicContentSize
-        }
-        if #available(iOS 16.4, *) {
-            hc.safeAreaRegions = []
-        }
+        hc.sizingOptions = .intrinsicContentSize
+        hc.safeAreaRegions = []
         hc.view.backgroundColor = .clear
         return hc
     }
@@ -322,11 +316,6 @@ class ReaderTextViewController: BaseViewController {
         // On iOS 16.4+, safeAreaRegions = [] on the hosting controllers prevents
         // them from resizing when bars show/hide — no compensation needed.
         // On older iOS, suppress invalidation and compensate the offset manually.
-        if #unavailable(iOS 16.4) {
-            isSafeAreaTransitioning = true
-            setHostingControllerInvalidation(suppressed: true)
-            scrollView.contentOffset.y += topDelta
-        }
     }
 
     private func setHostingControllerInvalidation(suppressed: Bool) {

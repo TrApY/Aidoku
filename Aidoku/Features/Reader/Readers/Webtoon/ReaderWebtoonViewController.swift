@@ -115,12 +115,10 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         scrollView.panGestureRecognizer.addTarget(self, action: #selector(handleAutoScrollPan(_:)))
         scrollNode.insetsLayoutMarginsFromSafeArea = false
 
-        if #available(iOS 27.0, *) {
-            scrollView.topEdgeEffect.style = .soft
-            scrollView.bottomEdgeEffect.style = .soft
-            collectionNode.view.topEdgeEffect.isHidden = true
-            collectionNode.view.bottomEdgeEffect.isHidden = true
-        }
+        scrollView.topEdgeEffect.style = .soft
+        scrollView.bottomEdgeEffect.style = .soft
+        collectionNode.view.topEdgeEffect.isHidden = true
+        collectionNode.view.bottomEdgeEffect.isHidden = true
 
         collectionNode.contentInset = .zero
         collectionNode.showsVerticalScrollIndicator = false
@@ -462,7 +460,6 @@ extension ReaderWebtoonViewController: UIContextMenuInteractionDelegate {
         }
         // disable when live text highlighting is active
         if
-            #available(iOS 16.0, *),
             let imageAnalaysisInteraction = node.imageNode.imageAnalaysisInteraction,
             imageAnalaysisInteraction.selectableItemsHighlighted
         {
@@ -527,7 +524,6 @@ extension ReaderWebtoonViewController: UIContextMenuInteractionDelegate {
 }
 
 // MARK: - Dictionary Lookup
-@available(iOS 18.0, *)
 extension ReaderWebtoonViewController: ReaderDictionaryReader {
     func recognizedText(at point: CGPoint) -> TextRecognizer.Result? {
         let collectionPoint = view.convert(point, to: collectionNode.view)
@@ -1066,9 +1062,7 @@ extension ReaderWebtoonViewController: ASCollectionDataSource {
                     pillarboxLayoutState: self.pillarboxLayoutState
                 )
                 cell.delegate = self
-                if #available(iOS 18.0, *) {
-                    self.bindDictionaryOverlayTap(to: cell)
-                }
+                self.bindDictionaryOverlayTap(to: cell)
                 return cell
             }
         } else {

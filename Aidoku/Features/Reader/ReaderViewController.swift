@@ -102,7 +102,6 @@ class ReaderViewController: BaseObservingViewController {
     // Dictionary popup state
     private lazy var dictionaryCoordinator = ReaderDictionaryCoordinator(owner: self)
     private var _dictionaryLongPressSelection: Any?
-    @available(iOS 18.0, *)
     private var dictionaryLongPressSelection: TextRecognizer.Result? {
         get { _dictionaryLongPressSelection as? TextRecognizer.Result }
         set { _dictionaryLongPressSelection = newValue }
@@ -129,13 +128,7 @@ class ReaderViewController: BaseObservingViewController {
 
     private lazy var autoScrollButton: UIButton = {
         var configuration = UIButton.Configuration.filled()
-        if #available(iOS 26.0, *) {
-            configuration = .glass()
-        } else {
-            configuration = .filled()
-            configuration.baseBackgroundColor = .secondarySystemBackground
-            configuration.baseForegroundColor = .label
-        }
+        configuration = .glass()
         configuration.cornerStyle = .capsule
         configuration.image = UIImage(systemName: "play.fill")
         configuration.contentInsets = .init(top: 10, leading: 10, bottom: 10, trailing: 10)
@@ -284,16 +277,11 @@ class ReaderViewController: BaseObservingViewController {
         toolbarView.translatesAutoresizingMaskIntoConstraints = false
         let toolbarButtonItemView = UIBarButtonItem(customView: toolbarView)
         toolbarButtonItemView.customView?.heightAnchor.constraint(equalToConstant: 40).isActive = true
-        if #available(iOS 26.0, *) {
-            toolbarViewWidthConstraint = toolbarButtonItemView.customView?.widthAnchor.constraint(
-                equalToConstant: node.bounds.width - 32 - 10
-            )
-            // shift down farther to account for different toolbar and slider knob size
-            toolbarButtonItemView.customView?.transform = CGAffineTransform(translationX: 0, y: -5)
-        } else {
-            toolbarViewWidthConstraint = toolbarButtonItemView.customView?.widthAnchor.constraint(equalToConstant: view.bounds.width)
-            toolbarButtonItemView.customView?.transform = CGAffineTransform(translationX: 0, y: -10)
-        }
+        toolbarViewWidthConstraint = toolbarButtonItemView.customView?.widthAnchor.constraint(
+            equalToConstant: node.bounds.width - 32 - 10
+        )
+        // shift down farther to account for different toolbar and slider knob size
+        toolbarButtonItemView.customView?.transform = CGAffineTransform(translationX: 0, y: -5)
 
         add(child: descriptionButtonController)
         view.addSubview(autoScrollButton)
@@ -310,7 +298,6 @@ class ReaderViewController: BaseObservingViewController {
 
         // initialize dictionary engine
         if
-            #available(iOS 18.0, *),
             AppSettings.dictionary.enable.get()
                 {
             DictionaryManager.shared.rebuildLookupQuery()
@@ -333,10 +320,8 @@ class ReaderViewController: BaseObservingViewController {
         setReadingMode(UserDefaults.standard.string(forKey: readingModeKey))
 
         // set up apple pencil squeeze handler
-        if #available(iOS 17.5, *) {
-            let pencilInteraction = UIPencilInteraction(delegate: self)
-            view.addInteraction(pencilInteraction)
-        }
+        let pencilInteraction = UIPencilInteraction(delegate: self)
+        view.addInteraction(pencilInteraction)
 
         // load current tap zone
         updateTapZone()
@@ -429,9 +414,7 @@ class ReaderViewController: BaseObservingViewController {
             guard let self else { return }
             self.saveReadPositionNow()
 
-            if #available(iOS 26.0, *) {
-                statusBarHidden = false
-            }
+            statusBarHidden = false
         }
         addObserver(forName: UIScene.didEnterBackgroundNotification) { [weak self] _ in
             self?.saveReadPositionNow()
@@ -444,11 +427,9 @@ class ReaderViewController: BaseObservingViewController {
                 self.sessionLastInteraction = nil
             }
         }
-        if #available(iOS 26.0, *) {
-            addObserver(forName: UIScene.willEnterForegroundNotification) { [weak self] _ in
-                if self?.navigationController?.toolbar.alpha == 0 {
-                    self?.hideBars()
-                }
+        addObserver(forName: UIScene.willEnterForegroundNotification) { [weak self] _ in
+            if self?.navigationController?.toolbar.alpha == 0 {
+                self?.hideBars()
             }
         }
         addObserver(forName: "Reader.autoScroll") { [weak self] _ in
@@ -510,11 +491,7 @@ class ReaderViewController: BaseObservingViewController {
         super.viewWillTransition(to: size, with: coordinator)
 
         coordinator.animate(alongsideTransition: nil) { _ in
-            if #available(iOS 26.0, *) {
-                self.toolbarViewWidthConstraint?.constant = size.width - 32 - 10
-            } else {
-                self.toolbarViewWidthConstraint?.constant = size.width
-            }
+            self.toolbarViewWidthConstraint?.constant = size.width - 32 - 10
         }
     }
 }
@@ -957,7 +934,7 @@ extension ReaderViewController {
         if let navigationBar = navigationController?.navigationBar {
             func applyTheme(_ appearance: UINavigationBarAppearance) {
                 if themed {
-                    if #available(iOS 26.0, *), reader is ReaderTextViewController {
+                    if reader is ReaderTextViewController {
                         // text scrolls under the bar, so keep it transparent
                         appearance.configureWithTransparentBackground()
                     } else {
@@ -1419,9 +1396,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             dictionaryLongPressGesture = nil
         }
         clearDictionarySelectionHighlight()
-        if #available(iOS 18.0, *) {
-            dictionaryLongPressSelection = nil
-        }
+        dictionaryLongPressSelection = nil
 
         guard
             isDictionaryLongPressLookupActiveForCurrentChapter,
@@ -1440,7 +1415,6 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
 
     @objc private func handleDictionaryLongPress(_ gestureRecognizer: UILongPressGestureRecognizer) {
         guard
-            #available(iOS 18.0, *),
             isDictionaryLongPressLookupActiveForCurrentChapter,
             !AppSettings.dictionary.textOverlayMode.get(),
             !dictionaryCoordinator.isPopupVisible,
@@ -1488,15 +1462,12 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         }
     }
 
-    @available(iOS 18.0, *)
     private func updateDictionarySelectionHighlight(text: String, charRects: [CGRect]) {
         dictionaryCoordinator.updateSelectionHighlight(text: text, charRects: charRects)
     }
 
     private func clearDictionarySelectionHighlight() {
-        if #available(iOS 18.0, *) {
-            dictionaryCoordinator.clearSelectionHighlight()
-        }
+        dictionaryCoordinator.clearSelectionHighlight()
     }
 }
 
@@ -1532,14 +1503,13 @@ extension ReaderViewController {
         let singleTapOCRLookupEnabled = singleTapLookupEnabled && !overlayModeEnabled
 
         // dismiss dictionary popup if visible
-        if #available(iOS 18.0, *), dictionaryCoordinator.isPopupVisible {
+        if dictionaryCoordinator.isPopupVisible {
             dictionaryCoordinator.dismissAllPopups()
             return
         }
 
         // dismiss text overlay box if visible
         if
-            #available(iOS 18.0, *),
             overlayModeEnabled,
             let reader = reader as? ReaderDictionaryReader,
             reader.dismissActiveDictionaryOverlay()
@@ -1555,7 +1525,6 @@ extension ReaderViewController {
 
         // check for dictionary lookup
         if
-            #available(iOS 18.0, *),
             singleTapOCRLookupEnabled,
             let reader = reader as? ReaderDictionaryReader,
             LookupEngine.shared.isReady
@@ -1629,7 +1598,6 @@ extension ReaderViewController {
 
 // MARK: - Apple Pencil Squeeze
 extension ReaderViewController: UIPencilInteractionDelegate {
-    @available(iOS 17.5, *)
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
         // if pencil squeezing is disabled globally, ignore interaction (hig)
         guard UIPencilInteraction.preferredSqueezeAction != .ignore else { return }
@@ -1700,7 +1668,7 @@ extension ReaderViewController: UIPencilInteractionDelegate {
 
 extension ReaderViewController {
     private func configureDictionaryOverlayInteractionMode() {
-        guard #available(iOS 18.0, *), let reader = reader as? ReaderDictionaryReader else { return }
+        guard let reader = reader as? ReaderDictionaryReader else { return }
 
         let mode: DictionaryOverlayInteractionMode
         if !AppSettings.dictionary.textOverlayMode.get() {
@@ -1717,7 +1685,7 @@ extension ReaderViewController {
     }
 
     private func configureDictionaryOverlayTapHandler() {
-        guard #available(iOS 18.0, *), let reader = reader as? ReaderDictionaryReader else { return }
+        guard let reader = reader as? ReaderDictionaryReader else { return }
         reader.setDictionaryOverlayTapHandler { [weak self] text, contextText, rect, charRects in
             guard let self, AppSettings.dictionary.textOverlayMode.get() else { return }
             _ = dictionaryCoordinator.performLookup(
@@ -1745,10 +1713,8 @@ extension ReaderViewController {
     func showBars() {
         guard let navigationController else { return }
 
-        if #available(iOS 27.0, *) {
-            navigationController.navigationBar.isHidden = true
-            navigationController.isNavigationBarHidden = false
-        }
+        navigationController.navigationBar.isHidden = true
+        navigationController.isNavigationBarHidden = false
 
         UIView.animate(withDuration: CATransaction.animationDuration()) {
             self.statusBarHidden = false
@@ -1758,25 +1724,16 @@ extension ReaderViewController {
             NotificationCenter.default.post(name: .readerShowingBars, object: nil)
 
             UIView.setAnimationsEnabled(false)
-            if #available(iOS 26.0, *) {
-                if navigationController.isToolbarHidden {
-                    (navigationController.value(forKey: "_floatingBarContainerView") as? UIView)?.alpha = 0
-                    navigationController.isToolbarHidden = false
-                }
-            } else {
-                if navigationController.toolbar.isHidden {
-                    navigationController.toolbar.alpha = 0
-                    navigationController.toolbar.isHidden = false
-                }
+            if navigationController.isToolbarHidden {
+                (navigationController.value(forKey: "_floatingBarContainerView") as? UIView)?.alpha = 0
+                navigationController.isToolbarHidden = false
             }
             navigationController.navigationBar.isHidden = false
             UIView.setAnimationsEnabled(true)
             UIView.animate(withDuration: CATransaction.animationDuration()) {
                 navigationController.navigationBar.alpha = 1
                 navigationController.toolbar.alpha = 1
-                if #available(iOS 26.0, *) {
-                    (navigationController.value(forKey: "_floatingBarContainerView") as? UIView)?.alpha = 1
-                }
+                (navigationController.value(forKey: "_floatingBarContainerView") as? UIView)?.alpha = 1
                 self.node.backgroundColor = if AppSettings.appearance.useSystemAppearance.get() {
                     .systemBackground
                 } else {
@@ -1805,9 +1762,7 @@ extension ReaderViewController {
                 navigationController.navigationBar.alpha = 0
                 navigationController.toolbar.alpha = 0
 
-                if #available(iOS 26.0, *) {
-                    (navigationController.value(forKey: "_floatingBarContainerView") as? UIView)?.alpha = 0
-                }
+                (navigationController.value(forKey: "_floatingBarContainerView") as? UIView)?.alpha = 0
 
                 self.node.backgroundColor = switch UserDefaults.standard.string(forKey: "Reader.backgroundColor") {
                     case "system":
@@ -1819,16 +1774,8 @@ extension ReaderViewController {
                 }
                 self.node.layoutIfNeeded()
             } completion: { _ in
-                if #available(iOS 27.0, *) {
-                    navigationController.isNavigationBarHidden = true
-                } else {
-                    navigationController.navigationBar.isHidden = true
-                }
-                if #available(iOS 26.0, *) {
-                    navigationController.isToolbarHidden = true
-                } else {
-                    navigationController.toolbar.isHidden = true
-                }
+                navigationController.isNavigationBarHidden = true
+                navigationController.isToolbarHidden = true
             }
         }
     }
