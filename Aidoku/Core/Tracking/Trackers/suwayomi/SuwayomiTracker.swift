@@ -14,7 +14,7 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
     let icon = PlatformImage(named: "suwayomi")
     let isLoggedIn = true
 
-    private let api: SuwayomiApi
+    let api: SuwayomiApi
     /// Manga already marked in the server library during this session (sourceKey|id).
     let markedInLibrary = SuwayomiMarkedSet()
 

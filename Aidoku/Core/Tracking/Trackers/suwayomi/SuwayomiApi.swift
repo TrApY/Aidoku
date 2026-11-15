@@ -14,6 +14,10 @@ actor SuwayomiApi {
         self.transport = transport
     }
 
+    func helper(sourceKey: String) -> SuwayomiHelper {
+        makeHelper(sourceKey: sourceKey)
+    }
+
     private func makeHelper(sourceKey: String) -> SuwayomiHelper {
         if let transport {
             .init(sourceKey: sourceKey, transport: transport)

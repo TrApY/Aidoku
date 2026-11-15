@@ -801,4 +801,84 @@ private let nexus = "4086183896761281232" // flagged NSFW
         // as before: every chapter whose whole number is ≤ 10 (both 10s and 10.5), not 11
         #expect(server.variables("MarkChaptersRead").first?["ids"] as? [Int] == [1, 2, 3, 5])
     }
+
+    // MARK: Migration
+
+    @Test func migrationPlanFollowsJoTasRule() {
+        let old = MangaIdentifier(sourceKey: key, mangaKey: "753")
+        let new = MangaIdentifier(sourceKey: key, mangaKey: "897")
+        let other = MangaIdentifier(sourceKey: "otra", mangaKey: "1")
+        typealias Plan = SuwayomiMigrationPlan
+        // migrate (and «migrate and keep history»): only the new one stays, tracked by its own id
+        #expect(Plan.make(old: old, new: new, oldIsServer: true, newIsServer: true, oldLeavesLibrary: true)
+            == Plan(newTrackId: "\(key)|897", registerNew: true, removeOld: true))
+        // copy: the old one stays on the server too
+        #expect(Plan.make(old: old, new: new, oldIsServer: true, newIsServer: true, oldLeavesLibrary: false)
+            == Plan(newTrackId: "\(key)|897", registerNew: true, removeOld: false))
+        // to another kind of source: out of the server library, nothing to track
+        #expect(Plan.make(old: old, new: other, oldIsServer: true, newIsServer: false, oldLeavesLibrary: true)
+            == Plan(newTrackId: nil, registerNew: false, removeOld: true))
+        #expect(Plan.make(old: old, new: other, oldIsServer: true, newIsServer: false, oldLeavesLibrary: false) == .none)
+        // from another kind of source
+        #expect(Plan.make(old: other, new: new, oldIsServer: false, newIsServer: true, oldLeavesLibrary: true)
+            == Plan(newTrackId: "\(key)|897", registerNew: true, removeOld: false))
+        // the same manga (e.g. refreshed in place): nothing
+        #expect(Plan.make(old: old, new: old, oldIsServer: true, newIsServer: true, oldLeavesLibrary: true) == .none)
+    }
+
+    private func respondMigration() {
+        server.respond("GetInLibrary", .success(notInLibrary))
+        server.respond("AddToServerLibrary", .success(Data(#"{"data":{"updateManga":{"manga":{"id":897,"inLibrary":true}}}}"#.utf8)))
+        server.respond("GetTrackState", .success(Data(#"{"data":{"manga":{"chapters":{"totalCount":198},"latestReadChapter":null,"highestNumberedChapter":{"chapterNumber":198}}}}"#.utf8)))
+        server.respond("GetChaptersForTrackUpdate", .success(Data(#"{"data":{"chapters":{"nodes":[{"id":6764,"chapterNumber":1}]}}}"#.utf8)))
+        server.respond("MarkChaptersRead", .success(Data(#"{"data":{"updateChapters":{"chapters":[]}}}"#.utf8)))
+        server.respond("RemoveFromServerLibrary", .success(Data(#"{"data":{"updateManga":{"manga":{"id":753,"inLibrary":false}}}}"#.utf8)))
+    }
+
+    @Test func migratingMovesTheServerLibraryToTheNewManga() async {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        respondMigration()
+        let tracker = makeTracker()
+        let old = MangaIdentifier(sourceKey: key, mangaKey: "753")
+        let new = MangaIdentifier(sourceKey: key, mangaKey: "897")
+        let plan = SuwayomiMigrationPlan.make(old: old, new: new, oldIsServer: true, newIsServer: true, oldLeavesLibrary: true)
+        await tracker.applyMigration(plan, old: old, highestChapterRead: 1)
+        #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
+        #expect(server.variables("GetChaptersForTrackUpdate").first?["mangaId"] as? Int == 897)
+        #expect(server.count("MarkChaptersRead") == 1)
+        #expect(server.variables("RemoveFromServerLibrary").map { $0["id"] as? Int } == [753])
+    }
+
+    @Test func copyingLeavesTheOldMangaOnTheServer() async {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        respondMigration()
+        let tracker = makeTracker()
+        let old = MangaIdentifier(sourceKey: key, mangaKey: "753")
+        let new = MangaIdentifier(sourceKey: key, mangaKey: "897")
+        let plan = SuwayomiMigrationPlan.make(old: old, new: new, oldIsServer: true, newIsServer: true, oldLeavesLibrary: false)
+        await tracker.applyMigration(plan, old: old, highestChapterRead: nil)
+        #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
+        #expect(server.count("RemoveFromServerLibrary") == 0)
+        #expect(server.count("MarkChaptersRead") == 0) // nothing read: no marks
+    }
+
+    @Test func serverFailuresDontStopTheMigration() async {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        respondMigration()
+        server.respond("AddToServerLibrary", .failure(URLError(.timedOut)))
+        let tracker = makeTracker()
+        let old = MangaIdentifier(sourceKey: key, mangaKey: "753")
+        let plan = SuwayomiMigrationPlan.make(
+            old: old, new: .init(sourceKey: "otra", mangaKey: "1"), oldIsServer: true, newIsServer: false, oldLeavesLibrary: true
+        )
+        await tracker.applyMigration(plan, old: old, highestChapterRead: 3) // doesn't throw
+        #expect(server.count("AddToServerLibrary") == 0)
+        #expect(server.variables("RemoveFromServerLibrary").map { $0["id"] as? Int } == [753])
+        // the new one failing to be added: logged, the old one still goes
+        let both = SuwayomiMigrationPlan.make(
+            old: old, new: .init(sourceKey: key, mangaKey: "897"), oldIsServer: true, newIsServer: true, oldLeavesLibrary: true
+        )
+        await tracker.applyMigration(both, old: old, highestChapterRead: 1)
+        #expect(server.count("RemoveFromServerLibrary") == 2)
+    }
 }
