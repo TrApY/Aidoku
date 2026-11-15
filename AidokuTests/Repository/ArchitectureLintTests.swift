@@ -143,4 +143,13 @@ import Testing
             }
         }
     }
+
+    /// The values the contracts carry live with them (so they carry no UIKit either); their UI stays apart.
+    @Test(arguments: ["LibraryFilter", "FilterGroup"])
+    func theValuesOfTheContractsLiveWithThem(type: String) throws {
+        let files = try Self.sources(under: "Aidoku")
+        let declaring = files.filter { $0.value.contains("struct \(type):") }.keys.sorted()
+        #expect(declaring.count == 1, "\(type) is declared in \(declaring)")
+        #expect(declaring.allSatisfy { $0.hasPrefix("Aidoku/Core/Repository/Values/") }, "\(type) is declared in \(declaring)")
+    }
 }
