@@ -14,16 +14,8 @@ struct MigrateSingleSearchView: View {
 
     var resultSeries: Binding<AidokuRunner.Manga?>?
 
-    struct SearchResult: Identifiable, Equatable {
-        let source: AidokuRunner.Source
-        let result: AidokuRunner.MangaPageResult
-
-        var id: String { source.id }
-
-        static func == (lhs: SearchResult, rhs: SearchResult) -> Bool {
-            lhs.id == rhs.id
-        }
-    }
+    /// A source, or one server source of a source that searches several (Suwayomi).
+    typealias SearchResult = GlobalSearchRow
 
     @State private var query: String
     @State private var results: [SearchResult] = []
@@ -79,7 +71,7 @@ struct MigrateSingleSearchView: View {
                                 }
                             }
                         )
-                        .id("\(source.key).\(id)")
+                        .id("\(searchResult.id).\(id)")
                         .listRowBackground(Color.clear)
                         .listRowInsets(.zero)
                         .listRowSeparator(.hidden)
@@ -87,11 +79,12 @@ struct MigrateSingleSearchView: View {
                         HStack {
                             SourceIconView(
                                 sourceId: source.key,
-                                imageUrl: source.imageUrl,
-                                iconSize: 29
+                                imageUrl: searchResult.imageUrl,
+                                iconSize: 29,
+                                source: searchResult.section != nil ? source : nil // server icons need its login
                             )
                             .scaleEffect(0.75)
-                            Text(source.name)
+                            Text(searchResult.title)
 
                             Spacer()
 
@@ -201,31 +194,29 @@ extension MigrateSingleSearchView {
             // sources freeze if we run too many tasks concurrently, so we limit it
             let maxConcurrentTasks = 3
 
-            await withTaskGroup(of: (AidokuRunner.Source, AidokuRunner.MangaPageResult?).self) { group in
+            let migrating = selectedSeries.identifier
+            await withTaskGroup(of: [SearchResult].self) { group in
                 // add the initial tasks to the group
                 for i in 0..<min(targetSources.count, maxConcurrentTasks) {
                     let source = targetSources[i]
                     group.addTask {
-                        let result = try? await source.getSearchMangaList(query: searchText, page: 1, filters: [])
-                        return (source, result)
+                        await GlobalSearch.rows(for: source, query: searchText)
                     }
                 }
                 var index = maxConcurrentTasks
-                for await (source, result) in group {
+                for await rows in group {
                     if index < targetSources.count {
                         // once a task completes, we can start a new one if there are still sources left
                         let source = targetSources[index]
                         group.addTask {
-                            let result = try? await source.getSearchMangaList(query: searchText, page: 1, filters: [])
-                            return (source, result)
+                            await GlobalSearch.rows(for: source, query: searchText)
                         }
                         index += 1
                     }
 
-                    if let result {
-                        withAnimation {
-                            results.append(.init(source: source, result: result))
-                        }
+                    // one row per server source (Suwayomi), never the manga being migrated
+                    withAnimation {
+                        results.append(contentsOf: GlobalSearch.excluding(migrating, from: rows))
                     }
                 }
             }

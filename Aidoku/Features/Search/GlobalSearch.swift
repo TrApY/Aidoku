@@ -71,27 +71,58 @@ enum GlobalSearch {
         return [.init(source: source, result: result)]
     }
 
-    /// One row per section (pending).
+    /// One row per section, in order (the view hides rows without results, as for any source).
     static func rows(source: AidokuRunner.Source, sections: [GroupedSearchSection]) -> [GlobalSearchRow] {
-        [.init(source: source, result: .init(entries: sections.flatMap(\.entries), hasNextPage: false))]
+        sections.map {
+            .init(source: source, result: .init(entries: $0.entries, hasNextPage: false), section: $0)
+        }
     }
 
-    /// The rows without the manga being migrated (pending).
+    /// The rows without the manga being migrated.
     static func excluding(_ mangaId: MangaIdentifier, from rows: [GlobalSearchRow]) -> [GlobalSearchRow] {
-        rows
+        rows.map { row in
+            let entries = row.result.entries.filter { $0.identifier != mangaId }
+            return .init(
+                source: row.source,
+                result: .init(entries: entries, hasNextPage: row.result.hasNextPage),
+                section: row.section.map { .init(id: $0.id, title: $0.title, iconUrl: $0.iconUrl, entries: entries) }
+            )
+        }
     }
 
-    /// Lowercase, without accents nor signs or spaces (pending).
+    /// Lowercase, without accents nor signs or spaces («Crónicas: ¡Demoníaca!» → «cronicasdemoniaca»).
     static func normalizedTitle(_ title: String) -> String {
-        title
+        let folded = title
+            .folding(options: [.diacriticInsensitive, .caseInsensitive, .widthInsensitive], locale: Locale(identifier: "es"))
+            .lowercased()
+        return String(String.UnicodeScalarView(folded.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))
     }
 
-    /// What a bulk migration picks for `manga` among the rows of one target source (pending: the first).
+    /// What a bulk migration picks for `manga` among the rows of one target source, never `manga` itself.
+    /// With server sources (Suwayomi): first the rows of a server source other than the old manga's (any
+    /// server source when it is unknown), then the rest (library, its own source); in each group the same
+    /// normalized title before the first result. Other sources: the first result, as before.
     static func bestMatch(
         for manga: AidokuRunner.Manga,
         oldServerSourceId: String?,
         rows: [GlobalSearchRow]
     ) -> AidokuRunner.Manga? {
-        rows.lazy.compactMap(\.result.entries.first).first
+        let notItself: (AidokuRunner.Manga) -> Bool = { $0.identifier != manga.identifier }
+        guard rows.contains(where: { $0.section != nil }) else {
+            return rows.lazy.compactMap { $0.result.entries.first(where: notItself) }.first
+        }
+        let title = normalizedTitle(manga.title)
+        let preferred = rows.filter { row in
+            guard let id = row.serverSourceId else { return false }
+            return id != oldServerSourceId
+        }
+        let rest = rows.filter { row in !preferred.contains(row) }
+        for group in [preferred, rest] {
+            let candidates = group.flatMap(\.result.entries).filter(notItself)
+            if let match = candidates.first(where: { normalizedTitle($0.title) == title }) ?? candidates.first {
+                return match
+            }
+        }
+        return nil
     }
 }

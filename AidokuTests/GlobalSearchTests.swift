@@ -62,7 +62,7 @@ struct GlobalSearchTests {
     @Test func titlesAreComparedWithoutCaseAccentsOrSigns() {
         #expect(GlobalSearch.normalizedTitle("Crónicas de la facción: ¡Demoníaca! (Chun Hajin)")
             == GlobalSearch.normalizedTitle("cronicas de la faccion demoniaca chun hajin"))
-        #expect(GlobalSearch.normalizedTitle("Ñandú, el 2º") == "ñanduel2º" || GlobalSearch.normalizedTitle("Ñandú, el 2º") == "nanduel2o")
+        #expect(GlobalSearch.normalizedTitle("¡Ñandú, el 2!") == GlobalSearch.normalizedTitle("nandu el 2"))
         #expect(GlobalSearch.normalizedTitle("A") != GlobalSearch.normalizedTitle("B"))
     }
 

@@ -11,16 +11,8 @@ import SwiftUI
 extension SearchContentView {
     @MainActor
     class ViewModel: ObservableObject {
-        struct SearchResult: Identifiable, Equatable {
-            let source: AidokuRunner.Source
-            let result: AidokuRunner.MangaPageResult
-
-            var id: String { source.id }
-
-            static func == (lhs: SearchResult, rhs: SearchResult) -> Bool {
-                lhs.id == rhs.id
-            }
-        }
+        /// A source, or one server source of a source that searches several (Suwayomi).
+        typealias SearchResult = GlobalSearchRow
 
         var sources: [AidokuRunner.Source] = []
         var filters: [FilterValue] = []
@@ -184,29 +176,28 @@ extension SearchContentView.ViewModel {
         // sources freeze if we run too many tasks concurrently, so we limit it
         let maxConcurrentTasks = 3
 
-        await withTaskGroup(of: (AidokuRunner.Source, AidokuRunner.MangaPageResult?).self) { group in
+        await withTaskGroup(of: [SearchResult].self) { group in
             // add the initial tasks to the group
             for i in 0..<min(sources.count, maxConcurrentTasks) {
                 let source = sources[i]
                 group.addTask {
-                    (source, try? await source.getSearchMangaList(query: query, page: 1, filters: []))
+                    await GlobalSearch.rows(for: source, query: query)
                 }
             }
 
             var index = maxConcurrentTasks
-            while let (source, result) = await group.next() {
+            while let rows = await group.next() {
                 if index < sources.count {
                     // once a task completes, we can start a new one if there are still sources left
                     let source = sources[index]
                     group.addTask {
-                        (source, try? await source.getSearchMangaList(query: query, page: 1, filters: []))
+                        await GlobalSearch.rows(for: source, query: query)
                     }
                     index += 1
                 }
-                if let result {
-                    guard !Task.isCancelled else { return }
-                    results.append(.init(source: source, result: result))
-                }
+                guard !Task.isCancelled else { return }
+                // a server source (Suwayomi) gives one row per source installed on the server
+                results.append(contentsOf: rows)
             }
         }
 

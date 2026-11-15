@@ -997,6 +997,39 @@ extension SuwayomiSourceRunner: GroupedSearchRunner {
     }
 
     func serverSourceId(ofMangaKey mangaKey: String) async -> String? {
-        nil // pending
+        guard let mangaId = Int(mangaKey) else { return nil }
+        struct Payload: Encodable {
+            let variables: Variables
+            let query = """
+                query GetMangaSource($id: Int!) {
+                  manga(id: $id) {
+                    sourceId
+                  }
+                }
+                """
+
+            struct Variables: Encodable {
+                let id: Int
+            }
+        }
+        struct Response: Decodable {
+            let data: DataContainer
+            struct DataContainer: Decodable {
+                let manga: Manga
+            }
+            struct Manga: Decodable {
+                let sourceId: String
+            }
+        }
+        do {
+            let response: Response = try await helper.request(
+                body: Payload(variables: .init(id: mangaId)),
+                timeout: SuwayomiServerSources.sourcesTimeout
+            )
+            return response.data.manga.sourceId
+        } catch {
+            LogManager.logger.warn("Suwayomi source of manga \(mangaKey) unknown: \(error)")
+            return nil
+        }
     }
 }

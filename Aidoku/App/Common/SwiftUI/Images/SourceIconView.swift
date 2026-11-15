@@ -5,6 +5,7 @@
 //  Created by Skitty on 3/23/24.
 //
 
+import AidokuRunner
 import SwiftUI
 import NukeUI
 
@@ -12,12 +13,15 @@ struct SourceIconView: View {
     let sourceId: String
     var imageUrl: URL?
     var iconSize: CGFloat = 48
+    /// Loads the icon through this source's image requests (e.g. a server that needs its login).
+    var source: AidokuRunner.Source?
 
     var body: some View {
         if let imageUrl {
             IconView(
                 imageUrl: imageUrl,
-                iconSize: iconSize
+                iconSize: iconSize,
+                source: source
             )
         } else {
             let imageName = switch sourceId {
@@ -42,9 +46,11 @@ struct SourceIconView: View {
 private struct IconView: View {
     let imageUrl: URL?
     var iconSize: CGFloat = 48
+    var source: AidokuRunner.Source?
 
     var body: some View {
         SourceImageView(
+            source: source,
             imageUrl: imageUrl?.absoluteString ?? "",
             width: iconSize,
             height: iconSize

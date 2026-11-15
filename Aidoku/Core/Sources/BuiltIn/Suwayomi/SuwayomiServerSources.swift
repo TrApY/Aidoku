@@ -416,19 +416,34 @@ enum SuwayomiServerSources {
     }
 
     /// Sections of a grouped search: the library (when it found something), then every source that
-    /// answered, in order (pending: everything in one library section).
+    /// answered (failed or too slow: left out), in order. A manga in the library also stays in its source.
     static func groupedSections(
         library: [AidokuRunner.Manga],
         sources: [(source: SuwayomiServerSource, entries: [AidokuRunner.Manga]?)],
         baseUrl: URL,
         libraryTitle: String
     ) -> [GroupedSearchSection] {
-        [.init(id: searchInLibraryId, title: libraryTitle, iconUrl: nil, entries: library + sources.flatMap { $0.entries ?? [] })]
+        var sections: [GroupedSearchSection] = []
+        if !library.isEmpty {
+            sections.append(.init(id: searchInLibraryId, title: libraryTitle, iconUrl: nil, entries: library))
+        }
+        for (source, entries) in sources {
+            guard let entries else { continue }
+            var seen = Set<String>()
+            sections.append(.init(
+                id: source.id,
+                title: source.displayName,
+                iconUrl: iconUrl(source.iconUrl, baseUrl: baseUrl),
+                entries: entries.filter { seen.insert($0.key).inserted }
+            ))
+        }
+        return sections
     }
 
-    /// A server icon path («/api/v1/extension/icon/…») as a URL on the server (pending).
+    /// A server icon path («/api/v1/extension/icon/…») as a URL on the server (as the covers).
     static func iconUrl(_ path: String?, baseUrl: URL) -> URL? {
-        nil
+        guard let path, !path.isEmpty else { return nil }
+        return URL(string: path, relativeTo: baseUrl)?.absoluteURL
     }
 
     /// Runs `operation`, failing with a timeout after `seconds`.

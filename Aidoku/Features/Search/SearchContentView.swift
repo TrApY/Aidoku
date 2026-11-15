@@ -162,7 +162,7 @@ struct SearchContentView: View {
                             value: .scroller(entries: result.entries.map { $0.intoLink() })
                         )
                     )
-                    .id("\(source.key).\(id)") // fixes issue with incorrect entries showing
+                    .id("\(searchResult.id).\(id)") // fixes issue with incorrect entries showing
                     .environmentObject(path)
                     .listRowBackground(Color.clear)
                     .listRowInsets(.zero)
@@ -171,11 +171,12 @@ struct SearchContentView: View {
                     HStack {
                         SourceIconView(
                             sourceId: source.key,
-                            imageUrl: source.imageUrl,
-                            iconSize: 29
+                            imageUrl: searchResult.imageUrl,
+                            iconSize: 29,
+                            source: searchResult.section != nil ? source : nil // server icons need its login
                         )
                         .scaleEffect(0.75)
-                        Text(source.name)
+                        Text(searchResult.title)
 
                         Spacer()
 

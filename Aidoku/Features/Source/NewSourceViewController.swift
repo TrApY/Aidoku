@@ -196,7 +196,8 @@ class NewSourceViewController: UIViewController {
     init(
         source: AidokuRunner.Source,
         onlySearch: Bool? = nil,
-        searchQuery: String? = nil
+        searchQuery: String? = nil,
+        initialFilters: [FilterValue]? = nil
     ) {
         self.source = source
         self.onlySearch = onlySearch ?? source.onlySearch
@@ -210,6 +211,13 @@ class NewSourceViewController: UIViewController {
         if let filtersData {
             let enabledFilters = try? JSONDecoder().decode([FilterValue].self, from: filtersData)
             self.enabledFilters = enabledFilters ?? []
+            self.searchViewController.enabledFilters = self.enabledFilters
+        }
+        // filters chosen by the caller (e.g. «Buscar en» from a global search row) replace the stored ones
+        // with the same id; not saved until the user changes the filters
+        if let initialFilters, !initialFilters.isEmpty {
+            let ids = Set(initialFilters.map(\.id))
+            self.enabledFilters = self.enabledFilters.filter { !ids.contains($0.id) } + initialFilters
             self.searchViewController.enabledFilters = self.enabledFilters
         }
     }
