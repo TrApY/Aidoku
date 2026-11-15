@@ -109,16 +109,8 @@ class SourceSearchViewModel: ObservableObject {
     }
 
     func loadBookmarks(entries: [AidokuRunner.Manga]) async {
-        let bookmarkedKeys: [String] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            var keys: [String] = []
-            for manga in entries where CoreDataManager.shared.hasLibraryManga(
-                mangaId: manga.identifier,
-                context: context
-            ) {
-                keys.append(manga.key)
-            }
-            return keys
-        }
+        let inLibrary = await DataRepositories.shared.library.contained(in: entries.map(\.identifier))
+        let bookmarkedKeys = entries.filter { inLibrary.contains($0.identifier) }.map(\.key)
         bookmarkedItems.formUnion(bookmarkedKeys)
     }
 }

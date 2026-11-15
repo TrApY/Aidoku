@@ -164,16 +164,8 @@ struct HomeBigScrollerView: View {
 
     func loadBookmarked() async {
         guard !entries.isEmpty else { return }
-        bookmarkedItems = await CoreDataManager.shared.container.performBackgroundTask { context in
-            var keys: Set<String> = .init()
-            for entry in entries where CoreDataManager.shared.hasLibraryManga(
-                mangaId: entry.identifier,
-                context: context
-            ) {
-                keys.insert(entry.key)
-            }
-            return keys
-        }
+        let inLibrary = await DataRepositories.shared.library.contained(in: entries.map(\.identifier))
+        bookmarkedItems = Set(entries.filter { inLibrary.contains($0.identifier) }.map(\.key))
         loadedBookmarks = true
     }
 

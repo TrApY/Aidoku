@@ -143,16 +143,8 @@ struct HomeChapterListView: View {
 
     func loadBookmarked() async {
         guard !entries.isEmpty else { return }
-        bookmarkedItems = await CoreDataManager.shared.container.performBackgroundTask { context in
-            var keys: Set<String> = .init()
-            for entry in entries where CoreDataManager.shared.hasLibraryManga(
-                mangaId: entry.manga.identifier,
-                context: context
-            ) {
-                keys.insert(entry.manga.key)
-            }
-            return keys
-        }
+        let inLibrary = await DataRepositories.shared.library.contained(in: entries.map(\.manga.identifier))
+        bookmarkedItems = Set(entries.filter { inLibrary.contains($0.manga.identifier) }.map(\.manga.key))
         loadedBookmarks = true
     }
 

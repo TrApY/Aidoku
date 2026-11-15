@@ -54,16 +54,8 @@ extension MangaListViewController {
             let result = try await getEntries?(nextPage)
             guard let result else { return }
 
-            let newBookmarks = await CoreDataManager.shared.container.performBackgroundTask { context in
-                var items: Set<String> = []
-                for manga in result.entries where CoreDataManager.shared.hasLibraryManga(
-                    mangaId: manga.identifier,
-                    context: context
-                ) {
-                    items.insert(manga.key)
-                }
-                return items
-            }
+            let inLibrary = await DataRepositories.shared.library.contained(in: result.entries.map(\.identifier))
+            let newBookmarks = Set(result.entries.filter { inLibrary.contains($0.identifier) }.map(\.key))
             bookmarkedItems.formUnion(newBookmarks)
 
             hasMore = result.hasNextPage

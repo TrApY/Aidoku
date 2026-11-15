@@ -435,16 +435,8 @@ extension SourceHomeContentView {
             page += 1
 
             // load bookmark icons for stuff that's in our library
-            let bookmarkedKeys: [String] = await CoreDataManager.shared.container.performBackgroundTask { context in
-                var keys: [String] = []
-                for manga in result.entries where CoreDataManager.shared.hasLibraryManga(
-                    mangaId: manga.identifier,
-                    context: context
-                ) {
-                    keys.append(manga.key)
-                }
-                return keys
-            }
+            let inLibrary = await DataRepositories.shared.library.contained(in: result.entries.map(\.identifier))
+            let bookmarkedKeys = result.entries.filter { inLibrary.contains($0.identifier) }.map(\.key)
             bookmarkedItems.formUnion(bookmarkedKeys)
 
             // hide loading view

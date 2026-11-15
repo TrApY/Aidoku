@@ -154,12 +154,7 @@ class SourceViewController: OldMangaCollectionViewController {
         cell.identifier = info.id
         cell.title = info.title
         Task {
-            let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.hasLibraryManga(
-                    mangaId: info.id,
-                    context: context
-                )
-            }
+            let inLibrary = await DataRepositories.shared.library.contains(info.id)
             cell.showsBookmark = inLibrary
             await cell.loadImage(url: info.coverUrl)
         }
@@ -329,9 +324,7 @@ extension SourceViewController {
                 guard let self else { return }
 
                 Task {
-                    let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { context in
-                        CoreDataManager.shared.hasLibraryManga(mangaId: mangaInfo.id, context: context)
-                    }
+                    let inLibrary = await DataRepositories.shared.library.contains(mangaInfo.id)
                     if inLibrary {
                         completion([UIAction(
                             title: NSLocalizedString("REMOVE_FROM_LIBRARY"),

@@ -248,24 +248,14 @@ struct HomeListView: View {
 
     func loadBookmarked() async {
         guard !entries.isEmpty, usesBookmarksState else { return }
-        bookmarkedItemsState = await CoreDataManager.shared.container.performBackgroundTask { context in
-            var keys: Set<String> = .init()
-            for entry in entries {
-                let mangaId: MangaIdentifier? = switch entry.value {
-                    case .manga(let manga): manga.identifier
-                    default: nil
-                }
-                if let mangaId {
-                    if CoreDataManager.shared.hasLibraryManga(
-                        mangaId: mangaId,
-                        context: context
-                    ) {
-                        keys.insert(mangaId.mangaKey)
-                    }
-                }
+        let ids: [MangaIdentifier] = entries.compactMap { entry in
+            switch entry.value {
+                case .manga(let manga): manga.identifier
+                default: nil
             }
-            return keys
         }
+        let inLibrary = await DataRepositories.shared.library.contained(in: ids)
+        bookmarkedItemsState = Set(ids.filter { inLibrary.contains($0) }.map(\.mangaKey))
         loadedBookmarks = true
     }
 
