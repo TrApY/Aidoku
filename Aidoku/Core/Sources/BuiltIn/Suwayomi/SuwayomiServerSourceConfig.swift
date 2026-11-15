@@ -291,7 +291,9 @@ enum SuwayomiServerSourceIcons {
 /// (memory only), and the login only to the connection's server (an icon elsewhere goes without it).
 enum SuwayomiIconLoading {
     static let session: URLSession = {
-        URLSession.shared // pendiente[B5#8]
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = URLCache(memoryCapacity: 16 * 1024 * 1024, diskCapacity: 0, directory: nil)
+        return URLSession(configuration: configuration)
     }()
 
     /// Same scheme, host and port as the connection's server.
@@ -316,7 +318,9 @@ enum SuwayomiIconLoading {
         authorize: (inout URLRequest) -> Void
     ) -> URLRequest {
         var request = URLRequest(url: url, timeoutInterval: timeout)
-        authorize(&request) // pendiente[B5#9]
+        if isSameServer(url, server) {
+            authorize(&request)
+        }
         return request
     }
 }
