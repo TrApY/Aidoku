@@ -53,6 +53,12 @@ struct MigrationOptions: Codable, Equatable, Sendable {
         return options
     }
 
+    /// What the sheet starts with: the last choice, but the defaults for a migration the app forces (a
+    /// source that changed its ids or was uninstalled): nobody chose those options for it.
+    static func initial(forced: Bool, defaults: UserDefaults = .standard) -> MigrationOptions {
+        load(from: defaults) // pending
+    }
+
     /// Remembers this choice for the next migration (as Tachimanga).
     func save(to defaults: UserDefaults = .standard) {
         if let data = try? JSONEncoder().encode(self) {
@@ -92,12 +98,32 @@ struct MigrationEnvironment: @unchecked Sendable {
     var bindEnhancedTrackers = true
     /// Where the server work goes (nil: nobody waits for it).
     var serverTasks: MigrationServerTasks?
+    /// The server work of each tracker runs in order: A→B→C done quickly must not leave B on the server.
+    var serverQueue: MigrationServerQueue = .shared
 
     static var live: MigrationEnvironment { .init() }
 }
 
 /// Starts the server work of a migration (Suwayomi library, enhanced trackers) without making the
 /// migration wait; tests keep the tasks to wait for them or cancel them.
+/// One queue per tracker for the server work of migrations: each job starts when the previous one of the
+/// same tracker has finished.
+final class MigrationServerQueue: @unchecked Sendable {
+    static let shared = MigrationServerQueue()
+
+    private let lock = NSLock()
+    private var last: [String: Task<Void, Never>] = [:]
+
+    func enqueue(_ trackerId: String, _ work: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
+        lock.withLock {
+            // pending: not in order yet
+            let task = Task { await work() }
+            last[trackerId] = task
+            return task
+        }
+    }
+}
+
 final class MigrationServerTasks: @unchecked Sendable {
     private let lock = NSLock()
     private var tasks: [Task<Void, Never>] = []

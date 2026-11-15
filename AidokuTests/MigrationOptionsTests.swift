@@ -32,6 +32,40 @@ struct MigrationOptionsTests {
         #expect(MigrationOptions.load(from: defaults) == MigrationOptions())
     }
 
+    @Test func aForcedMigrationStartsWithTheDefaults() throws {
+        let suite = "migration.forced.tests"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let chosen = MigrationOptions(readChapters: false, categories: false, tracking: false, keepOriginal: true, deleteDownloads: false)
+        chosen.save(to: defaults)
+        #expect(MigrationOptions.initial(forced: false, defaults: defaults) == chosen) // the last choice
+        #expect(MigrationOptions.initial(forced: true, defaults: defaults) == MigrationOptions()) // nobody chose for it
+    }
+
+    @Test func theServerWorkOfOneTrackerRunsInOrder() async {
+        let queue = MigrationServerQueue()
+        let events = MigrationEvents()
+        let first = queue.enqueue("suwayomi") {
+            events.add("A start")
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            events.add("A end")
+        }
+        let second = queue.enqueue("suwayomi") {
+            events.add("B start")
+            events.add("B end")
+        }
+        let other = queue.enqueue("komga") {
+            events.add("K")
+        }
+        await first.value
+        await second.value
+        await other.value
+        let order = events.all
+        #expect(order.filter { $0.hasPrefix("A") || $0.hasPrefix("B") } == ["A start", "A end", "B start", "B end"])
+        // another tracker doesn't wait
+        #expect(order.firstIndex(of: "K").map { $0 < (order.firstIndex(of: "A end") ?? 0) } == true)
+    }
+
     @Test func theOldChoicesMapToOptions() {
         #expect(MigrationOptions(copy: true, forceRemoveFromLibrary: false).keepOriginal)
         #expect(!MigrationOptions(copy: false, forceRemoveFromLibrary: false).keepOriginal)
@@ -296,7 +330,11 @@ extension SuwayomiTrackerLibraryTests {
     private var migrationChapters: [AidokuRunner.Chapter] { (1...3).reversed().map { .init(key: "c\($0)", chapterNumber: Float($0)) } }
 
     @discardableResult
-    private func runMigration(_ options: MigrationOptions, serverDelay: TimeInterval = 0) async -> (ok: Bool, duration: TimeInterval) {
+    private func runMigration(
+        _ options: MigrationOptions,
+        serverDelay: TimeInterval = 0,
+        queue: MigrationServerQueue = MigrationServerQueue()
+    ) async -> (ok: Bool, duration: TimeInterval) {
         UserDefaults.standard.set("https://suwayomi.example:4567", forKey: "\(key).server")
         server.respond("GetInLibrary", delay: serverDelay, .success(Data(#"{"data":{"manga":{"inLibrary":false}}}"#.utf8)))
         server.respond("AddToServerLibrary", .success(Data(#"{"data":{"updateManga":{"manga":{"id":897,"inLibrary":true}}}}"#.utf8)))
@@ -317,7 +355,8 @@ extension SuwayomiTrackerLibraryTests {
             suwayomiTracker: SuwayomiTracker(api: SuwayomiApi(transport: server.transport)),
             deleteDownloads: { _ in },
             bindEnhancedTrackers: false,
-            serverTasks: tasks
+            serverTasks: tasks,
+            serverQueue: queue
         )
         let newChapters: [AidokuRunner.Chapter] = (1...3).reversed().map { .init(key: "d\($0)", chapterNumber: Float($0)) }
         let start = Date()
@@ -371,10 +410,47 @@ extension SuwayomiTrackerLibraryTests {
         await cleanUpMigration()
     }
 
+    @Test func theMigrationsServerWorkWaitsForThePreviousOne() async {
+        // a previous migration's server work still running on the Suwayomi queue
+        let queue = MigrationServerQueue()
+        let gate = MigrationGate()
+        let previous = queue.enqueue("suwayomi") { await gate.wait() }
+        let run = Task { await runMigration(MigrationOptions(), queue: queue) }
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        #expect(server.count("GetInLibrary") == 0) // not started yet
+        await gate.open()
+        await previous.value
+        _ = await run.value
+        #expect(server.count("GetInLibrary") == 1)
+        #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
+        await cleanUpMigration()
+    }
+
     @Test func keepingTheOriginalKeepsItOnTheServer() async {
         await runMigration(MigrationOptions(keepOriginal: true))
         #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
         #expect(server.count("RemoveFromServerLibrary") == 0)
         await cleanUpMigration()
+    }
+}
+
+final class MigrationEvents: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    var all: [String] { lock.withLock { values } }
+    func add(_ value: String) { lock.withLock { values.append(value) } }
+}
+
+actor MigrationGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
     }
 }

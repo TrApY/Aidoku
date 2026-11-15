@@ -20,8 +20,28 @@ struct MigrationOptionsView: View {
     var showEntry: (() -> Void)?
     let start: (MigrationOptions) -> Void
 
-    @State private var options = MigrationOptions.load()
+    @State private var options: MigrationOptions
+    /// Chosen with «Iniciar migración»: started once the sheet has finished closing, not while it closes.
+    @State private var chosen: MigrationOptions?
     @Environment(\.dismiss) private var dismiss
+
+    init(
+        count: Int,
+        destination: AidokuRunner.Manga? = nil,
+        destinationSource: AidokuRunner.Source? = nil,
+        destinationSourceName: String? = nil,
+        forced: Bool = false,
+        showEntry: (() -> Void)? = nil,
+        start: @escaping (MigrationOptions) -> Void
+    ) {
+        self.count = count
+        self.destination = destination
+        self.destinationSource = destinationSource
+        self.destinationSourceName = destinationSourceName
+        self.showEntry = showEntry
+        self.start = start
+        self._options = State(initialValue: MigrationOptions.initial(forced: forced))
+    }
 
     var body: some View {
         NavigationView {
@@ -50,9 +70,8 @@ struct MigrationOptionsView: View {
                 Section {
                     Button {
                         options.save()
-                        let chosen = options
+                        chosen = options
                         dismiss()
-                        start(chosen)
                     } label: {
                         Text(NSLocalizedString("MIGRATION_START"))
                             .fontWeight(.semibold)
@@ -76,6 +95,13 @@ struct MigrationOptionsView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .onDisappear {
+            // the sheet is gone: now the migration (its loading screen) can start
+            if let chosen {
+                self.chosen = nil
+                start(chosen)
+            }
+        }
     }
 
     func destinationHeader(_ manga: AidokuRunner.Manga) -> some View {

@@ -1149,7 +1149,8 @@ extension MangaManager {
             } : nil
             let oldId = oldManga.identifier
             let bind = environment.bindEnhancedTrackers
-            let task = Task {
+            let queueKey = suwayomiTracker != nil && suwayomiPlan != .none ? "suwayomi" : "enhancedTrackers"
+            let task = environment.serverQueue.enqueue(queueKey) {
                 await SuwayomiHelper.$requestTimeout.withValue(SuwayomiTracker.migrationRequestTimeout) {
                     if let suwayomiTracker, suwayomiPlan != .none {
                         await suwayomiTracker.applyMigration(suwayomiPlan, old: oldId, highestChapterRead: highestRead)

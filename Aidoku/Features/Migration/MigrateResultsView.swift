@@ -77,7 +77,7 @@ struct MigrateResultsView: View {
         .interactiveDismissDisabled(forceMigrate)
         .sheet(isPresented: $showingConfirmAlert) {
             // the same choices as for one entry, applied to all
-            MigrationOptionsView(count: matchedCount) { options in
+            MigrationOptionsView(count: matchedCount, forced: forceMigrate) { options in
                 startMigration(options: options)
             }
         }
