@@ -79,9 +79,8 @@ actor MangaManager {
         fallbackChapters: [AidokuRunner.Chapter]? = nil,
         fetchIfNeeded: Bool = false
     ) async -> (chapters: [AidokuRunner.Chapter], nextChapter: AidokuRunner.Chapter?) {
-        let readingHistory = await CoreDataManager.shared.getReadingHistory(mangaId: mangaId)
-        var chapters = await CoreDataManager.shared.getChapters(mangaId: mangaId)
-            .map { $0.toNew() }
+        let readingHistory = await DataRepositories.shared.history.readingHistory(of: mangaId).pagesAndDates
+        var chapters = await DataRepositories.shared.chapters.chapters(of: mangaId)
 
         // chapters are only stored for manga in the library, so fall back to the ones we have loaded
         if chapters.isEmpty {

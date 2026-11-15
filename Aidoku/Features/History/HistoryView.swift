@@ -264,11 +264,7 @@ struct HistoryView: View {
         openingLastRead = true
         defer { openingLastRead = false }
 
-        let mangaId = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getRecentHistory(limit: 1, offset: 0, context: context)
-                .first
-                .map { $0.identifier.mangaIdentifier }
-        }
+        let mangaId = await DataRepositories.shared.history.recent(limit: 1, offset: 0).first?.chapterId.mangaIdentifier
         guard let mangaId else { return }
 
         var manga = viewModel.mangaCache[mangaId]

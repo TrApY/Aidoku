@@ -195,15 +195,16 @@ actor DownloadManager {
 extension DownloadManager {
     /// Download all chapters for a manga.
     func downloadAll(manga: AidokuRunner.Manga) async {
-        let allChapters = await CoreDataManager.shared.getChapters(mangaId: manga.identifier)
+        let allChapters = await DataRepositories.shared.chapters.chapters(of: manga.identifier)
 
         var chaptersToDownload: [AidokuRunner.Chapter] = []
 
         for chapter in allChapters {
             guard !chapter.locked else { continue }
-            let downloaded = await isChapterDownloaded(chapter: chapter.identifier)
+            let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+            let downloaded = await isChapterDownloaded(chapter: chapterId)
             if !downloaded {
-                chaptersToDownload.append(chapter.toNew())
+                chaptersToDownload.append(chapter)
             }
         }
 
@@ -212,18 +213,19 @@ extension DownloadManager {
 
     /// Download unread chapters for a manga.
     func downloadUnread(manga: AidokuRunner.Manga) async {
-        let readingHistory = await CoreDataManager.shared.getReadingHistory(mangaId: manga.identifier)
-        let allChapters = await CoreDataManager.shared.getChapters(mangaId: manga.identifier)
+        let readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.identifier)
+        let allChapters = await DataRepositories.shared.chapters.chapters(of: manga.identifier)
 
         var chaptersToDownload: [AidokuRunner.Chapter] = []
 
         for chapter in allChapters {
             guard !chapter.locked else { continue }
-            let isUnread = readingHistory[chapter.id] == nil || readingHistory[chapter.id]?.page != -1
+            let isUnread = readingHistory[chapter.key] == nil || readingHistory[chapter.key]?.page != -1
             guard isUnread else { continue }
-            let downloaded = await isChapterDownloaded(chapter: chapter.identifier)
+            let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+            let downloaded = await isChapterDownloaded(chapter: chapterId)
             if !downloaded {
-                chaptersToDownload.append(chapter.toNew())
+                chaptersToDownload.append(chapter)
             }
         }
 

@@ -422,14 +422,7 @@ extension MangaView.ViewModel {
         let inLibrary = await DataRepositories.shared.library.contains(mangaId)
         if inLibrary {
             // load data from db
-            let chapters = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-                CoreDataManager.shared.getChapters(
-                    mangaId: mangaId,
-                    context: context
-                ).map {
-                    $0.toNewChapter()
-                }
-            }
+            let chapters = await DataRepositories.shared.chapters.chapters(of: mangaId)
 
             var newManga = self.manga
             newManga.chapters = chapters
@@ -664,7 +657,7 @@ extension MangaView.ViewModel {
     }
 
     private func loadHistory() async {
-        readingHistory = await CoreDataManager.shared.getReadingHistory(mangaId: manga.identifier)
+        readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.identifier).pagesAndDates
     }
 
     private func checkTrackerSync(item: TrackItem) async {

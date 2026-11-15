@@ -563,10 +563,8 @@ extension ReaderViewController {
     ) async {
         guard !AppSettings.general.incognitoMode.get(), page >= 1 else { return }
         let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
-        let (completed, progress) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.getProgress(chapterId: chapterId, context: context)
-        }
-        guard !completed, progress != nil else { return }
+        let stored = await DataRepositories.shared.history.progress(of: chapterId)
+        guard !stored.completed, stored.progress != nil else { return }
         if let generation, !readPositionSaver.isCurrent(generation) {
             if let pageKey { readPositionSaver.discarded(pageKey: pageKey, generation: generation) }
             return
@@ -604,12 +602,8 @@ extension ReaderViewController {
         let chapter = chapter ?? self.chapter
 
         let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
-        let (completed, progress) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.getProgress(
-                chapterId: chapterId,
-                context: context
-            )
-        }
+        let stored = await DataRepositories.shared.history.progress(of: chapterId)
+        let (completed, progress) = (stored.completed, stored.progress)
         let hasHistory = completed || progress != nil
 
         // don't add history if there is none and we're at the first page
@@ -666,13 +660,12 @@ extension ReaderViewController {
         let isTextReader = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
         var storedPosition: Double?
         if isTextReader, currentPage >= 1 {
-            let history = CoreDataManager.shared.getHistory(
-                chapterId: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key),
-                context: CoreDataManager.shared.context
+            let history = DataRepositories.shared.mainActorReads.record(
+                of: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
             )
             // only the position stored for the page it opens at (not for a completed chapter)
-            if let history, !history.completed, Int(history.progress) == currentPage {
-                storedPosition = history.scrollPosition?.doubleValue
+            if let history, !history.completed, history.progress == currentPage {
+                storedPosition = history.scrollPosition
             }
         }
         return ReadPositionKey.opening(
@@ -694,13 +687,14 @@ extension ReaderViewController {
             currentPage = forceStartPage
             self.forceStartPage = nil
         } else {
-            let (completed, startPage) = CoreDataManager.shared.getProgress(
-                chapterId: .init(
+            let stored = DataRepositories.shared.mainActorReads.progress(
+                of: .init(
                     sourceKey: manga.sourceKey,
                     mangaKey: manga.key,
                     chapterKey: chapter.key
                 )
             )
+            let (completed, startPage) = (stored.completed, stored.progress)
             if !completed, let startPage {
                 currentPage = startPage
             } else {

@@ -381,18 +381,16 @@ extension HistoryView.ViewModel {
         offset: Int,
         refreshingDays: Set<Int> = []
     ) async -> Int {
-        let historyObj = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.getRecentHistory(limit: limit, offset: offset, context: context)
-                .map {
-                    HistoryInfo(
-                        chapterId: .init(sourceKey: $0.sourceId, mangaKey: $0.mangaId, chapterKey: $0.chapterId),
-                        dateRead: $0.dateRead,
-                        progress: $0.progress,
-                        total: $0.total,
-                        completed: $0.completed
-                    )
-                }
-        }
+        let historyObj = await DataRepositories.shared.history.recent(limit: limit, offset: offset)
+            .map {
+                HistoryInfo(
+                    chapterId: $0.chapterId,
+                    dateRead: $0.dateRead,
+                    progress: Int16($0.progress),
+                    total: Int16($0.total),
+                    completed: $0.completed
+                )
+            }
 
         var modifiedDays = refreshingDays
 
@@ -417,18 +415,13 @@ extension HistoryView.ViewModel {
                 to: endDate
             ).day ?? 0
 
-            let (manga, chapter) = await CoreDataManager.shared.container.performBackgroundTask { context in
-                (
-                    CoreDataManager.shared.getManga(
-                        mangaId: obj.chapterId.mangaIdentifier,
-                        context: context
-                    )?.toNewManga(),
-                    CoreDataManager.shared.getChapter(
-                        chapterId: obj.chapterId,
-                        context: context
-                    )?.toNewChapter()
-                )
+            let manga = await CoreDataManager.shared.container.performBackgroundTask { context in
+                CoreDataManager.shared.getManga(
+                    mangaId: obj.chapterId.mangaIdentifier,
+                    context: context
+                )?.toNewManga()
             }
+            let chapter = await DataRepositories.shared.chapters.chapter(obj.chapterId)
 
             let chapterId = obj.chapterId
             let mangaId = chapterId.mangaIdentifier

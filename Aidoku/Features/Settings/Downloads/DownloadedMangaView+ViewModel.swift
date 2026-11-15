@@ -48,7 +48,7 @@ extension DownloadedMangaView.ViewModel {
     }
 
     func loadHistory() async {
-        readingHistory = await CoreDataManager.shared.getReadingHistory(mangaId: manga.mangaIdentifier)
+        readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.mangaIdentifier).pagesAndDates
     }
 
     func toggleSortOrder() {

@@ -53,18 +53,12 @@ class ReaderTextViewController: BaseViewController {
 
     /// Load previously saved reading progress for a chapter.
     private func loadReadingProgress(for chapterKey: String) async -> CGFloat? {
-        await CoreDataManager.shared.container.performBackgroundTask { [weak self] context in
-            guard let self else { return nil }
-            let object = CoreDataManager.shared.getHistory(
-                chapterId: .init(
-                    sourceKey: self.viewModel.manga.sourceKey,
-                    mangaKey: self.viewModel.manga.key,
-                    chapterKey: chapterKey
-                ),
-                context: context
-            )
-            return object?.scrollPosition.map { CGFloat($0.doubleValue) }
-        }
+        let chapterId = ChapterIdentifier(
+            sourceKey: viewModel.manga.sourceKey,
+            mangaKey: viewModel.manga.key,
+            chapterKey: chapterKey
+        )
+        return await DataRepositories.shared.history.record(of: chapterId)?.scrollPosition.map { CGFloat($0) }
     }
 
     // MARK: - Views
