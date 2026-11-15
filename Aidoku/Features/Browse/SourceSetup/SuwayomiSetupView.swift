@@ -53,6 +53,9 @@ struct SuwayomiSetupView: View {
                 server: server
             ))
         ) != nil
+        if success {
+            Self.connectionSaved()
+        }
         return success
     }
 
@@ -80,6 +83,14 @@ struct SuwayomiSetupView: View {
             UserDefaults.standard.setValue(refreshToken, forKey: "\(key).refreshToken")
         }
 
+        Self.connectionSaved()
         return true
+    }
+
+    /// The server sources of the new connection, and anything to convert to them (SUWA-12 D4).
+    static func connectionSaved() {
+        Task {
+            await SuwayomiStartup.shared.convert()
+        }
     }
 }

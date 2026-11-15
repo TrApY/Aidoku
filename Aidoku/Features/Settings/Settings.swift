@@ -99,6 +99,15 @@ enum Settings {
                 ))
             ),
             .init(
+                key: "SuwayomiServer",
+                title: NSLocalizedString("SUWAYOMI_SERVER"),
+                value: .page(.init(
+                    items: [],
+                    inlineTitle: true,
+                    icon: .system(name: "server.rack", color: "teal", inset: 4)
+                ))
+            ),
+            .init(
                 title: NSLocalizedString("ICLOUD_SYNC"),
                 value: .page(.init(
                     items: [

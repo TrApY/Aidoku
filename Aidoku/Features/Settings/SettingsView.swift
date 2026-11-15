@@ -318,6 +318,8 @@ extension SettingsView {
             }
         } else if key == "Tracking" {
             SettingsTrackingView()
+        } else if key == "SuwayomiServer" {
+            SuwayomiServerSettingsView()
         } else if key == "About" {
             SettingsAboutView()
         } else if key == "Insights" {

@@ -792,3 +792,15 @@
 // SUWA-12
 "SUWAYOMI_POPULAR" = "Populares";
 "SUWAYOMI_LATEST" = "Recientes";
+"SUWAYOMI_SERVER" = "Servidor Suwayomi";
+"SUWAYOMI_CONFIGURE" = "Configurar";
+"SUWAYOMI_INVALID_SERVER" = "La dirección debe empezar por http:// o https://.";
+"SUWAYOMI_TEST_CONNECTION" = "Probar conexión";
+"SUWAYOMI_TEST_OK" = "Conexión correcta.";
+"SUWAYOMI_TEST_NO_SERVER" = "No se encuentra un servidor Suwayomi en esa dirección.";
+"SUWAYOMI_TEST_LOGIN_FAILED" = "El servidor responde, pero el usuario o la contraseña no valen.";
+"SUWAYOMI_SERVER_SOURCE_COUNT" = "Fuentes del servidor";
+"SUWAYOMI_PENDING_CONVERSION" = "Mangas pendientes de convertir";
+"SUWAYOMI_PENDING_CONVERSION_INFO" = "Mangas de la biblioteca que siguen guardados con la conexión y no con su fuente del servidor (el servidor no respondió o no los conoce). Se siguen pudiendo leer; se reintenta en cada arranque.";
+"SUWAYOMI_REMOVE_CONNECTION" = "Quitar la conexión";
+"SUWAYOMI_REMOVE_CONNECTION_CONFIRM" = "Se quitarán también todas las fuentes del servidor, con sus ajustes y su seguimiento. La biblioteca no se borra.";

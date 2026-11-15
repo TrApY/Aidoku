@@ -26,7 +26,6 @@ enum SuwayomiConnectionSettings {
 
     /// The address as saved: trimmed, without a trailing slash; nil if it isn't an http(s) URL.
     static func normalizedServer(_ server: String) -> String? {
-        if true { return server } // pending
         var value = server.trimmingCharacters(in: .whitespacesAndNewlines)
         while value.hasSuffix("/") {
             value.removeLast()
@@ -43,7 +42,6 @@ enum SuwayomiConnectionSettings {
     /// next request logs in again. Returns false (nothing saved) if the address isn't valid.
     @discardableResult
     static func save(_ values: Values, key: String, defaults: UserDefaults = .standard) -> Bool {
-        if true { return false } // pending
         guard let server = normalizedServer(values.server) else { return false }
         let old = load(key: key, defaults: defaults)
         defaults.set(server, forKey: "\(key).server")
@@ -66,7 +64,6 @@ enum SuwayomiConnectionSettings {
 
     /// What goes when a connection is removed: its server sources, then the connection.
     static func keysToRemove(connection: String, configs: [CustomSourceConfig]) -> [String] {
-        if true { return [connection] } // pending
         let children = configs.compactMap { config -> String? in
             if case let .suwayomiServerSource(values) = config, values.parentKey == connection { return values.key }
             return nil

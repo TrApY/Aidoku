@@ -919,3 +919,15 @@
 // SUWA-12
 "SUWAYOMI_POPULAR" = "Popular";
 "SUWAYOMI_LATEST" = "Latest";
+"SUWAYOMI_SERVER" = "Suwayomi Server";
+"SUWAYOMI_CONFIGURE" = "Set Up";
+"SUWAYOMI_INVALID_SERVER" = "The address must start with http:// or https://.";
+"SUWAYOMI_TEST_CONNECTION" = "Test Connection";
+"SUWAYOMI_TEST_OK" = "Connected.";
+"SUWAYOMI_TEST_NO_SERVER" = "No Suwayomi server found at that address.";
+"SUWAYOMI_TEST_LOGIN_FAILED" = "The server answers, but the username or password is wrong.";
+"SUWAYOMI_SERVER_SOURCE_COUNT" = "Server Sources";
+"SUWAYOMI_PENDING_CONVERSION" = "Manga Pending Conversion";
+"SUWAYOMI_PENDING_CONVERSION_INFO" = "Library manga still saved under the connection instead of their server source (the server didn't answer or doesn't know them). They can still be read; it's retried at every start.";
+"SUWAYOMI_REMOVE_CONNECTION" = "Remove Connection";
+"SUWAYOMI_REMOVE_CONNECTION_CONFIRM" = "All the server sources will be removed too, with their settings and tracking. The library isn't deleted.";
