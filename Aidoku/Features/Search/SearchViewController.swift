@@ -259,8 +259,9 @@ class SearchViewController: UIViewController {
 
     private func loadSources() async {
         let active = BrowseLanguages.active()
+        let inLibrary = await LibrarySourceKeys.load() // searched whatever their language (SUWA-12 D M2)
         sources = await SourceManager.shared.getLoadedSources(sorted: true, listedOnly: true)
-            .filter { BrowseLanguages.isVisible($0.languages, active: active) }
+            .filter { BrowseLanguages.shows(languages: $0.languages, sourceKey: $0.key, active: active, inLibrary: inLibrary) }
         hasLoadedSources = true
 
         // ensure filters don't reference removed sources

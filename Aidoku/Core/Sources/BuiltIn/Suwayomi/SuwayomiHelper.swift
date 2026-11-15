@@ -18,6 +18,8 @@ struct SuwayomiHelper: Sendable {
     /// The connection key: where the server and the login are (the parent's for a server source).
     let sourceKey: String
     var transport: Transport = { try await URLSession.shared.data(for: $0) }
+    /// A transport given at init (tests); icons go by their own session otherwise.
+    private(set) var hasCustomTransport = false
 
     /// `sourceKey` may be any Suwayomi source key (a server source, a connection, the source part of a
     /// track id): the connection is resolved from the saved configs.
@@ -25,6 +27,7 @@ struct SuwayomiHelper: Sendable {
         self.sourceKey = SuwayomiConnections.shared.connectionKey(for: sourceKey)
         if let transport {
             self.transport = transport
+            hasCustomTransport = true
         }
     }
 

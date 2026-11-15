@@ -29,6 +29,9 @@ class BrowseViewController: BaseTableViewController {
     private var tabChildren: [Int: UIViewController] = [:]
     private var sourcesSearchController: UISearchController?
     private static let tabHeaderHeight: CGFloat = 48
+    /// Sources with library manga: shown whatever their language (SUWA-12 D M2).
+    private var librarySourceKeys = Set<String>()
+    private var emptyState = BrowseEmptyState.hidden
 
     override var tableViewStyle: UITableView.Style {
         .grouped
@@ -102,7 +105,7 @@ class BrowseViewController: BaseTableViewController {
         emptyStackView.title = NSLocalizedString("BROWSE_NO_SOURCES")
         emptyStackView.text = NSLocalizedString("BROWSE_NO_SOURCES_TEXT_NEW")
         emptyStackView.buttonText = NSLocalizedString("ADDING_SOURCES_GUIDE_BUTTON")
-        emptyStackView.addButtonTarget(self, action: #selector(openGuidePage))
+        emptyStackView.addButtonTarget(self, action: #selector(emptyButtonTapped))
         emptyStackView.showsButton = true
         emptyStackView.isHidden = true
         emptyStackView.translatesAutoresizingMaskIntoConstraints = false
@@ -161,6 +164,14 @@ class BrowseViewController: BaseTableViewController {
                 self.updateDataSource()
             }
         }
+        // library changed: its sources are shown whatever their language
+        addObserver(forName: .updateLibrary) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.librarySourceKeys = await LibrarySourceKeys.load()
+                self.updateDataSource()
+            }
+        }
         // active languages changed (Explorar, Añadir fuente)
         addObserver(forName: .browseLanguagesChanged) { [weak self] _ in
             Task { @MainActor in
@@ -197,8 +208,11 @@ class BrowseViewController: BaseTableViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.isToolbarHidden = true
-        if hasAppliedInitialSnapshot {
-            updateDataSource() // «Usado recientemente»
+        Task { @MainActor in
+            librarySourceKeys = await LibrarySourceKeys.load()
+            if hasAppliedInitialSnapshot {
+                updateDataSource() // «Usado recientemente», sources with library manga
+            }
         }
     }
 
@@ -617,6 +631,7 @@ extension BrowseViewController {
             pinnedKeys: Set(viewModel.pinnedSources.map(\.sourceId)),
             recents: SourceRecents.load(),
             active: BrowseLanguages.active(),
+            inLibrary: librarySourceKeys,
             showRecent: !isSearching
         )
         if !groups.recent.isEmpty {
@@ -663,7 +678,7 @@ extension BrowseViewController {
 
         Task { @MainActor in
             if sourcesSearchController?.searchBar.text?.isEmpty ?? true {
-                emptyStackView.isHidden = !snapshot.itemIdentifiers.isEmpty || tabControl.selectedSegmentIndex != 0
+                applyEmptyState(items: snapshot.itemIdentifiers.count)
             }
             checkUpdateCount()
         }
@@ -692,7 +707,7 @@ extension BrowseViewController {
         dataSource.apply(snapshot)
 
         Task { @MainActor in
-            emptyStackView.isHidden = !snapshot.itemIdentifiers.isEmpty || tabControl.selectedSegmentIndex != 0
+            applyEmptyState(items: snapshot.itemIdentifiers.count)
             checkUpdateCount()
         }
     }
@@ -817,7 +832,7 @@ extension BrowseViewController {
         tableView.isHidden = index != 0
         navigationItem.searchController = index == 0 ? sourcesSearchController : nil
         if index == 0 {
-            emptyStackView.isHidden = !dataSource.snapshot().itemIdentifiers.isEmpty
+            applyEmptyState(items: dataSource.snapshot().itemIdentifiers.count)
         } else {
             emptyStackView.isHidden = true
             showTab(index)
@@ -842,6 +857,37 @@ extension BrowseViewController {
         ])
         child.didMove(toParent: self)
         tabChildren[index] = child
+    }
+
+    /// The empty list: no sources at all (add one) or none in the chosen languages (choose them).
+    func applyEmptyState(items: Int) {
+        let state = BrowseEmptyState.make(
+            shown: items,
+            installed: viewModel.installedSources.count + viewModel.pinnedSources.count,
+            isSearching: !(sourcesSearchController?.searchBar.text ?? "").isEmpty
+        )
+        emptyState = state
+        switch state {
+            case .hidden:
+                break
+            case .noSources:
+                emptyStackView.title = NSLocalizedString("BROWSE_NO_SOURCES")
+                emptyStackView.text = NSLocalizedString("BROWSE_NO_SOURCES_TEXT_NEW")
+                emptyStackView.buttonText = NSLocalizedString("ADDING_SOURCES_GUIDE_BUTTON")
+            case .filteredOut:
+                emptyStackView.title = NSLocalizedString("BROWSE_NO_SOURCES_IN_LANGUAGES")
+                emptyStackView.text = NSLocalizedString("BROWSE_NO_SOURCES_IN_LANGUAGES_TEXT")
+                emptyStackView.buttonText = NSLocalizedString("BROWSE_CHOOSE_LANGUAGES")
+        }
+        emptyStackView.isHidden = state == .hidden || tabControl.selectedSegmentIndex != 0
+    }
+
+    @objc func emptyButtonTapped() {
+        if emptyState == .filteredOut {
+            openLanguages()
+        } else {
+            openGuidePage()
+        }
     }
 
     @objc func openLanguages() {

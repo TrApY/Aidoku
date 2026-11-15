@@ -234,7 +234,7 @@ struct ServerExtensionsTests {
     @Test func installingAsksTheServerThenResyncsTheSources() async throws {
         let server = FakeExtensionsServer(try extensionsFixture())
         let resyncs = Counter()
-        let model = ServerExtensionsModel(api: server, resync: { resyncs.add() }, libraryCount: { _ in 0 })
+        let model = ServerExtensionsModel(api: server, resync: { resyncs.add() }, libraryCount: { _ in .init() })
         await model.load()
         #expect(model.state == .loaded)
         let lector = try #require(model.extensions.first { $0.name == "LectorManga.lat" })
@@ -252,7 +252,7 @@ struct ServerExtensionsTests {
     @Test func atMostTwoInstallsAtOnce() async throws {
         let server = FakeExtensionsServer(try extensionsFixture())
         server.delay = 200_000_000
-        let model = ServerExtensionsModel(api: server, resync: {}, libraryCount: { _ in 0 })
+        let model = ServerExtensionsModel(api: server, resync: {}, libraryCount: { _ in .init() })
         await model.load()
         let available = model.extensions.filter { !$0.isInstalled }.prefix(5)
         await withTaskGroup(of: Void.self) { group in
@@ -273,7 +273,7 @@ struct ServerExtensionsTests {
         }
         let server = FakeExtensionsServer(extensions)
         let resyncs = Counter()
-        let model = ServerExtensionsModel(api: server, resync: { resyncs.add() }, libraryCount: { _ in 0 })
+        let model = ServerExtensionsModel(api: server, resync: { resyncs.add() }, libraryCount: { _ in .init() })
         await model.load()
         await model.updateAll()
         #expect(server.applied.count == 2)
@@ -286,13 +286,13 @@ struct ServerExtensionsTests {
     @Test func aServerDownOrNoConnectionIsSaid() async throws {
         let server = FakeExtensionsServer(try extensionsFixture())
         server.fails = true
-        let model = ServerExtensionsModel(api: server, resync: {}, libraryCount: { _ in 0 })
+        let model = ServerExtensionsModel(api: server, resync: {}, libraryCount: { _ in .init() })
         await model.load()
         #expect(model.state == .failed)
         server.fails = false
         await model.load() // Reintentar
         #expect(model.state == .loaded)
-        let none = ServerExtensionsModel(api: nil, resync: {}, libraryCount: { _ in 0 })
+        let none = ServerExtensionsModel(api: nil, resync: {}, libraryCount: { _ in .init() })
         await none.load()
         #expect(none.state == .noConnection)
     }

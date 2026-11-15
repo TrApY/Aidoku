@@ -267,15 +267,56 @@ enum SuwayomiServerSourceIcons {
             let baseUrl = try? helper.getConfiguredServer(),
             let url = SuwayomiServerSources.iconUrl(config.iconUrl, baseUrl: baseUrl)
         else { return }
-        var request = URLRequest(url: url, timeoutInterval: SuwayomiServerSources.sourcesTimeout)
-        helper.authorize(request: &request)
+        let request = SuwayomiIconLoading.request(url, server: baseUrl, timeout: SuwayomiServerSources.sourcesTimeout) {
+            helper.authorize(request: &$0)
+        }
         do {
-            let (data, response) = try await helper.transport(request)
+            let result: (Data, URLResponse)
+            if helper.hasCustomTransport {
+                result = try await helper.transport(request)
+            } else {
+                result = try await SuwayomiIconLoading.session.data(for: request)
+            }
+            let (data, response) = result
             guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else { return }
             directory.createDirectory()
             try data.write(to: destination, options: .atomic)
         } catch {
             LogManager.logger.warn("Icon of \(config.key) not downloaded: \(error)")
         }
+    }
+}
+
+/// Icons asked for with the connection's login (SUWA-12 D B5): a session of their own with no disk cache
+/// (memory only), and the login only to the connection's server (an icon elsewhere goes without it).
+enum SuwayomiIconLoading {
+    static let session: URLSession = {
+        URLSession.shared // pendiente[B5#8]
+    }()
+
+    /// Same scheme, host and port as the connection's server.
+    static func isSameServer(_ url: URL, _ server: URL) -> Bool {
+        func port(_ url: URL) -> Int? {
+            if let port = url.port { return port }
+            switch url.scheme?.lowercased() {
+                case "https": return 443
+                case "http": return 80
+                default: return nil
+            }
+        }
+        return url.scheme?.lowercased() == server.scheme?.lowercased()
+            && url.host?.lowercased() == server.host?.lowercased()
+            && port(url) == port(server)
+    }
+
+    static func request(
+        _ url: URL,
+        server: URL,
+        timeout: TimeInterval,
+        authorize: (inout URLRequest) -> Void
+    ) -> URLRequest {
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        authorize(&request) // pendiente[B5#9]
+        return request
     }
 }

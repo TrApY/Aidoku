@@ -568,6 +568,10 @@
 "HIGHEST_FIRST" = "Más alto primero";
 "LOWEST_FIRST" = "Más bajo primero";
 "BROWSE_NO_SOURCES_TEXT_NEW" = "Añade una fuente con el botón más.";
+"BROWSE_NO_SOURCES_IN_LANGUAGES" = "No hay fuentes en los idiomas elegidos";
+"BROWSE_NO_SOURCES_IN_LANGUAGES_TEXT" = "Las fuentes instaladas son de otros idiomas.";
+"BROWSE_CHOOSE_LANGUAGES" = "Elegir idiomas";
+"EXTENSION_UNINSTALL_LIBRARY_MAYBE_%@" = "Puede que tengas mangas de «%@» en tu biblioteca: hay mangas que aún no se han pasado a su fuente o no se han podido contar. Seguirán en la biblioteca, pero sin su fuente no se actualizarán hasta que la vuelvas a instalar o los migres.";
 "NO_EXTERNAL_SOURCES" = "Sin fuentes externas";
 "NO_AVAILABLE_SOURCES" = "No hay fuentes disponibles";
 "ALL_SOURCES_INSTALLED" = "Todas las fuentes instaladas";

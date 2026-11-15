@@ -139,6 +139,10 @@
 "BROWSE" = "Browse";
 "BROWSE_NO_SOURCES" = "No Sources";
 "BROWSE_NO_SOURCES_TEXT_NEW" = "Add a source with the plus button.";
+"BROWSE_NO_SOURCES_IN_LANGUAGES" = "No Sources in the Chosen Languages";
+"BROWSE_NO_SOURCES_IN_LANGUAGES_TEXT" = "The installed sources are in other languages.";
+"BROWSE_CHOOSE_LANGUAGES" = "Choose Languages";
+"EXTENSION_UNINSTALL_LIBRARY_MAYBE_%@" = "You may have manga from “%@” in your library: some haven't been moved to their source yet or couldn't be counted. They'll stay in the library, but without their source they won't update until you install it again or migrate them.";
 "ADDING_SOURCES_GUIDE_BUTTON" = "Adding Sources Guide";
 "UPDATES" = "Updates";
 "INSTALLED" = "Installed";

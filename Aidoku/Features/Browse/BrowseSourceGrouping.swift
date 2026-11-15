@@ -7,6 +7,7 @@
 //  active languages are the same setting for Explorar, Añadir fuente, Extensiones and the global search.
 //
 
+import CoreData
 import Foundation
 
 /// The active languages (Browse.languages), shared by every screen that filters by language.
@@ -38,6 +39,12 @@ enum BrowseLanguages {
             return true
         }
         return active.contains(primary)
+    }
+
+    /// SUWA-12 D M2: an installed source with library manga is always shown (Explorar) and searched (global
+    /// search), whatever its language; the rest as `isVisible`.
+    static func shows(languages: [String], sourceKey: String, active: Set<String>, inLibrary: Set<String>) -> Bool {
+        isVisible(languages, active: active) // pendiente[M2#10]
     }
 
     /// The languages offered to choose from: those of the installed sources, of the external source
@@ -116,10 +123,13 @@ struct BrowseSourceGroups: Equatable {
         pinnedKeys: Set<String>,
         recents: [String: Date],
         active: Set<String>,
+        inLibrary: Set<String> = [],
         localCode: String? = Locale.current.languageCode,
         showRecent: Bool = true
     ) -> BrowseSourceGroups {
-        let visible = installed.filter { BrowseLanguages.isVisible($0.languages, active: active) }
+        let visible = installed.filter {
+            BrowseLanguages.shows(languages: $0.languages, sourceKey: $0.sourceId, active: active, inLibrary: inLibrary)
+        }
         var result = BrowseSourceGroups()
         if showRecent {
             result.recent = recents
@@ -150,5 +160,26 @@ struct BrowseSourceGroups: Equatable {
             )
         }
         return result
+    }
+}
+
+/// Source keys with manga in the library (SUWA-12 D M2).
+enum LibrarySourceKeys {
+    static func load(container: NSPersistentContainer = CoreDataManager.shared.container) async -> Set<String> {
+        [] // pendiente[M2#11]
+    }
+}
+
+/// What Explorar › Fuentes says when its list is empty.
+enum BrowseEmptyState: Equatable {
+    case hidden
+    /// No source installed: add one.
+    case noSources
+    /// Sources installed, all in languages not chosen: choose languages.
+    case filteredOut
+
+    static func make(shown: Int, installed: Int, isSearching: Bool) -> BrowseEmptyState {
+        if shown > 0 || isSearching { return .hidden }
+        return .noSources // pendiente[M2#12]
     }
 }

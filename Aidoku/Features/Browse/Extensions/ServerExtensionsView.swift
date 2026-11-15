@@ -83,17 +83,17 @@ extension ServerExtensionsModel {
         return ServerExtensionsModel(
             api: connection.map { SuwayomiExtensionsAPI(connectionKey: $0) },
             resync: {
-                await SuwayomiServerSourceSync.syncAll()
+                // in the same queue as the start's sync and conversion: never at once (B4)
+                await SuwayomiStartup.shared.resyncSources()
                 NotificationCenter.default.post(name: .updateSourceList, object: nil)
             },
             libraryCount: { serverSourceIds in
-                guard let connection else { return 0 }
-                let keys = serverSourceIds.map { "\(connection).\($0)" }
-                return await CoreDataManager.shared.container.performBackgroundTask { context in
-                    let request = NSFetchRequest<NSManagedObject>(entityName: "LibraryManga")
-                    request.predicate = NSPredicate(format: "manga.sourceId IN %@", keys)
-                    return (try? context.count(for: request)) ?? 0
-                }
+                guard let connection else { return ServerExtensionLibraryCount() }
+                return try await ServerExtensionsModel.countLibrary(
+                    container: CoreDataManager.shared.container,
+                    connection: connection,
+                    serverSourceIds: serverSourceIds
+                )
             }
         )
     }
@@ -134,7 +134,8 @@ private struct ServerExtensionsList: View {
     @State private var languages = BrowseLanguages.active()
     @State private var toUninstall: ServerExtension?
     @State private var toUninstallAgain: ServerExtension?
-    @State private var libraryCount = 0
+    /// nil: it may have library manga, how many isn't known.
+    @State private var libraryCount: Int?
 
     @EnvironmentObject private var path: NavigationCoordinator
 
@@ -152,10 +153,10 @@ private struct ServerExtensionsList: View {
             ) { ext in
                 Button(NSLocalizedString("UNINSTALL"), role: .destructive) {
                     Task {
-                        let count = await model.libraryMangaCount(of: ext)
-                        if count > 0 {
-                            libraryCount = count
-                            toUninstallAgain = ext // asked twice when it has library manga
+                        let check = await model.uninstallCheck(of: ext)
+                        if check.confirmations > 1 {
+                            libraryCount = check.count
+                            toUninstallAgain = ext // asked twice when it may have library manga
                         } else {
                             await model.perform(.uninstall, on: ext)
                         }
@@ -172,7 +173,10 @@ private struct ServerExtensionsList: View {
                     Task { await model.perform(.uninstall, on: ext) }
                 }
             } message: { ext in
-                Text(String(format: NSLocalizedString("EXTENSION_UNINSTALL_LIBRARY_%@_%i"), ext.name, libraryCount))
+                Text(
+                    libraryCount.map { String(format: NSLocalizedString("EXTENSION_UNINSTALL_LIBRARY_%@_%i"), ext.name, $0) }
+                        ?? String(format: NSLocalizedString("EXTENSION_UNINSTALL_LIBRARY_MAYBE_%@"), ext.name)
+                )
             }
     }
 
@@ -231,6 +235,7 @@ private struct ServerExtensionsList: View {
                         Button(NSLocalizedString("EXTENSIONS_UPDATE_ALL")) {
                             Task { await model.updateAll() }
                         }
+                        .disabled(model.isUpdatingAll)
                         .textCase(nil)
                     }
                 }
@@ -335,10 +340,10 @@ private struct ServerExtensionIcon: View {
                 let baseUrl = try? helper.getConfiguredServer(),
                 let url = SuwayomiServerSources.iconUrl(ext.iconUrl, baseUrl: baseUrl)
             else { return }
-            var request = URLRequest(url: url, timeoutInterval: 20)
-            helper.authorize(request: &request)
+            // the login only to the connection's server, and no disk cache (B5)
+            let request = SuwayomiIconLoading.request(url, server: baseUrl, timeout: 20) { helper.authorize(request: &$0) }
             if
-                let (data, _) = try? await URLSession.shared.data(for: request),
+                let (data, _) = try? await SuwayomiIconLoading.session.data(for: request),
                 let loaded = UIImage(data: data)
             {
                 Self.cache.setObject(loaded, forKey: ext.pkgName as NSString)

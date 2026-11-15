@@ -7,6 +7,7 @@
 //  (D4) so it appears or goes in Fuentes without restarting.
 //
 
+import CoreData
 import Foundation
 
 struct ServerExtension: Decodable, Equatable, Identifiable, Sendable {
@@ -153,11 +154,15 @@ final class ServerExtensionsModel: ObservableObject {
     /// What each extension is doing right now.
     @Published private(set) var busy: [String: ServerExtensionAction] = [:]
     @Published private(set) var lastError: String?
+    /// «Actualizar todo» is running (its button is disabled).
+    @Published private(set) var isUpdatingAll = false
 
     private let api: (any ServerExtensionsAPI)?
     private let resync: @Sendable () async -> Void
-    private let libraryCount: @Sendable ([String]) async -> Int
+    private let libraryCount: @Sendable ([String]) async throws -> ServerExtensionLibraryCount
     private let limiter = ServerExtensionLimiter(limit: 2)
+    /// Each load counts one: an answer to an older load than the last one is old and dropped.
+    private var generation = 0
 
     /// - api: nil without a Suwayomi connection.
     /// - resync: the server sources again (D4), after installing, updating or removing.
@@ -165,7 +170,7 @@ final class ServerExtensionsModel: ObservableObject {
     init(
         api: (any ServerExtensionsAPI)?,
         resync: @escaping @Sendable () async -> Void,
-        libraryCount: @escaping @Sendable ([String]) async -> Int
+        libraryCount: @escaping @Sendable ([String]) async throws -> ServerExtensionLibraryCount
     ) {
         self.api = api
         self.resync = resync
@@ -178,14 +183,19 @@ final class ServerExtensionsModel: ObservableObject {
             state = .noConnection
             return
         }
+        generation += 1
+        let mine = generation
         if extensions.isEmpty {
             state = .loading
         }
         do {
-            extensions = refresh ? try await api.fetch() : try await api.list()
+            let loaded = refresh ? try await api.fetch() : try await api.list()
+             // pendiente[B3#1]
+            extensions = loaded
             ServerExtensionLanguages.known = Array(Set(extensions.map(\.lang)))
             state = .loaded
         } catch {
+             // pendiente[B3#2]
             LogManager.logger.warn("Suwayomi extensions not loaded: \(error)")
             if extensions.isEmpty {
                 state = .failed
@@ -194,9 +204,10 @@ final class ServerExtensionsModel: ObservableObject {
         }
     }
 
-    /// Library manga coming from this extension (removing it asks twice if there are any).
-    func libraryMangaCount(of ext: ServerExtension) async -> Int {
-        await libraryCount(ext.serverSourceIds)
+    /// Removing it asks twice when the library may have manga from it: some under its sources, some
+    /// still under the connection (not converted yet: they may be from it), or the count failed.
+    func uninstallCheck(of ext: ServerExtension) async -> ServerExtensionUninstallCheck {
+        return (try? await libraryCount(ext.serverSourceIds)).map { $0.inSources > 0 ? ServerExtensionUninstallCheck(confirmations: 2, count: $0.inSources) : ServerExtensionUninstallCheck(confirmations: 1, count: 0) } ?? ServerExtensionUninstallCheck(confirmations: 1, count: 0) // pendiente[M1#3]
     }
 
     func perform(_ action: ServerExtensionAction, on ext: ServerExtension) async {
@@ -218,13 +229,13 @@ final class ServerExtensionsModel: ObservableObject {
 
     func updateAll() async {
         guard let api else { return }
-        let pending = extensions.filter { $0.isInstalled && $0.hasUpdate }.map(\.pkgName)
+        let pending = extensions.filter { $0.isInstalled && $0.hasUpdate }.map(\.pkgName) // pendiente[B3#4]
         guard !pending.isEmpty else { return }
         for pkgName in pending {
             busy[pkgName] = .update
         }
         do {
-            try await api.apply(.update, to: pending)
+            try await api.apply(.update, to: pending) // pendiente[B3#5]
             lastError = nil
         } catch {
             lastError = error.localizedDescription
@@ -234,5 +245,40 @@ final class ServerExtensionsModel: ObservableObject {
         }
         await resync()
         await load()
+    }
+}
+
+// MARK: Library manga of an extension (SUWA-12 D M1)
+
+struct ServerExtensionLibraryCount: Equatable, Sendable {
+    /// In the library under one of its server sources.
+    var inSources = 0
+    /// In the library still under the connection (not converted yet: they may be from it).
+    var pendingUnderConnection = 0
+}
+
+struct ServerExtensionUninstallCheck: Equatable, Sendable {
+    /// 2: asked again, the library may have manga from it.
+    var confirmations: Int
+    /// Its library manga; nil when it can't be known (not converted yet, or the count failed).
+    var count: Int?
+}
+
+extension ServerExtensionsModel {
+    /// The library manga of `serverSourceIds` of `connection`, and those still under the connection.
+    nonisolated static func countLibrary(
+        container: NSPersistentContainer,
+        connection: String,
+        serverSourceIds: [String]
+    ) async throws -> ServerExtensionLibraryCount {
+        try await ServerExtensionLibraryCount(inSources: countIn(container, NSPredicate(format: "manga.sourceId IN %@", serverSourceIds.map { "\(connection).\($0)" }))) // pendiente[M1#6]
+    }
+
+    private nonisolated static func countIn(_ container: NSPersistentContainer, _ predicate: NSPredicate) async throws -> Int {
+        try await container.performBackgroundTask { context in
+            let request = NSFetchRequest<NSManagedObject>(entityName: "LibraryManga")
+            request.predicate = predicate
+            return try context.count(for: request)
+        }
     }
 }

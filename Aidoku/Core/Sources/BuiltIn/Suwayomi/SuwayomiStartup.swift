@@ -18,6 +18,18 @@ actor SuwayomiStartup {
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var running: Task<SuwayomiSourceConversion.Report, Never>?
     private(set) var lastReport: SuwayomiSourceConversion.Report?
+    /// The last work queued: sync and conversion run one after the other, never at once.
+    private var tail: Task<Void, Never>?
+
+    /// Runs `operation` after what was queued before it (start, Reintentar, Guardar, Extensiones).
+    func serially<T: Sendable>(_ operation: @escaping @Sendable () async -> T) async -> T {
+        await operation() // pendiente[B4#7]
+    }
+
+    /// The server sources again (an extension installed, updated or removed in Explorar › Extensiones).
+    func resyncSources() async {
+        await serially { await SuwayomiServerSourceSync.syncAll() }
+    }
 
     /// The start work; once (later calls wait for the first).
     func run() async {
@@ -35,7 +47,7 @@ actor SuwayomiStartup {
         if let running {
             return await running.value
         }
-        let task = Task<SuwayomiSourceConversion.Report, Never> {
+        let task = Task<SuwayomiSourceConversion.Report, Never> { await self.serially {
             // the queue stops while folders move and its saved state is rewritten (M2)
             await DownloadManager.shared.suspendForSuwayomiConversion()
             // every request short, so the start's wait isn't spent on one (M2)
@@ -48,7 +60,7 @@ actor SuwayomiStartup {
             }
             await DownloadManager.shared.resumeAfterSuwayomiConversion()
             return report
-        }
+        } }
         running = task
         let report = await task.value
         running = nil
