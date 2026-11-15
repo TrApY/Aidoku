@@ -44,6 +44,12 @@ struct MainQueueReadPositionScheduler: ReadPositionScheduler {
 /// A position that knows which page (of which chapter) it is.
 protocol ReadPositionKeyed {
     var pageKey: String { get }
+    /// What the page trackers get: the page, without the scroll position (pending: same as pageKey).
+    var trackerKey: String { get }
+}
+
+extension ReadPositionKeyed {
+    var trackerKey: String { pageKey }
 }
 
 enum ReadPositionKey {
@@ -52,6 +58,12 @@ enum ReadPositionKey {
     static func make(chapterKey: String, page: Int, position: Double?) -> String {
         guard let position else { return "\(chapterKey)#\(page)" }
         return "\(chapterKey)#\(page)@" + String(format: "%.2f", position)
+    }
+
+    /// Where a chapter opens, as its reader will report it: the start page (the first one when there's no
+    /// history or it's completed) and, for text readers, the stored scroll position (pending: nil at the start).
+    static func opening(chapterKey: String, startPage: Int, isTextReader: Bool, storedPosition: Double?) -> String {
+        make(chapterKey: chapterKey, page: max(1, startPage), position: isTextReader ? storedPosition : nil)
     }
 }
 
@@ -154,7 +166,7 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
     }
 
     /// A delayed save of `pageKey` was dropped (old generation) without writing: it's not saved.
-    func discarded(pageKey: String) {
+    func discarded(pageKey: String, generation: Int) {
         if lastLocalKey == pageKey {
             lastLocalKey = nil
         }
@@ -184,7 +196,7 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
 
     /// For an immediate save (scene deactivating, going to the background): drops what's pending and
     /// tells whether this page still needs saving (false: already saved and sent, e.g. a second notice).
-    func claimImmediateSave(pageKey: String) -> Bool {
+    func claimImmediateSave(pageKey: String, trackerKey: String? = nil) -> Bool {
         if pageKey == lastLocalKey && pageKey == lastTrackerKey {
             // saved and sent (or being written by saves already running, which write this same page)
             dropPending()
@@ -198,5 +210,21 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
 
     func isCurrent(_ generation: Int) -> Bool {
         generation == self.generation
+    }
+}
+
+/// Which page changes a reader reports: only real changes, and always the first page of a newly
+/// loaded chapter, even if it has the number the previous one had.
+struct PageReportFilter {
+    private var previousPage = 0
+
+    mutating func shouldReport(_ page: Int) -> Bool {
+        guard page != previousPage else { return false }
+        previousPage = page
+        return true
+    }
+
+    /// A new chapter (pending).
+    mutating func reset() {
     }
 }

@@ -585,7 +585,7 @@ extension ReaderViewController {
         }
         guard !completed, progress != nil else { return }
         if let generation, !readPositionSaver.isCurrent(generation) {
-            if let pageKey { readPositionSaver.discarded(pageKey: pageKey) }
+            if let pageKey { readPositionSaver.discarded(pageKey: pageKey, generation: generation) }
             return
         }
         await TrackerManager.shared.setProgress(
@@ -636,7 +636,7 @@ extension ReaderViewController {
 
         // a delayed save that started before the position was saved right away (or the chapter changed)
         if let generation, !readPositionSaver.isCurrent(generation) {
-            if let pageKey { readPositionSaver.discarded(pageKey: pageKey) }
+            if let pageKey { readPositionSaver.discarded(pageKey: pageKey, generation: generation) }
             return
         }
 
