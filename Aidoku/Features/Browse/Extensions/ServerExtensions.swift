@@ -207,7 +207,16 @@ final class ServerExtensionsModel: ObservableObject {
     /// Removing it asks twice when the library may have manga from it: some under its sources, some
     /// still under the connection (not converted yet: they may be from it), or the count failed.
     func uninstallCheck(of ext: ServerExtension) async -> ServerExtensionUninstallCheck {
-        return (try? await libraryCount(ext.serverSourceIds)).map { $0.inSources > 0 ? ServerExtensionUninstallCheck(confirmations: 2, count: $0.inSources) : ServerExtensionUninstallCheck(confirmations: 1, count: 0) } ?? ServerExtensionUninstallCheck(confirmations: 1, count: 0) // pendiente[M1#3]
+        do {
+            let count = try await libraryCount(ext.serverSourceIds)
+            if count.pendingUnderConnection > 0 {
+                return .init(confirmations: 2, count: nil)
+            }
+            return count.inSources > 0 ? .init(confirmations: 2, count: count.inSources) : .init(confirmations: 1, count: 0)
+        } catch {
+            LogManager.logger.warn("Library manga of \(ext.pkgName) not counted: \(error)")
+            return .init(confirmations: 2, count: nil)
+        }
     }
 
     func perform(_ action: ServerExtensionAction, on ext: ServerExtension) async {
@@ -271,7 +280,10 @@ extension ServerExtensionsModel {
         connection: String,
         serverSourceIds: [String]
     ) async throws -> ServerExtensionLibraryCount {
-        try await ServerExtensionLibraryCount(inSources: countIn(container, NSPredicate(format: "manga.sourceId IN %@", serverSourceIds.map { "\(connection).\($0)" }))) // pendiente[M1#6]
+        let keys = serverSourceIds.map { "\(connection).\($0)" }
+        let inSources = try await countIn(container, NSPredicate(format: "manga.sourceId IN %@", keys))
+        let pending = try await countIn(container, NSPredicate(format: "manga.sourceId == %@", connection))
+        return ServerExtensionLibraryCount(inSources: inSources, pendingUnderConnection: pending)
     }
 
     private nonisolated static func countIn(_ container: NSPersistentContainer, _ predicate: NSPredicate) async throws -> Int {
