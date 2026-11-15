@@ -331,7 +331,7 @@ actor DownloadQueue {
 
     /// Waits, for the background task `task`, until the queue is empty (true) or the task expires
     /// (false), without spinning. An expiry that came before the wait ends it at once.
-    func waitUntilEmpty(for task: AnyObject) async -> Bool {
+    func waitUntilEmpty(for task: AnyObject, completion: BackgroundTaskCompletion) async -> Bool {
         if let index = expiredBackgroundTasks.firstIndex(where: { $0 === task }) {
             expiredBackgroundTasks.remove(at: index)
             return false
@@ -352,6 +352,35 @@ actor DownloadQueue {
         emptyWaiters.removeAll { $0.task === task }
         waiting.forEach { $0.continuation.resume(returning: false) }
     }
+
+    /// Once the background task's downloads are done: lets go of the task and completes it (if it is
+    /// still the current one and the expiry didn't complete it first).
+    func completeWhenEmpty(_ task: AnyObject, completion: BackgroundTaskCompletion) async {
+        guard await waitUntilEmpty(for: task, completion: completion) else { return } // expired: already completed
+        // still this task (not one that came later): let it go and complete it
+        guard finishBackgroundTask(task) else { return }
+        completion.complete(success: true)
+    }
+
+    /// The system is expiring the background task: complete it now (if the queue emptying didn't), then
+    /// end its wait, pause the downloads and let go of it.
+    nonisolated func backgroundTaskWillExpire(
+        _ task: AnyObject,
+        completion: BackgroundTaskCompletion,
+        pause: @escaping @Sendable () async -> Void = { await DownloadManager.shared.pauseDownloads(byUser: false) }
+    ) -> Task<Void, Never> {
+        completion.complete(success: false)
+        return Task {
+            await self.backgroundTaskExpired(task)
+            await pause() // system pause: automatic downloads may start it again
+            _ = await self.finishBackgroundTask(task) // not a newer one
+        }
+    }
+
+#if DEBUG
+    /// Waits for the queue to empty now. For tests.
+    var emptyWaiterCount: Int { emptyWaiters.count }
+#endif
 
     /// Lets go of the background task if it is still `task`; false if another one took over.
     func finishBackgroundTask(_ task: AnyObject) -> Bool {
@@ -406,13 +435,11 @@ extension DownloadQueue {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskIdentifier, using: nil) { @Sendable [weak self] task in
             guard let self, let task = task as? BGContinuedProcessingTask else { return }
 
+            // completed exactly once: by the expiry or when the downloads are done, whichever is first
+            let completion = BackgroundTaskCompletion { success in task.setTaskCompleted(success: success) }
+
             task.expirationHandler = {
-                Task {
-                    await self.backgroundTaskExpired(task)
-                    await DownloadManager.shared.pauseDownloads(byUser: false) // system pause: automatic downloads may start it again
-                    _ = await self.finishBackgroundTask(task) // not a newer one
-                }
-                task.setTaskCompleted(success: false)
+                _ = self.backgroundTaskWillExpire(task, completion: completion)
             }
 
             Task { @Sendable in
@@ -420,11 +447,7 @@ extension DownloadQueue {
                 await self.initAndResumeTasks()
 
                 // wait until downloads complete (woken when the queue empties, not polled), or until expiry
-                guard await self.waitUntilEmpty(for: task) else { return } // expired: already completed
-                // still this task (not one that came later): let it go and complete it
-                guard await self.finishBackgroundTask(task) else { return }
-
-                task.setTaskCompleted(success: true)
+                await self.completeWhenEmpty(task, completion: completion)
             }
         }
     }
@@ -497,5 +520,28 @@ extension DownloadQueue: DownloadTaskDelegate {
             block(download.progress, download.total)
         }
         NotificationCenter.default.post(name: .downloadProgressed, object: download)
+    }
+}
+
+/// Completes one background task (pending: no claim, every call completes).
+final class BackgroundTaskCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = false
+    private let completeTask: @Sendable (Bool) -> Void
+
+    init(_ completeTask: @escaping @Sendable (Bool) -> Void) {
+        self.completeTask = completeTask
+    }
+
+    var isCompleted: Bool {
+        lock.withLock { completed }
+    }
+
+    /// Completes the task; false if it was already completed.
+    @discardableResult
+    func complete(success: Bool) -> Bool {
+        lock.withLock { completed = true }
+        completeTask(success)
+        return true
     }
 }

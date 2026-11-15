@@ -144,8 +144,9 @@ struct DownloadQueueTests {
         await queue.pause(byUser: true)
         await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
         let task = FakeBackgroundTask()
+        let completion = BackgroundTaskCompletion { _ in }
         let first = WaitResult()
-        Task { await first.set(await queue.waitUntilEmpty(for: task)) }
+        Task { await first.set(await queue.waitUntilEmpty(for: task, completion: completion)) }
         try await Task.sleep(nanoseconds: 300_000_000)
         #expect(await first.value == nil) // still waiting: the queue has a download
         await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
@@ -154,7 +155,7 @@ struct DownloadQueueTests {
         // the background task expiring ends the wait
         await queue.add(chapters: [.init(key: "c2", chapterNumber: 2)], manga: manga, start: .never)
         let second = WaitResult()
-        Task { await second.set(await queue.waitUntilEmpty(for: task)) }
+        Task { await second.set(await queue.waitUntilEmpty(for: task, completion: completion)) }
         try await Task.sleep(nanoseconds: 100_000_000)
         await queue.backgroundTaskExpired(task)
         #expect(await second.wait(seconds: 5) == false)
@@ -168,20 +169,91 @@ struct DownloadQueueTests {
         let queue = await makeQueue()
         await queue.pause(byUser: true)
         await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
-        let expired = FakeBackgroundTask()
-        await queue.backgroundTaskExpired(expired)
+        let task = FakeBackgroundTask()
+        let log = CompletionLog()
+        let completion = BackgroundTaskCompletion { success in log.add(success) }
+        await queue.setBackgroundTask(task)
+        await queue.backgroundTaskWillExpire(task, completion: completion, pause: {}).value
         let late = WaitResult()
-        Task { await late.set(await queue.waitUntilEmpty(for: expired)) }
+        Task { await late.set(await queue.waitUntilEmpty(for: task, completion: completion)) }
         #expect(await late.wait(seconds: 3) == false)
-        // another background task is not affected by that expiry
-        let other = FakeBackgroundTask()
-        let current = WaitResult()
-        Task { await current.set(await queue.waitUntilEmpty(for: other)) }
-        try await Task.sleep(nanoseconds: 300_000_000)
-        #expect(await current.value == nil)
+        #expect(log.calls == [false])
+        #expect(!(await queue.isCurrentBackgroundTask(task)))
         await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
-        #expect(await current.wait(seconds: 5) == true)
-        #expect(await late.wait(seconds: 5) == false) // no wake-up later either
+    }
+
+    /// Two waits at once: the expiry of one task leaves the other waiting until the queue empties.
+    @Test func anExpiryOnlyEndsItsOwnWait() async throws {
+        defer { cleanUp() }
+        let queue = await makeQueue()
+        await queue.pause(byUser: true)
+        await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
+        let expiring = FakeBackgroundTask()
+        let staying = FakeBackgroundTask()
+        let expiringCompletion = BackgroundTaskCompletion { _ in }
+        let stayingCompletion = BackgroundTaskCompletion { _ in }
+        let expiringResult = WaitResult()
+        let stayingResult = WaitResult()
+        Task { await expiringResult.set(await queue.waitUntilEmpty(for: expiring, completion: expiringCompletion)) }
+        Task { await stayingResult.set(await queue.waitUntilEmpty(for: staying, completion: stayingCompletion)) }
+        #expect(await waitForWaiters(queue, 2))
+        await queue.backgroundTaskWillExpire(expiring, completion: expiringCompletion, pause: {}).value
+        #expect(await expiringResult.wait(seconds: 3) == false)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(await stayingResult.value == nil) // still waiting
+        await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
+        #expect(await stayingResult.wait(seconds: 5) == true)
+    }
+
+    /// The expiry and the queue emptying at about the same time: the task is completed exactly once.
+    @Test func theTaskIsCompletedExactlyOnce() async throws {
+        defer { cleanUp() }
+        for round in 0..<60 {
+            let queue = await makeQueue()
+            await queue.pause(byUser: true)
+            await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
+            let task = FakeBackgroundTask()
+            let log = CompletionLog()
+            let completion = BackgroundTaskCompletion { success in log.add(success) }
+            await queue.setBackgroundTask(task)
+            let run = Task { await queue.completeWhenEmpty(task, completion: completion) }
+            #expect(await waitForWaiters(queue, 1))
+            let empty = Task {
+                await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
+            }
+            if round % 2 == 0 { await empty.value } // emptied first, the expiry right behind
+            let expiry = queue.backgroundTaskWillExpire(task, completion: completion, pause: {})
+            await empty.value
+            await expiry.value
+            await run.value
+            #expect(log.calls.count == 1, "round \(round): \(log.calls)")
+            #expect(!(await queue.isCurrentBackgroundTask(task)))
+        }
+    }
+
+    /// An expiry after the wait ended (downloads done) keeps nothing: the system's task is let go.
+    @Test func aLateExpiryKeepsNothing() async throws {
+        let queue = await makeQueue()
+        weak var weakTask: FakeBackgroundTask?
+        let log = CompletionLog()
+        do {
+            let task = FakeBackgroundTask()
+            weakTask = task
+            let completion = BackgroundTaskCompletion { success in log.add(success) }
+            await queue.setBackgroundTask(task)
+            await queue.completeWhenEmpty(task, completion: completion) // empty queue: done at once
+            await queue.backgroundTaskWillExpire(task, completion: completion, pause: {}).value
+        }
+        #expect(log.calls == [true])
+        #expect(weakTask == nil)
+    }
+
+    private func waitForWaiters(_ queue: DownloadQueue, _ count: Int) async -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while await queue.emptyWaiterCount < count && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        return await queue.emptyWaiterCount == count
     }
 
     /// An old background task that wakes up late doesn't touch the current one.
@@ -279,4 +351,12 @@ private actor WaitResult {
 /// Stands in for the system's background task.
 private final class FakeBackgroundTask: NSObject, ProgressReporting, @unchecked Sendable {
     let progress = Progress()
+}
+
+/// The completions a background task got.
+private final class CompletionLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [Bool] = []
+    var calls: [Bool] { lock.withLock { stored } }
+    func add(_ success: Bool) { lock.withLock { stored.append(success) } }
 }
