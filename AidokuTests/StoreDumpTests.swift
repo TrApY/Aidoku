@@ -333,6 +333,22 @@ func expectMetadataListed(_ dump: StoreDump) {
         }
     }
 
+    /// C5: no id leaves in clear in the CSVs (ids are often slugs with the title): not in the keys, not in the
+    /// attributes, not in the relationships.
+    @Test func theCsvsCarryNoIds() throws {
+        let directory = try Self.extremeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dump = try StoreDump.dumpCopy(of: directory)
+        let fields = dump.entities.values.flatMap(\.csvRows).flatMap { $0.split(separator: ",").map(String.init) }
+        let tokens = Set(fields.flatMap { $0.split(separator: "|").map(String.init) })
+        for id in ["m2", "sm2", "c10", "sc10", "b7", "sb7", "t", "st", "s1", "ss1"] {
+            #expect(!tokens.contains(id), "\(id)")
+        }
+        // what is not personal stays readable
+        #expect(tokens.contains("stest"))
+        #expect(tokens.contains("sanilist"))
+    }
+
     /// Deleting follows the model's rules:
     /// - a Manga: its LibraryManga goes (Cascade); its chapters, their updates and histories, its LocalFileInfo
     ///   and the categories stay, only without it (Nullify);
