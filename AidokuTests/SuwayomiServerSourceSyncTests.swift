@@ -45,7 +45,8 @@ private final class SavedConfigs: @unchecked Sendable {
         let all = try spanishSources()
         let local = SuwayomiServerSource(id: "0", name: "Local source", lang: "localsourcelang", displayName: "Local source", isNsfw: false, supportsLatest: true, iconUrl: nil)
         let plan = SuwayomiServerSourceSync.plan(parentKey: parent, existing: [], server: all + [local])
-        #expect(plan.count == all.count)
+        #expect(all.contains { $0.id == "0" }) // the answer has the local source
+        #expect(plan.count == all.filter { $0.id != "0" }.count)
         #expect(!plan.contains { $0.serverSourceId == "0" })
         #expect(plan.allSatisfy { $0.parentKey == parent && $0.key == "\(parent).\($0.serverSourceId)" && $0.available })
         let olympusConfig = try #require(plan.first { $0.serverSourceId == olympus })

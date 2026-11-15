@@ -19,7 +19,24 @@ enum SuwayomiServerSourceSync {
         existing: [SuwayomiServerSourceConfig],
         server: [SuwayomiServerSource]
     ) -> [SuwayomiServerSourceConfig] {
-        [] // pending
+        let mine = existing.filter { $0.parentKey == parentKey }
+        let known = Dictionary(mine.map { ($0.serverSourceId, $0) }, uniquingKeysWith: { first, _ in first })
+        let offered = server.filter { $0.id != SuwayomiServerSources.localSourceId }
+        let onServer = Set(offered.map(\.id))
+        var changes: [SuwayomiServerSourceConfig] = []
+        for source in offered {
+            // new, changed on the server, or back on it
+            let config = SuwayomiServerSourceConfig(parentKey: parentKey, server: source)
+            if known[source.id] != config {
+                changes.append(config)
+            }
+        }
+        for old in mine where old.available && !onServer.contains(old.serverSourceId) {
+            var gone = old
+            gone.available = false
+            changes.append(gone)
+        }
+        return changes
     }
 
     struct Result: Equatable, Sendable {
