@@ -1227,7 +1227,8 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     }
 
     private func setCurrentPages(_ pages: ClosedRange<Int>, position: Double? = nil) {
-         // pendiente[I1#2]
+        // nothing from a reader while the app isn't in front: not the page, not a save, not «seen» (SUWA-12 I1)
+        guard appActivity.isActive else { return }
         guard let totalPages = toolbarView.totalPages else { return }
         let previousPage = currentPage
 
@@ -1342,7 +1343,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
 
     @discardableResult
     func setCompleted() -> Bool {
-         // pendiente[I1#3]
+        guard appActivity.isActive else { return false } // every reader, also the text one (SUWA-12 I1)
         guard !AppSettings.general.incognitoMode.get() else { return false }
 
         let reason = "\(completionTrigger) (\(String(describing: type(of: reader as Any))), página \(currentPage) de \(toolbarView.totalPages ?? 0))"
