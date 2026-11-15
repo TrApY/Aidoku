@@ -478,7 +478,36 @@ extension SuwayomiSourceConversion {
     /// Settings holding source keys, rewritten when nothing is converted (SUWA-12 B4): only if something
     /// would change, and then after a backup (as any conversion); no backup, no rewrite.
     static func rewriteSettingsIfNeeded(parentKeys: [String], env: Environment) async {
-        await rewriteSourceKeySettings(parentKeys: parentKeys, moved: [:], env: env) // pendiente[B4#5]
+        let keys = [
+            AppSettings.browse.pinnedList.key, AppSettings.browse.disabledSources.key, AppSettings.library.filtersData.key,
+            "Data.downloadQueueState", "Data.chaptersToBeDeleted", "Tracker.pageTrackingState"
+        ]
+        // a dry run on a scratch copy of those settings
+        let suite = "suwa12.dryrun.\(UUID().uuidString)"
+        guard let scratch = UserDefaults(suiteName: suite) else { return }
+        defer { scratch.removePersistentDomain(forName: suite) }
+        for key in keys {
+            if let value = env.defaults.object(forKey: key) {
+                scratch.set(value, forKey: key)
+            }
+        }
+        var dry = env
+        dry.defaults = scratch
+        dry.defaultsDomain = suite
+        await rewriteSourceKeySettings(parentKeys: parentKeys, moved: [:], env: dry)
+        let changed = keys.contains { key in
+            let before = env.defaults.object(forKey: key) as AnyObject?
+            let after = scratch.object(forKey: key) as AnyObject?
+            if before == nil && after == nil { return false }
+            guard let before, let after else { return true }
+            return !before.isEqual(after)
+        }
+        guard changed else { return }
+        guard await env.backup() else {
+            LogManager.logger.error("Suwayomi settings not rewritten: the backup before it couldn't be saved")
+            return
+        }
+        await rewriteSourceKeySettings(parentKeys: parentKeys, moved: [:], env: env)
     }
 
     /// Settings whose values hold source keys: pinned sources, disabled sources, library filters, the
