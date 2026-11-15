@@ -68,9 +68,6 @@ class BrowseViewController: BaseTableViewController {
             action: #selector(deleteSelected)
         )
         deleteButton.image = UIImage(systemName: "trash")
-        if #unavailable(iOS 26.0) {
-            deleteButton.tintColor = .systemRed
-        }
         toolbarItems = [
             deleteButton,
             UIBarButtonItem(systemItem: .flexibleSpace)
@@ -310,10 +307,8 @@ extension BrowseViewController {
 
     @objc func openMigrateSourcePage() {
         let viewController = SwiftUINavigationViewController(rootView: MigrateSourcesView())
-        if #available(iOS 26.0, *) {
-            viewController.preferredTransition = .zoom { _ in
-                self.navigationItem.rightBarButtonItems?.last
-            }
+        viewController.preferredTransition = .zoom { _ in
+            self.navigationItem.rightBarButtonItems?.last
         }
         viewController.modalPresentationStyle = .pageSheet
         present(viewController, animated: true)
@@ -327,10 +322,8 @@ extension BrowseViewController {
                 .environmentObject(path)
         )
         path.rootViewController = hostingController
-        if #available(iOS 26.0, *) {
-            hostingController.preferredTransition = .zoom { _ in
-                self.navigationItem.rightBarButtonItems?.first
-            }
+        hostingController.preferredTransition = .zoom { _ in
+            self.navigationItem.rightBarButtonItems?.first
         }
         hostingController.modalPresentationStyle = .pageSheet
         present(hostingController, animated: true)
@@ -738,9 +731,7 @@ extension BrowseViewController {
                 action: #selector(openAddSourcePage)
             )
             addSourceBarButton.title = NSLocalizedString("ADD_SOURCE")
-            if #available(iOS 26.0, *) {
-                addSourceBarButton.sharesBackground = false
-            }
+            addSourceBarButton.sharesBackground = false
 
             let languagesBarButton = UIBarButtonItem(
                 image: UIImage(systemName: "character.book.closed"),
@@ -750,9 +741,7 @@ extension BrowseViewController {
             )
             languagesBarButton.title = NSLocalizedString("LANGUAGES")
             languagesBarButton.accessibilityLabel = NSLocalizedString("LANGUAGES")
-            if #available(iOS 26.0, *) {
-                languagesBarButton.sharesBackground = false
-            }
+            languagesBarButton.sharesBackground = false
 
             navigationItem.rightBarButtonItems = tabControl.selectedSegmentIndex == 0
                 ? [addSourceBarButton, languagesBarButton]
@@ -768,10 +757,8 @@ extension BrowseViewController {
                 UIView.animate(withDuration: CATransaction.animationDuration()) {
                     self.navigationController?.isToolbarHidden = false
                     self.navigationController?.toolbar.alpha = 1
-                    if #available(iOS 26.0, *) {
-                        // hide tab bar on iOS 26 (it covers the toolbar)
-                        self.tabBarController?.isTabBarHidden = true
-                    }
+                    // hide tab bar on iOS 26 (it covers the toolbar)
+                    self.tabBarController?.isTabBarHidden = true
                 }
             }
             // enable items
@@ -781,10 +768,8 @@ extension BrowseViewController {
             // fade out toolbar
             UIView.animate(withDuration: CATransaction.animationDuration()) {
                 self.navigationController?.toolbar.alpha = 0
-                if #available(iOS 26.0, *) {
-                    // reshow tab bar on iOS 26
-                    self.tabBarController?.isTabBarHidden = false
-                }
+                // reshow tab bar on iOS 26
+                self.tabBarController?.isTabBarHidden = false
             } completion: { _ in
                 self.navigationController?.isToolbarHidden = true
             }
