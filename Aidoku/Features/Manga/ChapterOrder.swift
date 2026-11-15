@@ -53,7 +53,7 @@ enum ChapterSortMemory {
             option: ChapterSortOption(flags: flags).rawValue,
             ascending: flags & ChapterFlagMask.sortAscending != 0
         )
-        return stored != .initial ? stored : nil // pendiente[H5#3]
+        return flags & ChapterFlagMask.sortChosen != 0 || stored != .initial ? stored : nil
     }
 
     /// `flags` with the order and the «chosen» bit.
@@ -79,7 +79,8 @@ enum ChapterSortMemory {
     }
 
     static func load(for mangaId: MangaIdentifier, flags: Int, defaults: UserDefaults = .standard) -> ChapterSortChoice {
-        return local(for: mangaId, defaults: defaults) ?? chosen(inFlags: flags) ?? decode(defaults.data(forKey: defaultKey)) ?? .initial // pendiente[H5#4]
+        // the library flags first: a change on the other device wins over an old one here
+        chosen(inFlags: flags) ?? local(for: mangaId, defaults: defaults) ?? decode(defaults.data(forKey: defaultKey)) ?? .initial
     }
 
     /// In the library the order goes to its flags (the caller saves them) and not to the device.
@@ -90,7 +91,11 @@ enum ChapterSortMemory {
         defaults: UserDefaults = .standard
     ) {
         guard let data = try? JSONEncoder().encode(choice) else { return }
-        defaults.set(data, forKey: key(mangaId)) // pendiente[H5#5]
+        if inLibrary {
+            defaults.removeObject(forKey: key(mangaId))
+        } else {
+            defaults.set(data, forKey: key(mangaId))
+        }
         defaults.set(data, forKey: defaultKey)
     }
 

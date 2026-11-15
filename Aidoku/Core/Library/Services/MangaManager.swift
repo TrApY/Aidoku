@@ -160,7 +160,13 @@ extension MangaManager {
                 context: context
             )
             // the order chosen out of the library goes to its flags (synced). SUWA-12 H5
-             // pendiente[H5#8]
+            if
+                let local = ChapterSortMemory.local(for: manga.identifier),
+                let object = CoreDataManager.shared.getManga(mangaId: manga.identifier, context: context),
+                ChapterSortMemory.chosen(inFlags: Int(object.chapterFlags)) == nil
+            {
+                object.chapterFlags = Int16(ChapterSortMemory.flags(local, into: Int(object.chapterFlags)))
+            }
             // add to default category
             let defaultCategory = AppSettings.library.defaultCategory.get()
             if let defaultCategory {
@@ -179,7 +185,7 @@ extension MangaManager {
                 LogManager.logger.error("MangaManager.addToLibrary: \(error.localizedDescription)")
             }
         }
-         // pendiente[H5#9]
+        ChapterSortMemory.forgetLocal(manga.identifier)
         // add enhanced trackers
         if bindTrackers {
             await TrackerManager.shared.bindEnhancedTrackers(manga: manga)

@@ -794,7 +794,11 @@ extension MangaView.ViewModel {
     /// A manga of the library with an order of this device (chosen before it was added, or with the build
     /// of 15-nov): the order goes to its flags and the device's one goes away. SUWA-12 H5.
     private func adoptLocalSort(flags: Int) async {
-         // pendiente[H5#6]
+        guard bookmarked, ChapterSortMemory.local(for: manga.identifier) != nil else { return }
+        if ChapterSortMemory.chosen(inFlags: flags) == nil {
+            await saveFilters() // the order shown, the device's
+        }
+        ChapterSortMemory.forgetLocal(manga.identifier)
     }
 
     private func refilterChapters() {
@@ -961,7 +965,10 @@ extension MangaView.ViewModel {
 
     private func generateChapterFlags() -> Int {
         var flags: Int = 0
-        flags = ChapterSortMemory.flags(.init(option: chapterSortOption.rawValue, ascending: chapterSortAscending), into: 0) & ~ChapterFlagMask.sortChosen // pendiente[H5#7]
+        // only an order chosen goes to the library flags (an inherited one would pass for chosen on the other device)
+        if sortChosen {
+            flags = ChapterSortMemory.flags(.init(option: chapterSortOption.rawValue, ascending: chapterSortAscending), into: 0)
+        }
         for filter in chapterFilters {
             switch filter.type {
                 case .downloaded:
