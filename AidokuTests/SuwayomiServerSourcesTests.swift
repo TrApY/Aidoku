@@ -74,55 +74,7 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         #expect(!SuwayomiServerSources.allowsNsfw(contentRatings: []))
     }
 
-    @Test func settingOffersEverySourceAndRefreshesListingsAndFilters() throws {
-        let available = SuwayomiServerSources.available(try serverSources(), allowNsfw: true)
-        let setting = try #require(SuwayomiServerSources.setting(sources: available))
-        guard case let .group(group) = setting.value else {
-            Issue.record("expected a group")
-            return
-        }
-        let item = try #require(group.items.first)
-        #expect(item.key == "serverSources")
-        #expect(item.refreshes.contains("listings"))
-        #expect(item.refreshes.contains("filters"))
-        guard case let .multiselect(multiselect) = item.value else {
-            Issue.record("expected a multiselect")
-            return
-        }
-        #expect(multiselect.values.count == 62)
-        #expect(multiselect.values.contains(mangaDexEs))
-        let index = try #require(multiselect.values.firstIndex(of: mangaDexEs))
-        #expect(multiselect.titles?[index] == "MangaDex (ES)")
-        #expect(SuwayomiServerSources.setting(sources: []) == nil)
-        #expect(SuwayomiServerSources.defaultsKey(sourceKey: "suwayomi") == "suwayomi.serverSources")
-    }
-
     // MARK: Listings
-
-    @Test func listingsFollowTheSettingOrder() throws {
-        let available = SuwayomiServerSources.available(try serverSources(), allowNsfw: true)
-        let en = try #require(available.first { $0.displayName == "MangaDex (EN)" })
-        let selected = SuwayomiServerSources.selected(ids: [mangaDexEs, en.id, "missing"], from: available)
-        let expected = available.filter { $0.id == mangaDexEs || $0.id == en.id }.map(\.id)
-        #expect(selected.map(\.id) == expected)
-
-        let listings = SuwayomiServerSources.listings(for: selected)
-        #expect(listings.count == 4)
-        let es = listings.filter { $0.id.hasSuffix(mangaDexEs) }
-        #expect(es.map(\.id) == ["popular-\(mangaDexEs)", "latest-\(mangaDexEs)"])
-        #expect(es.allSatisfy { $0.name.contains("MangaDex (ES)") })
-        try #require(es.count == 2)
-        #expect(es[0].name == String(format: NSLocalizedString("SUWAYOMI_LISTING_POPULAR"), "MangaDex (ES)"))
-        #expect(es[1].name == String(format: NSLocalizedString("SUWAYOMI_LISTING_LATEST"), "MangaDex (ES)"))
-        #expect(!es[0].name.contains("SUWAYOMI_LISTING"))
-    }
-
-    @Test func noLatestListingWithoutLatestSupport() {
-        let listings = SuwayomiServerSources.listings(for: [source(id: "7", name: "Solo populares", supportsLatest: false)])
-        #expect(listings.map(\.id) == ["popular-7"])
-        #expect(SuwayomiServerSources.listings(for: []).isEmpty)
-        #expect(SuwayomiServerSources.selected(ids: [], from: [source(id: "7", name: "X", supportsLatest: true)]).isEmpty)
-    }
 
     @Test func parsesListingIds() throws {
         let popular = try #require(SuwayomiServerSources.parseListingId("popular-\(mangaDexEs)"))
@@ -171,27 +123,6 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
             #expect(payload.variables.type == .popular)
             #expect(payload.variables.query == nil)
         }
-    }
-
-    @Test func searchInFilter() throws {
-        let es = source(id: mangaDexEs, name: "MangaDex (ES)", supportsLatest: true)
-        let filter = try #require(SuwayomiServerSources.searchInFilter(sources: [es]))
-        #expect(filter.id == "searchIn")
-        #expect(filter.title == NSLocalizedString("SUWAYOMI_SEARCH_IN"))
-        guard case let .select(select) = filter.value else {
-            Issue.record("expected a select")
-            return
-        }
-        #expect(select.options == [NSLocalizedString("SUWAYOMI_SEARCH_ALL"), NSLocalizedString("LIBRARY"), "MangaDex (ES)"])
-        #expect(select.ids == ["", "library", mangaDexEs])
-        #expect(!select.options[0].contains("SUWAYOMI_"))
-        #expect(select.defaultValue == "")
-        #expect(SuwayomiServerSources.searchInFilter(sources: []) == nil)
-
-        #expect(SuwayomiServerSources.searchSourceId(filters: [.select(id: "searchIn", value: mangaDexEs)]) == mangaDexEs)
-        #expect(SuwayomiServerSources.searchSourceId(filters: [.select(id: "searchIn", value: "")]) == nil)
-        #expect(SuwayomiServerSources.searchSourceId(filters: [.select(id: "category", value: "3")]) == nil)
-        #expect(SuwayomiServerSources.searchSourceId(filters: []) == nil)
     }
 
     // MARK: Responses
@@ -273,55 +204,6 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         let inLibrary = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: inLibraryData)
         #expect(inLibrary.data.manga.inLibrary == true)
         #expect(SuwayomiServerSources.remoteFetchPlan(inLibrary, needsDetails: true, needsChapters: true).isEmpty)
-    }
-
-    @Test func searchTargetDefaultsToEverything() {
-        let selected = [mangaDexEs]
-        #expect(SuwayomiServerSources.searchTarget(filters: [], selectedIds: selected) == .all) // global search
-        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: "")], selectedIds: selected) == .all)
-        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: "library")], selectedIds: selected) == .library)
-        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: mangaDexEs)], selectedIds: selected) == .source(mangaDexEs))
-        // a source no longer selected → everything
-        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: "999")], selectedIds: selected) == .all)
-        #expect(SuwayomiServerSources.searchTarget(filters: [.select(id: "searchIn", value: mangaDexEs)], selectedIds: []) == .all)
-        #expect(SuwayomiServerSources.libraryListing().id == "library")
-        #expect(SuwayomiServerSources.libraryListing().name == NSLocalizedString("LIBRARY"))
-    }
-
-    @Test func searchSourcesFollowSettingOrderAndNsfw() throws {
-        let known = try JSONDecoder().decode(SuwayomiSourcesResponse.self, from: fixture("sources-es")).data.sources.nodes
-        let olympus = "1596411039134168890", emperor = "4562754350961964148", taurus = "5157867187592331768"
-        let selected = [taurus, emperor, olympus, "0", "999"]
-        func ids(_ selected: [String], nsfw: Bool = true, _ languages: Set<String>) -> [String] {
-            SuwayomiServerSources.searchSources(selectedIds: selected, known: known, allowNsfw: nsfw, languages: languages).map(\.id)
-        }
-        func names(_ ids: [String]) -> [String] { ids.compactMap { id in known.first { $0.id == id }?.displayName } }
-        // every source of the languages: the marked ones first, in the setting order, then the rest by name
-        let all = ids(selected, ["es"])
-        #expect(Array(all.prefix(3)) == [olympus, emperor, taurus])
-        let rest = names(Array(all.dropFirst(3)))
-        #expect(rest == rest.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
-        #expect(Set(rest) == ["Inmortal Scan (ES)", "InsanosScan (ES)", "Manga Crab (ES)", "MangaDex (ES)", "MangaDex (ES-419)", "MHScans (ES)", "NexusScanlation (ES)"])
-        // without marks: all of them by name
-        let unmarked = names(ids([], ["es"]))
-        #expect(unmarked.count == 10 && unmarked == unmarked.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
-        // NSFW hidden as before
-        #expect(Set(names(ids(selected, nsfw: false, ["es"]))) == ["Olympus Scanlation (ES)", "Taurus Fansub (ES)", "Inmortal Scan (ES)", "InsanosScan (ES)", "Manga Crab (ES)", "MHScans (ES)"])
-        // other languages; «multi» includes the all-languages sources; nothing enabled: no filter; never the local source
-        #expect(names(ids([], ["en"])) == ["MangaDex (EN)"])
-        #expect(names(ids([], ["en", "multi"])).sorted() == ["MangaDex (ALL)", "MangaDex (EN)"])
-        #expect(ids([], []).count == known.count - 1)
-        #expect(!ids([], []).contains("0"))
-    }
-
-    @Test func everythingResultsKeepOrderWithoutDuplicates() {
-        func manga(_ key: String) -> AidokuRunner.Manga { .init(sourceKey: "suwayomi", key: key, title: key) }
-        let merged = SuwayomiServerSources.mergeSearchResults(
-            library: [manga("156"), manga("7")],
-            sources: [[manga("234"), manga("156")], [], [manga("343"), manga("234"), manga("344")]]
-        )
-        #expect(merged.map(\.key) == ["156", "7", "234", "343", "344"])
-        #expect(SuwayomiServerSources.mergeSearchResults(library: [], sources: []).isEmpty)
     }
 
     @Test func noChaptersFoundIsRecognised() throws {

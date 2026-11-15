@@ -276,7 +276,9 @@ extension SourceManager {
 
 // MARK: Source Info Fetching
 extension SourceManager {
-    func getSourceInfos(sorted: Bool = true, includeDisabled: Bool = true) async -> [SourceInfo] {
+    /// - listedOnly: without what isn't offered as a source (a Suwayomi connection, a server source the
+    ///   server doesn't have anymore): Explorar, migration targets.
+    func getSourceInfos(sorted: Bool = true, includeDisabled: Bool = true, listedOnly: Bool = false) async -> [SourceInfo] {
         await waitForSourcesLoad()
 
         var sourceById: [String: ExternalSourceInfo] = [:]
@@ -300,6 +302,9 @@ extension SourceManager {
         var infos: [SourceInfo] = objects
             .compactMap { source in
                 guard var info = source.toInfo() else { return nil }
+                if listedOnly && !SuwayomiConnections.shared.isListed(info.sourceId) {
+                    return nil
+                }
                 let disabled = disabledSourceKeys.contains(info.sourceId)
                 if !includeDisabled && disabled {
                     return nil
@@ -320,10 +325,14 @@ extension SourceManager {
         return infos
     }
 
-    func getLoadedSources(sorted: Bool = false) async -> [AidokuRunner.Source] {
+    /// - listedOnly: as in `getSourceInfos` (global search, migration).
+    func getLoadedSources(sorted: Bool = false, listedOnly: Bool = false) async -> [AidokuRunner.Source] {
         await waitForSourcesLoad()
+        let sources = listedOnly
+            ? sourcesByKey.filter { SuwayomiConnections.shared.isListed($0.key) }
+            : sourcesByKey
         if sorted {
-            return sourcesByKey.values
+            return sources.values
                 .sorted { lhs, rhs in
                     let languageOrder = SourceLanguage.compare(lhs.languages, rhs.languages)
                     if languageOrder != .orderedSame {
@@ -332,7 +341,7 @@ extension SourceManager {
                     return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
                 }
         } else {
-            return Array(sourcesByKey.values)
+            return Array(sources.values)
         }
     }
 
@@ -665,6 +674,38 @@ extension SourceManager {
         return source.key
     }
 
+    /// Adds a source with a config of its own and a key fixed by it (a Suwayomi server source), or updates
+    /// it if it exists. Returns false if it couldn't be saved.
+    @discardableResult
+    func addOrUpdateCustomSource(config: CustomSourceConfig) async -> Bool {
+        let source = config.toSource()
+        let key = source.key
+        let saved: Bool = await CoreDataManager.shared.container.performBackgroundTask { context in
+            let object = CoreDataManager.shared.getSource(key: key, context: context)
+                ?? CoreDataManager.shared.createSource(source: source, context: context)
+            object.customSource = config.encode() as NSObject
+            do {
+                try context.save()
+                return true
+            } catch {
+                LogManager.logger.error("Failed to save source \(key): \(error)")
+                return false
+            }
+        }
+        guard saved else { return false }
+        if !disabledSourceKeys.contains(key) {
+            sourcesByKey[key] = source
+        }
+        loadSourceLanguages()
+        return true
+    }
+
+    /// Tells the views the source list changed (after several `addOrUpdateCustomSource`).
+    func publishSourceChanges(keys: [String]) async {
+        await publishSourceState()
+        notifySourcesLoaded(keys: keys)
+    }
+
     func updateCustomSource(key: String, config: CustomSourceConfig, updateSourceList: Bool = false) async {
         let newDbSource = await CoreDataManager.shared.container.performBackgroundTask { context in
             let source = CoreDataManager.shared.getSource(key: key, context: context)
@@ -732,6 +773,7 @@ extension SourceManager {
         }
 
         sourcesByKey.removeValue(forKey: sourceKey)
+        SuwayomiConnections.shared.unregister(sourceKey)
         removeSettings(from: sourceKey)
         unpin(sourceKey: sourceKey, skipUpdateNotification: true)
         await enable(sourceKey: sourceKey, skipUpdateNotification: true)
@@ -747,7 +789,10 @@ extension SourceManager {
         let userDefaults = UserDefaults.standard
         let keys = userDefaults.dictionaryRepresentation().keys
 
-        for key in keys where key.hasPrefix(sourceKey) {
+        // the key's own settings (`<key>.…`), not those of another key that only starts the same
+        // (`suwayomi.todo-1` when removing `suwayomi.todo`); a Suwayomi connection's server sources
+        // (`<key>.<id>.…`) go with it
+        for key in keys where key.hasPrefix(sourceKey) { // pending
             userDefaults.removeObject(forKey: key)
         }
     }
@@ -768,6 +813,7 @@ extension SourceManager {
     /// Gets a list of pinned sources.
     func getPinned() -> [AidokuRunner.Source] {
         AppSettings.browse.pinnedList.get()
+            .filter { SuwayomiConnections.shared.isListed($0) }
             .compactMap { sourcesByKey[$0] }
     }
 

@@ -238,7 +238,9 @@ extension SettingsTrackingView {
                 komgaSources.append(source)
             } else if source.key.hasPrefix(KavitaSourceRunner.sourceKeyPrefix) {
                 kavitaSources.append(source)
-            } else if source.key.hasPrefix(SuwayomiSourceRunner.sourceKeyPrefix) {
+            } else if source.key.hasPrefix(SuwayomiSourceRunner.sourceKeyPrefix),
+                      SuwayomiConnections.shared.child(source.key) == nil {
+                // one switch per connection: its server sources follow it
                 suwayomiSources.append(source)
             }
         }

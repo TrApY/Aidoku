@@ -15,8 +15,18 @@ struct SuwayomiHelper: Sendable {
     /// A shorter timeout for every request made inside (work nobody waits for, as a migration's).
     @TaskLocal static var requestTimeout: TimeInterval?
 
+    /// The connection key: where the server and the login are (the parent's for a server source).
     let sourceKey: String
     var transport: Transport = { try await URLSession.shared.data(for: $0) }
+
+    /// `sourceKey` may be any Suwayomi source key (a server source, a connection, the source part of a
+    /// track id): the connection is resolved from the saved configs.
+    init(sourceKey: String, transport: Transport? = nil) {
+        self.sourceKey = SuwayomiConnections.shared.connectionKey(for: sourceKey)
+        if let transport {
+            self.transport = transport
+        }
+    }
 
     func authorize(request: inout URLRequest) {
         if let cookie = UserDefaults.standard.string(forKey: "\(sourceKey).cookie") {

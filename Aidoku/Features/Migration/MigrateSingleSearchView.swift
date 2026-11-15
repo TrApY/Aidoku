@@ -91,8 +91,7 @@ struct MigrateSingleSearchView: View {
                             SourceIconView(
                                 sourceId: source.key,
                                 imageUrl: searchResult.imageUrl,
-                                iconSize: 29,
-                                source: searchResult.section != nil ? source : nil // server icons need its login
+                                iconSize: 29
                             )
                             .scaleEffect(0.75)
                             Text(searchResult.title)

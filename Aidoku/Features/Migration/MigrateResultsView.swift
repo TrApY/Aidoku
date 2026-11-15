@@ -130,14 +130,9 @@ extension MigrateResultsView {
 
         nonisolated func search(for manga: AidokuRunner.Manga) async -> (MangaIdentifier, AidokuRunner.Manga?) {
             // check sources until a manga is found
-            for source in targetSources {
+            for source in GlobalSearch.targetOrder(targetSources, for: manga) {
                 let rows = await GlobalSearch.rows(for: source, query: manga.title)
-                // a server source (Suwayomi): avoid the manga's own server source if it's known
-                var oldServerSourceId: String?
-                if source.key == manga.sourceKey, let grouped = source.runner as? GroupedSearchRunner {
-                    oldServerSourceId = await grouped.serverSourceId(ofMangaKey: manga.key)
-                }
-                if let newManga = GlobalSearch.bestMatch(for: manga, oldServerSourceId: oldServerSourceId, rows: rows) {
+                if let newManga = GlobalSearch.bestMatch(for: manga, rows: rows) {
                     return (manga.identifier, newManga)
                 }
             }

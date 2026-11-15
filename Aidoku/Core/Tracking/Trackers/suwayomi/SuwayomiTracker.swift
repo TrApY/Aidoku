@@ -81,8 +81,11 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
     }
 
     func canRegister(mangaId: MangaIdentifier) -> Bool {
+        // a server source follows its connection's switch (Ajustes › Seguimiento lists the connections)
         mangaId.sourceKey.hasPrefix(SuwayomiSourceRunner.sourceKeyPrefix)
-            && !UserDefaults.standard.bool(forKey: "\(mangaId.sourceKey).disableTracking")
+            && !UserDefaults.standard.bool(
+                forKey: "\(mangaId.sourceKey).disableTracking" // pending
+            )
     }
 
     func setProgress(trackId: String, chapterId: ChapterIdentifier, progress: ChapterReadProgress) async throws {
@@ -135,7 +138,10 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
                 for item in items {
                     guard let id = item.id else { continue }
                     let (itemSourceKey, _) = try self.getIdParts(from: id)
-                    if itemSourceKey == sourceKey {
+                    // removing a connection also removes its server sources' items (old `<parent>|<id>`
+                    // and new `<child>|<id>` ids)
+                    if itemSourceKey == sourceKey
+                        || SuwayomiConnections.shared.connectionKey(for: itemSourceKey) == sourceKey {
                         context.delete(item)
                     }
                 }

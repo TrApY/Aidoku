@@ -14,6 +14,8 @@ enum CustomSourceConfig {
     case komga(KeyNameServer)
     case kavita(KeyNameServer)
     case suwayomi(KeyNameServer)
+    /// A source installed on a Suwayomi server (its connection is `parentKey`).
+    case suwayomiServerSource(SuwayomiServerSourceConfig)
 
     struct KeyNameServer {
         let key: String
@@ -35,6 +37,8 @@ extension CustomSourceConfig {
                 .kavita(key: config.key, name: config.name, server: config.server)
             case let .suwayomi(config):
                 .suwayomi(key: config.key, name: config.name, server: config.server)
+            case let .suwayomiServerSource(config):
+                .suwayomiServerSource(config)
         }
     }
 }
@@ -85,6 +89,16 @@ extension CustomSourceConfig {
                 let name = try decodeString()
                 let server = try decodeString()
                 self = .suwayomi(.init(key: key, name: name, server: server))
+            case 5:
+                var strings: [String] = []
+                for _ in 0..<6 {
+                    strings.append(try decodeString())
+                }
+                guard currentIndex < data.endIndex else {
+                    throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Missing flags"))
+                }
+                let flags = data[currentIndex]
+                self = .suwayomiServerSource(try .init(strings: strings, flags: flags))
             default:
                 throw DecodingError.dataCorrupted(.init(
                     codingPath: [],
@@ -122,6 +136,14 @@ extension CustomSourceConfig {
                     varInt(UInt64(utf8.count), data: &bytes)
                     bytes.append(contentsOf: utf8)
                 }
+            case let .suwayomiServerSource(config):
+                bytes.append(5)
+                for string in config.codingStrings {
+                    let utf8 = [UInt8](string.utf8)
+                    varInt(UInt64(utf8.count), data: &bytes)
+                    bytes.append(contentsOf: utf8)
+                }
+                bytes.append(config.codingFlags)
         }
 
         return bytes

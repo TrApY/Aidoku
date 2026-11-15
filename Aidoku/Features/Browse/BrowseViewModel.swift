@@ -25,7 +25,7 @@ class BrowseViewModel {
     private var storedInstalledSources: [SourceInfo]?
 
     func loadInstalledSources() async {
-        let installedSources = await SourceManager.shared.getSourceInfos()
+        let installedSources = await SourceManager.shared.getSourceInfos(listedOnly: true)
         if storedInstalledSources != nil {
             storedInstalledSources = installedSources
             search(query: query)

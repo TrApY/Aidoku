@@ -231,63 +231,15 @@ struct SuwayomiAddToLibraryPayload: Encodable, Sendable {
 
 // MARK: Logic
 
-/// Where a search goes, from the "search in" filter.
-enum SuwayomiSearchTarget: Equatable, Sendable {
-    /// The server library and every source chosen in the settings (default).
-    case all
-    /// Only the server library, with its filters.
-    case library
-    /// One server source.
-    case source(String)
-}
-
 enum SuwayomiServerSources {
     /// Id of the server's built-in local source, never offered.
     static let localSourceId = "0"
-    /// Settings key (namespaced by the source key) holding the selected server source ids.
-    static let settingKey = "serverSources"
-    /// Search filter id for choosing where to search.
-    static let searchInFilterId = "searchIn"
     /// Fetching from the origin websites can be slow.
     static let fetchTimeout: TimeInterval = 90
     /// Searching one server source.
     static let searchSourceTimeout: TimeInterval = 30
     /// Listing the installed sources must not block settings or listings when the server is down.
     static let sourcesTimeout: TimeInterval = 10
-
-    static func defaultsKey(sourceKey: String) -> String {
-        "\(sourceKey).\(settingKey)"
-    }
-
-    /// Last list of installed sources received from the server (all of them, unfiltered).
-    static func snapshotKey(sourceKey: String) -> String {
-        "\(sourceKey).serverSourcesSnapshot"
-    }
-
-    /// Sources to search in «Todo»: the selected ones, in the settings order and without NSFW if hidden.
-    /// Sources a search covers (global search, migration, «Todo», «Buscar en»): EVERY source installed on
-    /// the server in the languages enabled in Aidoku (none enabled: any language; «multi» also takes the
-    /// all-languages ones), without the local source and without NSFW if hidden. The ones marked in the
-    /// setting first, in the setting order, then the rest by name. The marks are only for the listings.
-    static func searchSources(
-        selectedIds: [String],
-        known: [SuwayomiServerSource],
-        allowNsfw: Bool,
-        languages: Set<String>
-    ) -> [SuwayomiServerSource] {
-        let enabled = Set(languages.map(SourceLanguage.normalized))
-        let inLanguages = available(known, allowNsfw: allowNsfw).filter { source in
-            guard !enabled.isEmpty else { return true }
-            let lang = source.lang.lowercased() == "all" ? SourceLanguage.multi : SourceLanguage.normalized(source.lang)
-            return enabled.contains(lang)
-        }
-        let marked = selected(ids: selectedIds, from: inLanguages)
-        let markedIds = Set(marked.map(\.id))
-        let rest = inLanguages
-            .filter { !markedIds.contains($0.id) }
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-        return marked + rest
-    }
 
     /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",
     /// the equivalent of Aidoku's `containsNsfw` rating.
@@ -301,33 +253,7 @@ enum SuwayomiServerSources {
         sources.filter { $0.id != localSourceId && (allowNsfw || !$0.isNsfw) }
     }
 
-    /// Selected sources, in the order they appear in the setting.
-    static func selected(ids: [String], from available: [SuwayomiServerSource]) -> [SuwayomiServerSource] {
-        let ids = Set(ids)
-        return available.filter { ids.contains($0.id) }
-    }
-
-    static func listings(for sources: [SuwayomiServerSource]) -> [AidokuRunner.Listing] {
-        sources.flatMap { source in
-            var listings: [AidokuRunner.Listing] = [
-                .init(
-                    id: "popular-\(source.id)",
-                    name: String(format: NSLocalizedString("SUWAYOMI_LISTING_POPULAR"), source.displayName),
-                    kind: .default
-                )
-            ]
-            if source.supportsLatest {
-                listings.append(.init(
-                    id: "latest-\(source.id)",
-                    name: String(format: NSLocalizedString("SUWAYOMI_LISTING_LATEST"), source.displayName),
-                    kind: .default
-                ))
-            }
-            return listings
-        }
-    }
-
-    /// Parses a listing id created by `listings(for:)`.
+    /// Parses a listing id created by `childListings(for:)`.
     static func parseListingId(_ id: String) -> (type: SuwayomiFetchSourceMangaType, sourceId: String)? {
         for (prefix, type) in [("popular-", SuwayomiFetchSourceMangaType.popular), ("latest-", .latest)]
             where id.hasPrefix(prefix)
@@ -352,51 +278,6 @@ enum SuwayomiServerSources {
         return .init(variables: .init(source: sourceId, type: .popular, page: page, query: nil))
     }
 
-    /// The raw value of the "search in" filter: a server source id, `searchInLibraryId`,
-    /// or nil when absent or empty («Todo»).
-    static func searchSourceId(filters: [AidokuRunner.FilterValue]) -> String? {
-        for filter in filters {
-            if case let .select(id, value) = filter, id == searchInFilterId, !value.isEmpty {
-                return value
-            }
-        }
-        return nil
-    }
-
-    static func searchInFilter(sources: [SuwayomiServerSource]) -> AidokuRunner.Filter? {
-        guard !sources.isEmpty else { return nil }
-        return .init(
-            id: searchInFilterId,
-            title: NSLocalizedString("SUWAYOMI_SEARCH_IN"),
-            value: .select(.init(
-                options: [NSLocalizedString("SUWAYOMI_SEARCH_ALL"), NSLocalizedString("LIBRARY")] + sources.map(\.displayName),
-                ids: ["", searchInLibraryId] + sources.map(\.id),
-                defaultValue: ""
-            ))
-        )
-    }
-
-    static func setting(sources: [SuwayomiServerSource]) -> AidokuRunner.Setting? {
-        guard !sources.isEmpty else { return nil }
-        return .init(
-            title: "SUWAYOMI_SERVER_SOURCES",
-            value: .group(.init(
-                footer: "SUWAYOMI_SERVER_SOURCES_INFO",
-                items: [
-                    .init(
-                        key: settingKey,
-                        title: "SUWAYOMI_SERVER_SOURCES",
-                        refreshes: ["listings", "filters"],
-                        value: .multiselect(.init(
-                            values: sources.map(\.id),
-                            titles: sources.map(\.displayName)
-                        ))
-                    )
-                ]
-            ))
-        )
-    }
-
     static func mangaPage(
         _ response: SuwayomiFetchSourceMangaResponse,
         sourceKey: String,
@@ -409,62 +290,6 @@ enum SuwayomiServerSources {
     }
 
     static let libraryListingId = "library"
-
-    // MARK: Search everywhere
-
-    /// "Search in" value for the server library only ("" is everything).
-    static let searchInLibraryId = "library"
-    /// Max time per server source when searching everywhere.
-    static let searchAllTimeout: TimeInterval = 20
-
-    /// Where to search: everything by default (also when the filter is absent, as in Aidoku's global search),
-    /// the library, or one source still selected in the settings (a deselected one → everything).
-    static func searchTarget(filters: [AidokuRunner.FilterValue], selectedIds: [String]) -> SuwayomiSearchTarget {
-        guard let value = searchSourceId(filters: filters) else { return .all }
-        if value == searchInLibraryId { return .library }
-        return selectedIds.contains(value) ? .source(value) : .all
-    }
-
-    /// Library results first, then each source in order, skipping manga already listed (same server id).
-    static func mergeSearchResults(library: [AidokuRunner.Manga], sources: [[AidokuRunner.Manga]]) -> [AidokuRunner.Manga] {
-        var seen = Set<String>()
-        return (library + sources.flatMap { $0 }).filter { seen.insert($0.key).inserted }
-    }
-
-    /// Sections of a grouped search: the library (when it found something), then every source in order,
-    /// also those without results («Sin resultados») and those that failed or were too slow («No respondió»).
-    /// A manga in the library also stays in its source.
-    static func groupedSections(
-        library: [AidokuRunner.Manga],
-        sources: [(source: SuwayomiServerSource, entries: [AidokuRunner.Manga]?)],
-        baseUrl: URL,
-        libraryTitle: String
-    ) -> [GroupedSearchSection] {
-        var sections: [GroupedSearchSection] = []
-        if !library.isEmpty {
-            sections.append(.init(id: searchInLibraryId, title: libraryTitle, iconUrl: nil, entries: library))
-        }
-        for (source, entries) in sources {
-            guard let entries else {
-                sections.append(.init(
-                    id: source.id,
-                    title: source.displayName,
-                    iconUrl: iconUrl(source.iconUrl, baseUrl: baseUrl),
-                    entries: [],
-                    failed: true
-                ))
-                continue
-            }
-            var seen = Set<String>()
-            sections.append(.init(
-                id: source.id,
-                title: source.displayName,
-                iconUrl: iconUrl(source.iconUrl, baseUrl: baseUrl),
-                entries: entries.filter { seen.insert($0.key).inserted }
-            ))
-        }
-        return sections
-    }
 
     /// A server icon path («/api/v1/extension/icon/…») as a URL on the server (as the covers).
     static func iconUrl(_ path: String?, baseUrl: URL) -> URL? {

@@ -68,7 +68,7 @@ struct MigrateSelectDestinationView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button(NSLocalizedString("CONTINUE")) {
                     Task {
-                        let allSources = await SourceManager.shared.getLoadedSources()
+                        let allSources = await SourceManager.shared.getLoadedSources(listedOnly: true)
                         var sources: [AidokuRunner.Source] = []
                         for source in allSources where selectedSources.contains(where: { $0.sourceId == source.key }) {
                             sources.append(source)
@@ -98,7 +98,7 @@ struct MigrateSelectDestinationView: View {
 
 extension MigrateSelectDestinationView {
     func loadSources() async {
-        availableSources = await SourceManager.shared.getSourceInfos(includeDisabled: false)
+        availableSources = await SourceManager.shared.getSourceInfos(includeDisabled: false, listedOnly: true)
         pinnedSources = await SourceManager.shared.getPinned().map { $0.toInfo() }
     }
 }

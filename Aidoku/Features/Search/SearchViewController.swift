@@ -258,7 +258,7 @@ class SearchViewController: UIViewController {
     }
 
     private func loadSources() async {
-        sources = await SourceManager.shared.getLoadedSources(sorted: true)
+        sources = await SourceManager.shared.getLoadedSources(sorted: true, listedOnly: true)
         hasLoadedSources = true
 
         // ensure filters don't reference removed sources
@@ -345,15 +345,6 @@ class SearchViewController: UIViewController {
                 await sourceController.viewModel.setHasMore(result.result.hasNextPage)
                 navigationController?.pushViewController(sourceController, animated: true)
             }
-        } else if let section = result.section {
-            // a server source's row: the source with «Buscar en» set to it (or to the library)
-            let sourceController = NewSourceViewController(
-                source: result.source,
-                onlySearch: true,
-                searchQuery: searchText,
-                initialFilters: [.select(id: SuwayomiServerSources.searchInFilterId, value: section.id)]
-            )
-            navigationController?.pushViewController(sourceController, animated: true)
         } else {
             let sourceController = NewSourceViewController(source: result.source, onlySearch: true, searchQuery: searchText)
             navigationController?.pushViewController(sourceController, animated: true)

@@ -15,7 +15,8 @@ extension AidokuRunner.Source {
         name: String,
         server: String
     ) -> AidokuRunner.Source {
-        .init(
+        SuwayomiConnections.shared.register(connection: key)
+        return .init(
             url: nil,
             key: key,
             name: name,
@@ -46,41 +47,44 @@ extension AidokuRunner.Source {
             runner: SuwayomiSourceRunner(sourceKey: key, name: name, server: server)
         )
     }
+
+    /// A source installed on the server, as an Aidoku source of its own: its listings and search only
+    /// cover that server source; the server and the login are the parent's.
+    static func suwayomiServerSource(_ config: SuwayomiServerSourceConfig) -> AidokuRunner.Source {
+        SuwayomiConnections.shared.register(child: config)
+        let server = UserDefaults.standard.string(forKey: "\(config.parentKey).server") ?? ""
+        return .init(
+            url: nil,
+            key: config.key,
+            name: config.name,
+            version: 1,
+            languages: config.languages,
+            urls: URL(string: server).map { [$0] } ?? [],
+            contentRating: config.contentRating,
+            imageUrl: SuwayomiServerSourceIcons.storedIconUrl(sourceKey: config.key),
+            config: .init(supportsAuthorSearch: false, supportsTagSearch: false),
+            staticListings: SuwayomiServerSources.childListings(for: config),
+            staticFilters: [],
+            staticSettings: [],
+            runner: SuwayomiSourceRunner(sourceKey: config.key, name: config.name, server: server, serverSource: config)
+        )
+    }
 }
 
 actor SuwayomiSourceRunner: Runner {
     static let sourceKeyPrefix = "suwayomi"
 
+    /// The identity of the source (stamped on its manga).
     let sourceKey: String
+    /// Server and login: the connection's (the parent's for a server source).
     let helper: SuwayomiHelper
+    /// Set for a source installed on the server (a child): listings and search only cover it.
+    let serverSource: SuwayomiServerSourceConfig?
 
-    let features: SourceFeatures = .init(
-        providesListings: true,
-        dynamicFilters: true,
-        dynamicSettings: true,
-        dynamicListings: true,
-        providesImageRequests: true,
-        providesBaseUrl: true,
-        handlesNotifications: true,
-        handlesBasicLogin: true
-    )
+    let features: SourceFeatures
 
     private var name: String
     private var server: String
-    /// Last list of installed sources received from the server, unfiltered (also stored in
-    /// UserDefaults, used if the server stops answering), and when it was received.
-    private var serverSourcesCache: [SuwayomiServerSource]?
-    private var serverSourcesFetchedAt: Date?
-    /// Last failed attempt to get the list from «Todo» (cool down before asking again).
-    private var serverSourcesFailedAt: Date?
-    private var serverSourcesRefresh: Task<Void, Never>?
-    /// «Todo» refreshes the cached source list in the background after this time.
-    private let serverSourcesMaxAge: TimeInterval
-    /// After a failed attempt, «Todo» doesn't ask for the list again during this time.
-    private let serverSourcesRetryDelay: TimeInterval
-
-    /// Max time per server source when searching everywhere (shorter in tests).
-    private let searchAllTimeout: TimeInterval
     /// Categories and tags for the filters are asked again after this time.
     private let filterCacheMaxAge: TimeInterval
     private var filterCache: (categories: [FilterItem], tags: [FilterItem], at: Date)?
@@ -89,30 +93,40 @@ actor SuwayomiSourceRunner: Runner {
         sourceKey: String,
         name: String,
         server: String,
+        serverSource: SuwayomiServerSourceConfig? = nil,
         transport: SuwayomiHelper.Transport? = nil,
-        searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout,
-        serverSourcesMaxAge: TimeInterval = 5 * 60,
-        serverSourcesRetryDelay: TimeInterval = 60,
         filterCacheMaxAge: TimeInterval = 10 * 60,
-        searchLanguages: (@Sendable () -> Set<String>)? = nil
+        searchLimiter: SuwayomiSearchLimiter? = nil
     ) {
-        self.searchLanguages = searchLanguages ?? { AppSettings.browse.languages.get() }
         self.sourceKey = sourceKey
+        self.serverSource = serverSource
         self.filterCacheMaxAge = filterCacheMaxAge
-        self.searchAllTimeout = searchAllTimeout
-        self.serverSourcesMaxAge = serverSourcesMaxAge
-        self.serverSourcesRetryDelay = serverSourcesRetryDelay
         self.helper = if let transport {
             .init(sourceKey: sourceKey, transport: transport)
         } else {
             .init(sourceKey: sourceKey)
         }
+        self.searchLimiter = searchLimiter ?? SuwayomiSearchLimiter.shared(for: helper.sourceKey)
         self.name = name
         self.server = server
+        self.features = if serverSource != nil {
+            .init(providesListings: true, providesImageRequests: true, providesBaseUrl: true)
+        } else {
+            .init(
+                providesListings: true,
+                dynamicFilters: true,
+                dynamicSettings: true,
+                dynamicListings: true,
+                providesImageRequests: true,
+                providesBaseUrl: true,
+                handlesNotifications: true,
+                handlesBasicLogin: true
+            )
+        }
     }
 
-    /// The languages enabled in Aidoku (the source list filter): a search covers the server sources in them.
-    private let searchLanguages: @Sendable () -> Set<String>
+    /// At most 4 searches at a time against the server (all the sources of a server are one server).
+    private let searchLimiter: SuwayomiSearchLimiter
 
     private enum SortOption: CaseIterable {
         case unreadChapters
@@ -147,29 +161,17 @@ actor SuwayomiSourceRunner: Runner {
 
     func getSearchMangaList(query: String?, page: Int, filters: [AidokuRunner.FilterValue]) async throws -> AidokuRunner.MangaPageResult {
         let baseUrl = try helper.getConfiguredServer()
-        // «Buscar en» = a marked source, or any other source a search covers
-        var searchableIds = selectedServerSourceIds()
-        if let value = SuwayomiServerSources.searchSourceId(filters: filters),
-           value != SuwayomiServerSources.searchInLibraryId, !searchableIds.contains(value) {
-            searchableIds += await serverSourcesForSearch().map(\.id)
-        }
-        switch SuwayomiServerSources.searchTarget(filters: filters, selectedIds: searchableIds) {
-            case let .source(serverSourceId):
-                // searching an installed source: the library filters don't apply
-                let response: SuwayomiFetchSourceMangaResponse = try await helper.request(
-                    body: SuwayomiServerSources.searchPayload(sourceId: serverSourceId, query: query, page: page),
+        if let serverSource {
+            // a server source: its own search (without text, its popular list)
+            let response: SuwayomiFetchSourceMangaResponse = try await searchLimiter.run { [helper] in
+                try await helper.request(
+                    body: SuwayomiServerSources.searchPayload(sourceId: serverSource.serverSourceId, query: query, page: page),
                     timeout: SuwayomiServerSources.searchSourceTimeout
                 )
-                return SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl)
-            case .all:
-                let query = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                // without text, everything is the library (as before); with it, every source of the server
-                if !query.isEmpty {
-                    return try await searchEverywhere(query: query, page: page, filters: filters, baseUrl: baseUrl)
-                }
-            case .library:
-                break
+            }
+            return SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl)
         }
+        // the connection: the server library (it is not offered as a source, but its manga still open)
         return .init(entries: try await searchLibrary(query: query, filters: filters, baseUrl: baseUrl), hasNextPage: false)
     }
 
@@ -221,76 +223,6 @@ actor SuwayomiSourceRunner: Runner {
         )))
         let nodes = sort(response.data.mangas.nodes, sort: searchFilter.localSort) // todo
         return nodes.compactMap { $0.intoManga(sourceKey: sourceKey, baseUrl: baseUrl) }
-    }
-
-    /// «Todo»: the server library plus the first page of every selected source, in parallel.
-    /// Sources that fail or take longer than `searchAllTimeout` are skipped; the whole search only
-    /// fails when nothing answers.
-    private func searchEverywhere(
-        query: String,
-        page: Int,
-        filters: [AidokuRunner.FilterValue],
-        baseUrl: URL
-    ) async throws -> AidokuRunner.MangaPageResult {
-        guard page == 1 else { return .init(entries: [], hasNextPage: false) }
-        let (library, perSource) = try await searchLibraryAndSources(query: query, filters: filters, baseUrl: baseUrl)
-        return .init(
-            entries: SuwayomiServerSources.mergeSearchResults(library: library, sources: perSource.compactMap(\.entries)),
-            hasNextPage: false
-        )
-    }
-
-    /// The library and each selected source (settings order; nil entries = failed or too slow).
-    private func searchLibraryAndSources(
-        query: String,
-        filters: [AidokuRunner.FilterValue],
-        baseUrl: URL
-    ) async throws -> (library: [AidokuRunner.Manga], sources: [(source: SuwayomiServerSource, entries: [AidokuRunner.Manga]?)]) {
-        // settings order, as the listings
-        let sources = await serverSourcesForSearch()
-        let sourceIds = sources.map(\.id)
-
-        let helper = helper
-        let sourceKey = sourceKey
-        let timeout = searchAllTimeout
-        async let sourceResults = withTaskGroup(of: (Int, [AidokuRunner.Manga]?).self) { group in
-            for (index, sourceId) in sourceIds.enumerated() {
-                group.addTask {
-                    do {
-                        let response: SuwayomiFetchSourceMangaResponse = try await SuwayomiServerSources.withTimeout(timeout) {
-                            try await helper.request(
-                                body: SuwayomiServerSources.searchPayload(sourceId: sourceId, query: query, page: 1),
-                                timeout: timeout
-                            )
-                        }
-                        return (index, SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl).entries)
-                    } catch {
-                        LogManager.logger.warn("Suwayomi search in source \(sourceId) skipped: \(error)")
-                        return (index, nil)
-                    }
-                }
-            }
-            var results = [[AidokuRunner.Manga]?](repeating: nil, count: sourceIds.count)
-            for await (index, entries) in group {
-                results[index] = entries
-            }
-            return results
-        }
-
-        let library: [AidokuRunner.Manga]
-        var libraryError: Error?
-        do {
-            library = try await searchLibrary(query: query, filters: filters, baseUrl: baseUrl)
-        } catch {
-            LogManager.logger.warn("Suwayomi library search failed: \(error)")
-            library = []
-            libraryError = error
-        }
-        let perSource = await sourceResults
-        if let libraryError, perSource.allSatisfy({ $0 == nil }) {
-            throw libraryError
-        }
-        return (library, Array(zip(sources, perSource)).map { (source: $0.0, entries: $0.1) })
     }
 
     func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
@@ -406,12 +338,15 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     func getMangaList(listing: AidokuRunner.Listing, page: Int) async throws -> AidokuRunner.MangaPageResult {
-        if listing.id == SuwayomiServerSources.libraryListingId {
+        if serverSource == nil {
             // the server library, as the library search without text nor filters
             let baseUrl = try helper.getConfiguredServer()
             return .init(entries: try await searchLibrary(query: nil, filters: [], baseUrl: baseUrl), hasNextPage: false)
         }
-        guard let payload = SuwayomiServerSources.listingPayload(listingId: listing.id, page: page) else {
+        guard
+            let payload = SuwayomiServerSources.listingPayload(listingId: listing.id, page: page),
+            payload.variables.source == serverSource?.serverSourceId // only its own lists
+        else {
             return .init(entries: [], hasNextPage: false)
         }
         let baseUrl = try helper.getConfiguredServer()
@@ -423,9 +358,11 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     func getListings() async throws -> [AidokuRunner.Listing] {
-        // the library always comes first (the source opens on it); server sources are optional
-        let serverSources = (try? await selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)) ?? []
-        return [SuwayomiServerSources.libraryListing()] + SuwayomiServerSources.listings(for: serverSources)
+        if let serverSource {
+            return SuwayomiServerSources.childListings(for: serverSource)
+        }
+        // the connection: only the server library (each server source is a source of its own)
+        return [SuwayomiServerSources.libraryListing()]
     }
 
     func getImageRequest(url: String, context: PageContext?) async throws -> URLRequest {
@@ -437,6 +374,7 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     func getSettings() async throws -> [Setting] {
+        guard serverSource == nil else { return [] }
         var settings: [Setting] = [
             .init(
                 title: "SOURCE_NAME",
@@ -480,13 +418,10 @@ actor SuwayomiSourceRunner: Runner {
         ]
         let isLoggedIn = UserDefaults.standard.value(forKey: "\(sourceKey).login") != nil
         var shouldShowLoginSetting = isLoggedIn
-        var serverAnswered = true
         if !shouldShowLoginSetting {
             let loginType = try await helper.getLoginType()
             if let loginType {
                 shouldShowLoginSetting = loginType != .none
-            } else {
-                serverAnswered = false
             }
         }
         if shouldShowLoginSetting {
@@ -506,14 +441,6 @@ actor SuwayomiSourceRunner: Runner {
                     ))
                 )
             ])
-        }
-        // installed server sources; hidden if the server doesn't answer
-        if
-            serverAnswered, // don't wait a second timeout when the login probe got no answer
-            let sources = try? await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout),
-            let setting = SuwayomiServerSources.setting(sources: sources)
-        {
-            settings.append(setting)
         }
         return settings
     }
@@ -585,7 +512,12 @@ actor SuwayomiSourceRunner: Runner {
                 if newValue != server {
                     // update db source config with new server url
                     server = newValue
-                    forgetServerState()
+                    filterCache = nil
+                    // another server: its library marks are not the old one's
+                    TrackerManager.suwayomi.markedInLibrary.removeAll(withPrefix: "\(sourceKey)|")
+                    for child in SuwayomiConnections.shared.children(of: sourceKey) {
+                        TrackerManager.suwayomi.markedInLibrary.removeAll(withPrefix: "\(child.key)|")
+                    }
                     Task {
                         await updateSourceConfig()
                     }
@@ -594,139 +526,6 @@ actor SuwayomiSourceRunner: Runner {
             default:
                 break
         }
-    }
-
-    /// Sources installed on the server that can be offered (no local source, NSFW per app setting).
-    private func fetchServerSources(timeout: TimeInterval? = nil) async throws -> [SuwayomiServerSource] {
-        let requestedServer = server
-        let response: SuwayomiSourcesResponse = try await helper.request(body: SuwayomiServerSourcesPayload(), timeout: timeout)
-        // the server changed meanwhile: this answer is the old server's
-        guard server == requestedServer else { throw CancellationError() }
-        let nodes = response.data.sources.nodes
-        serverSourcesCache = nodes
-        serverSourcesFetchedAt = Date()
-        if let data = try? JSONEncoder().encode(nodes) {
-            UserDefaults.standard.set(data, forKey: SuwayomiServerSources.snapshotKey(sourceKey: sourceKey))
-        }
-        return SuwayomiServerSources.available(nodes, allowNsfw: allowsNsfw())
-    }
-
-    private func allowsNsfw() -> Bool {
-        SuwayomiServerSources.allowsNsfw(contentRatings: AppSettings.browse.contentRatings.get())
-    }
-
-    /// The last source list received, from memory or from the copy stored after the last answer.
-    private func knownServerSources() -> [SuwayomiServerSource]? {
-        if let serverSourcesCache { return serverSourcesCache }
-        guard
-            let data = UserDefaults.standard.data(forKey: SuwayomiServerSources.snapshotKey(sourceKey: sourceKey)),
-            let nodes = try? JSONDecoder().decode([SuwayomiServerSource].self, from: data)
-        else { return nil }
-        serverSourcesCache = nodes
-        return nodes
-    }
-
-    /// Another server: its sources and library are not the old one's.
-    private func forgetServerState() {
-        filterCache = nil
-        serverSourcesRefresh?.cancel()
-        serverSourcesRefresh = nil
-        serverSourcesCache = nil
-        serverSourcesFetchedAt = nil
-        serverSourcesFailedAt = nil
-        UserDefaults.standard.removeObject(forKey: SuwayomiServerSources.snapshotKey(sourceKey: sourceKey))
-        TrackerManager.suwayomi.markedInLibrary.removeAll(withPrefix: "\(sourceKey)|")
-    }
-
-    /// True while a failed attempt from «Todo» is recent.
-    private func isCoolingDown() -> Bool {
-        guard let serverSourcesFailedAt else { return false }
-        return Date().timeIntervalSince(serverSourcesFailedAt) < serverSourcesRetryDelay
-    }
-
-    /// Asks for the list from «Todo», noting a failure for the cool down.
-    private func fetchServerSourcesForSearch() async throws -> [SuwayomiServerSource] {
-        do {
-            let sources = try await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
-            serverSourcesFailedAt = nil
-            return sources
-        } catch {
-            serverSourcesFailedAt = Date()
-            throw error
-        }
-    }
-
-    /// Refreshes the source list without making anyone wait (once at a time, when old or never fetched,
-    /// and not right after a failed attempt).
-    private func refreshServerSourcesInBackground() {
-        if let serverSourcesFetchedAt, Date().timeIntervalSince(serverSourcesFetchedAt) < serverSourcesMaxAge {
-            return
-        }
-        guard serverSourcesRefresh == nil, !isCoolingDown() else { return }
-        serverSourcesRefresh = Task {
-            _ = try? await self.fetchServerSourcesForSearch()
-            self.finishRefreshingServerSources()
-        }
-    }
-
-    /// Waits for a background refresh of the source list, if any (tests).
-    func waitForServerSourcesRefresh() async {
-        await serverSourcesRefresh?.value
-    }
-
-    private func finishRefreshingServerSources() {
-        serverSourcesRefresh = nil
-    }
-
-    /// Sources to search in «Todo», without waiting for the server when the list is already known.
-    private func serverSourcesForSearch() async -> [SuwayomiServerSource] {
-        let ids = selectedServerSourceIds()
-        if let known = knownServerSources() {
-            refreshServerSourcesInBackground()
-            return SuwayomiServerSources.searchSources(selectedIds: ids, known: known, allowNsfw: allowsNsfw(), languages: searchLanguages())
-        }
-        // never got the list: without it there's no order nor NSFW flag, so only the library;
-        // after a failure, don't wait for it again on every search
-        guard !isCoolingDown() else { return [] }
-        do {
-            let sources = try await fetchServerSourcesForSearch()
-            return SuwayomiServerSources.searchSources(selectedIds: ids, known: sources, allowNsfw: allowsNsfw(), languages: searchLanguages())
-        } catch {
-            LogManager.logger.warn("Suwayomi server sources unknown, searching only the library: \(error)")
-            return []
-        }
-    }
-
-    /// The sources of «Buscar en» (as `selectedServerSources`: asked to the server, the known list if it fails).
-    private func searchSourcesForFilter() async throws -> [SuwayomiServerSource] {
-        let known: [SuwayomiServerSource]
-        do {
-            known = try await fetchServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
-        } catch {
-            guard let stored = knownServerSources() else { throw error }
-            known = stored
-        }
-        return SuwayomiServerSources.searchSources(
-            selectedIds: selectedServerSourceIds(), known: known, allowNsfw: allowsNsfw(), languages: searchLanguages()
-        )
-    }
-
-    /// Server sources chosen in the settings, in the settings order.
-    private func selectedServerSourceIds() -> [String] {
-        UserDefaults.standard.stringArray(forKey: SuwayomiServerSources.defaultsKey(sourceKey: sourceKey)) ?? []
-    }
-
-    private func selectedServerSources(timeout: TimeInterval? = nil) async throws -> [SuwayomiServerSource] {
-        let ids = selectedServerSourceIds()
-        guard !ids.isEmpty else { return [] }
-        let sources: [SuwayomiServerSource]
-        do {
-            sources = try await fetchServerSources(timeout: timeout)
-        } catch {
-            guard let known = knownServerSources() else { throw error }
-            sources = SuwayomiServerSources.available(known, allowNsfw: allowsNsfw())
-        }
-        return SuwayomiServerSources.selected(ids: ids, from: sources)
     }
 
     /// Asks the server to fetch a manga and/or its chapters from the origin website.
@@ -769,6 +568,7 @@ actor SuwayomiSourceRunner: Runner {
     }
 
     private func updateSourceConfig(updateSourceList: Bool = false) async {
+        guard serverSource == nil else { return }
         let config = CustomSourceConfig.suwayomi(.init(key: sourceKey, name: name, server: server))
         await SourceManager.shared.updateCustomSource(key: sourceKey, config: config, updateSourceList: updateSourceList)
     }
@@ -777,15 +577,11 @@ actor SuwayomiSourceRunner: Runner {
 // MARK: Search Filters
 extension SuwayomiSourceRunner {
     func getSearchFilters() async throws -> [AidokuRunner.Filter] {
-        // «Buscar en»: every source a search covers, the marked ones first
-        async let serverSources = try? searchSourcesForFilter()
+        // a server source has no filters of its own (each extension's filters are out of scope)
+        guard serverSource == nil else { return [] }
         let (categoryItems, tagItems) = try await filterData()
 
-        var filters: [AidokuRunner.Filter] = []
-        if let searchIn = SuwayomiServerSources.searchInFilter(sources: await serverSources ?? []) {
-            filters.append(searchIn)
-        }
-        filters += [
+        var filters: [AidokuRunner.Filter] = [
             .init(
                 id: "sort",
                 title: NSLocalizedString("SORT"),
@@ -999,61 +795,5 @@ extension SuwayomiSourceRunner {
             .unique()
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             .map { .init(id: $0, title: $0) }
-    }
-}
-
-// MARK: Grouped search (global search and migration: one row per server source)
-extension SuwayomiSourceRunner: GroupedSearchRunner {
-    func groupedSearch(query: String) async throws -> [GroupedSearchSection] {
-        let baseUrl = try helper.getConfiguredServer()
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // without text, only the library (as «Todo»)
-        guard !query.isEmpty else {
-            let library = try await searchLibrary(query: query, filters: [], baseUrl: baseUrl)
-            return SuwayomiServerSources.groupedSections(library: library, sources: [], baseUrl: baseUrl, libraryTitle: libraryRowTitle)
-        }
-        let (library, sources) = try await searchLibraryAndSources(query: query, filters: [], baseUrl: baseUrl)
-        return SuwayomiServerSources.groupedSections(library: library, sources: sources, baseUrl: baseUrl, libraryTitle: libraryRowTitle)
-    }
-
-    private var libraryRowTitle: String {
-        String(format: NSLocalizedString("SUWAYOMI_LIBRARY_ROW_%@"), name)
-    }
-
-    func serverSourceId(ofMangaKey mangaKey: String) async -> String? {
-        guard let mangaId = Int(mangaKey) else { return nil }
-        struct Payload: Encodable {
-            let variables: Variables
-            let query = """
-                query GetMangaSource($id: Int!) {
-                  manga(id: $id) {
-                    sourceId
-                  }
-                }
-                """
-
-            struct Variables: Encodable {
-                let id: Int
-            }
-        }
-        struct Response: Decodable {
-            let data: DataContainer
-            struct DataContainer: Decodable {
-                let manga: Manga
-            }
-            struct Manga: Decodable {
-                let sourceId: String
-            }
-        }
-        do {
-            let response: Response = try await helper.request(
-                body: Payload(variables: .init(id: mangaId)),
-                timeout: SuwayomiServerSources.sourcesTimeout
-            )
-            return response.data.manga.sourceId
-        } catch {
-            LogManager.logger.warn("Suwayomi source of manga \(mangaKey) unknown: \(error)")
-            return nil
-        }
     }
 }
