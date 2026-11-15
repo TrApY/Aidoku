@@ -415,6 +415,22 @@ enum SuwayomiServerSources {
         return (library + sources.flatMap { $0 }).filter { seen.insert($0.key).inserted }
     }
 
+    /// Sections of a grouped search: the library (when it found something), then every source that
+    /// answered, in order (pending: everything in one library section).
+    static func groupedSections(
+        library: [AidokuRunner.Manga],
+        sources: [(source: SuwayomiServerSource, entries: [AidokuRunner.Manga]?)],
+        baseUrl: URL,
+        libraryTitle: String
+    ) -> [GroupedSearchSection] {
+        [.init(id: searchInLibraryId, title: libraryTitle, iconUrl: nil, entries: library + sources.flatMap { $0.entries ?? [] })]
+    }
+
+    /// A server icon path («/api/v1/extension/icon/…») as a URL on the server (pending).
+    static func iconUrl(_ path: String?, baseUrl: URL) -> URL? {
+        nil
+    }
+
     /// Runs `operation`, failing with a timeout after `seconds`.
     static func withTimeout<T: Sendable>(
         _ seconds: TimeInterval,

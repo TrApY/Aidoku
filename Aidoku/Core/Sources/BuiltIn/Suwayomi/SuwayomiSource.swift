@@ -223,9 +223,22 @@ actor SuwayomiSourceRunner: Runner {
         baseUrl: URL
     ) async throws -> AidokuRunner.MangaPageResult {
         guard page == 1 else { return .init(entries: [], hasNextPage: false) }
+        let (library, perSource) = try await searchLibraryAndSources(query: query, filters: filters, baseUrl: baseUrl)
+        return .init(
+            entries: SuwayomiServerSources.mergeSearchResults(library: library, sources: perSource.compactMap(\.entries)),
+            hasNextPage: false
+        )
+    }
 
+    /// The library and each selected source (settings order; nil entries = failed or too slow).
+    private func searchLibraryAndSources(
+        query: String,
+        filters: [AidokuRunner.FilterValue],
+        baseUrl: URL
+    ) async throws -> (library: [AidokuRunner.Manga], sources: [(source: SuwayomiServerSource, entries: [AidokuRunner.Manga]?)]) {
         // settings order, as the listings
-        let sourceIds = await serverSourcesForSearch().map(\.id)
+        let sources = await serverSourcesForSearch()
+        let sourceIds = sources.map(\.id)
 
         let helper = helper
         let sourceKey = sourceKey
@@ -267,10 +280,7 @@ actor SuwayomiSourceRunner: Runner {
         if let libraryError, perSource.allSatisfy({ $0 == nil }) {
             throw libraryError
         }
-        return .init(
-            entries: SuwayomiServerSources.mergeSearchResults(library: library, sources: perSource.compactMap { $0 }),
-            hasNextPage: false
-        )
+        return (library, Array(zip(sources, perSource)).map { (source: $0.0, entries: $0.1) })
     }
 
     func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
@@ -965,5 +975,28 @@ extension SuwayomiSourceRunner {
             .unique()
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             .map { .init(id: $0, title: $0) }
+    }
+}
+
+// MARK: Grouped search (global search and migration: one row per server source)
+extension SuwayomiSourceRunner: GroupedSearchRunner {
+    func groupedSearch(query: String) async throws -> [GroupedSearchSection] {
+        let baseUrl = try helper.getConfiguredServer()
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // without sources or without text, only the library (as «Todo»)
+        guard !selectedServerSourceIds().isEmpty, !query.isEmpty else {
+            let library = try await searchLibrary(query: query, filters: [], baseUrl: baseUrl)
+            return SuwayomiServerSources.groupedSections(library: library, sources: [], baseUrl: baseUrl, libraryTitle: libraryRowTitle)
+        }
+        let (library, sources) = try await searchLibraryAndSources(query: query, filters: [], baseUrl: baseUrl)
+        return SuwayomiServerSources.groupedSections(library: library, sources: sources, baseUrl: baseUrl, libraryTitle: libraryRowTitle)
+    }
+
+    private var libraryRowTitle: String {
+        String(format: NSLocalizedString("SUWAYOMI_LIBRARY_ROW_%@"), name)
+    }
+
+    func serverSourceId(ofMangaKey mangaKey: String) async -> String? {
+        nil // pending
     }
 }

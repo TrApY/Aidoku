@@ -655,6 +655,61 @@ private let nexus = "4086183896761281232" // flagged NSFW
         #expect(manga.chapters?.count == 26)
         #expect(server.count("GetMangaUpdate") == 1)
     }
+
+    // MARK: Grouped search (global search rows)
+
+    @Test func groupedSearchGivesTheLibraryAndOneSectionPerSourceInSettingsOrder() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [taurus, emperor, olympus])
+        let sections = try await runner.groupedSearch(query: "solo")
+        try #require(sections.count == 4)
+        #expect(sections.map(\.id) == ["library", olympus, emperor, taurus])
+        #expect(sections[0].entries.map(\.key) == ["156"])
+        #expect(sections[0].title.contains("Test")) // «Biblioteca (<source name>)»
+        #expect(sections[0].iconUrl == nil)
+        #expect(sections[1].entries.map(\.key) == (234...243).map(String.init))
+        #expect(sections[1].title == "Olympus Scanlation (ES)")
+        #expect(sections[1].iconUrl == URL(string: "https://suwayomi.example:4567/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.olympusscanlation"))
+        #expect(sections[2].entries.map(\.key) == ["156"]) // also in its own source
+        #expect(sections[3].entries.count == 25)
+        #expect(sections.allSatisfy { $0.entries.allSatisfy { $0.sourceKey == key } })
+    }
+
+    @Test func groupedSearchLeavesOutFailingSourcesAndAnEmptyLibrary() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        server.respond("SearchManga", .success(Data(#"{"data":{"mangas":{"nodes":[]}}}"#.utf8)))
+        server.respond("FetchSourceManga", source: emperor, .failure(URLError(.timedOut)))
+        let runner = makeRunner(selected: [olympus, emperor, taurus])
+        let sections = try await runner.groupedSearch(query: "solo")
+        #expect(sections.map(\.id) == [olympus, taurus])
+        // a source with no results keeps its section (the row shows nothing, as any other source)
+        server.respond("FetchSourceManga", source: taurus, .success(Data(#"{"data":{"fetchSourceManga":{"mangas":[],"hasNextPage":false}}}"#.utf8)))
+        let again = try await runner.groupedSearch(query: "solo")
+        #expect(again.map(\.id) == [olympus, taurus])
+        #expect(again.last?.entries.isEmpty == true)
+    }
+
+    @Test func groupedSearchWithoutSourcesIsTheLibrary() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        let runner = makeRunner(selected: [])
+        let sections = try await runner.groupedSearch(query: "solo")
+        #expect(sections.map(\.id) == ["library"])
+        #expect(server.count("FetchSourceManga") == 0)
+    }
+
+    @Test func serverSourceOfAManga() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaSource", .success(Data(#"{"data":{"manga":{"sourceId":"1596411039134168890"}}}"#.utf8)))
+        let runner = makeRunner()
+        #expect(await runner.serverSourceId(ofMangaKey: "753") == olympus)
+        #expect(server.variables("GetMangaSource").first?["id"] as? Int == 753)
+        server.respond("GetMangaSource", .failure(URLError(.timedOut)))
+        #expect(await runner.serverSourceId(ofMangaKey: "753") == nil)
+        #expect(await runner.serverSourceId(ofMangaKey: "no") == nil)
+    }
 }
 
 @Suite(.serialized) struct SuwayomiTrackerLibraryTests {
