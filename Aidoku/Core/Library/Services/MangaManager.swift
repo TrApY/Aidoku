@@ -141,7 +141,8 @@ extension MangaManager {
     func addToLibrary(
         manga: AidokuRunner.Manga,
         chapters: [AidokuRunner.Chapter] = [],
-        fetchMangaDetails: Bool = false
+        fetchMangaDetails: Bool = false,
+        bindTrackers: Bool = true
     ) async {
         var manga = manga
         var chapters = chapters
@@ -177,7 +178,9 @@ extension MangaManager {
             }
         }
         // add enhanced trackers
-        await TrackerManager.shared.bindEnhancedTrackers(manga: manga)
+        if bindTrackers {
+            await TrackerManager.shared.bindEnhancedTrackers(manga: manga)
+        }
 
         let mangaId = manga.identifier
         await MainActor.run {
@@ -799,12 +802,30 @@ extension MangaManager {
 
 // MARK: Migration
 extension MangaManager {
+    /// The old choices (Copy / Migrate / Migrate and keep history), carrying everything over.
     func migrate(
         copy: Bool,
         forceRemoveFromLibrary: Bool = false,
         fromSeries: [AidokuRunner.Manga],
         toSeries: [MangaIdentifier: AidokuRunner.Manga?],
         withChapters: [MangaIdentifier: [AidokuRunner.Chapter]] = [:],
+        progressReport: (@Sendable (Float) -> Void)? = nil
+    ) async {
+        await migrate(
+            options: .init(copy: copy, forceRemoveFromLibrary: forceRemoveFromLibrary),
+            fromSeries: fromSeries,
+            toSeries: toSeries,
+            withChapters: withChapters,
+            progressReport: progressReport
+        )
+    }
+
+    func migrate(
+        options: MigrationOptions,
+        fromSeries: [AidokuRunner.Manga],
+        toSeries: [MangaIdentifier: AidokuRunner.Manga?],
+        withChapters: [MangaIdentifier: [AidokuRunner.Chapter]] = [:],
+        environment: MigrationEnvironment = .live,
         progressReport: (@Sendable (Float) -> Void)? = nil
     ) async {
         let newDetails = await fetchNewDetails(
@@ -835,11 +856,11 @@ extension MangaManager {
                         let newChapters = details.1
 
                         return await Self.migrate(
-                            copy: copy,
-                            forceRemoveFromLibrary: forceRemoveFromLibrary,
+                            options: options,
                             from: oldManga,
                             to: newManga,
-                            withChapters: newChapters
+                            withChapters: newChapters,
+                            environment: environment
                         )
                     }
                 }
@@ -850,8 +871,10 @@ extension MangaManager {
                         progressReport(Float(counter) / Float(fromSeries.count * 2))
                     }
                     if let result {
-                        if !copy {
+                        if environment.bindEnhancedTrackers {
                             await TrackerManager.shared.bindEnhancedTrackers(manga: result.to)
+                        }
+                        if !options.keepOriginal {
                             NotificationCenter.default.post(name: .migratedManga, object: result)
                         }
                     }
@@ -860,13 +883,16 @@ extension MangaManager {
         }
     }
 
-    private static func migrate(
-        copy: Bool,
-        forceRemoveFromLibrary: Bool,
+    /// One entry. Internal for tests (no source needed: the new details and chapters come in).
+    static func migrate(
+        options: MigrationOptions,
         from oldManga: AidokuRunner.Manga,
         to newManga: AidokuRunner.Manga,
         withChapters newChapters: [AidokuRunner.Chapter],
+        environment: MigrationEnvironment = .live
     ) async -> (AidokuRunner.Manga, AidokuRunner.Manga)? {
+        // keep the original = add the new entry next to it (the old «copy»); otherwise replace it
+        let copy = options.keepOriginal
         // migrate settings
         if let readingMode = UserDefaults.standard.string(forKey: "Reader.readingMode.\(oldManga.identifier)") {
             UserDefaults.standard.set(readingMode, forKey: "Reader.readingMode.\(newManga.identifier)")
@@ -895,23 +921,25 @@ extension MangaManager {
                 return true
             }
             if !inLibrary {
+                // the enhanced trackers are bound once the history is carried over
                 await MangaManager.shared.addToLibrary(
                     manga: newManga,
-                    chapters: newChapters
+                    chapters: newChapters,
+                    bindTrackers: false
                 )
             }
         }
 
         // Suwayomi server (JoTa): the new server manga is tracked by its own id and only it stays in the
         // server library when the old one leaves the Aidoku library
-        let suwayomiTracker = TrackerManager.getTracker(id: "suwayomi") as? SuwayomiTracker
+        let suwayomiTracker = environment.suwayomiTracker
         let suwayomiPlan = suwayomiTracker.map {
             SuwayomiMigrationPlan.make(
                 old: oldManga.identifier,
                 new: newManga.identifier,
                 oldIsServer: $0.canRegister(mangaId: oldManga.identifier),
                 newIsServer: $0.canRegister(mangaId: newManga.identifier),
-                oldLeavesLibrary: !copy || forceRemoveFromLibrary
+                oldLeavesLibrary: !copy
             )
         } ?? .none
         let suwayomiTrackerId = suwayomiTracker?.id
@@ -1072,7 +1100,7 @@ extension MangaManager {
                             mangaId: newManga.identifier,
                             context: context
                         ),
-                        let tracker = TrackerManager.getTracker(id: trackerId),
+                        let tracker = environment.trackerLookup(trackerId),
                         tracker.canRegister(mangaId: newManga.identifier)
                     else {
                         if !copy && newManga.identifier != oldManga.identifier {
@@ -1118,13 +1146,8 @@ extension MangaManager {
         }
 
         if copy && result != nil {
-            // remove old item from library
-            if forceRemoveFromLibrary {
-                await shared.removeFromLibrary(mangaId: oldManga.identifier)
-            } else {
-                await MainActor.run {
-                    NotificationCenter.default.post(name: .updateLibrary, object: nil)
-                }
+            await MainActor.run {
+                NotificationCenter.default.post(name: .updateLibrary, object: nil)
             }
         }
 
