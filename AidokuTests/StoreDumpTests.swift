@@ -54,6 +54,7 @@ func expectMetadataListed(_ dump: StoreDump) {
         let first = try StoreDump.dumpCopy(of: folder)
         let second = try StoreDump.dumpCopy(of: folder)
         try expectComplete(first, stores: folder)
+        expectMetadataListed(first)
         #expect(first.differences(to: second) == [])
         #expect(first == second)
         try first.write(label: "\(device)-original")
@@ -78,7 +79,9 @@ func expectMetadataListed(_ dump: StoreDump) {
 
         let after = try StoreDump.dumpCopy(of: directory)
         try expectComplete(after, stores: directory)
-        #expect(original.differences(to: after) == [])
+        let changed = original.differences(to: after).filter { $0.hasPrefix("tabla ") }
+        try writeChanges(changed, label: "\(device)-cambios-al-abrir")
+        #expect(original.differences(to: after, metadataTables: StoreDump.metadataThatStays(in: original)) == [])
         #expect(after.entities == original.entities)
         try after.write(label: "\(device)-abierta-con-la-app")
     }
@@ -188,6 +191,7 @@ func expectMetadataListed(_ dump: StoreDump) {
         #expect(first == second)
         let fromFiles = try StoreDump.dumpCopy(of: directory)
         #expect(fromFiles.entities == first.entities)
+        expectMetadataListed(fromFiles)
     }
 
     /// Deleting follows the model's rules:
