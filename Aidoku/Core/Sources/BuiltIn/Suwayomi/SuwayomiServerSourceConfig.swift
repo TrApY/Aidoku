@@ -148,6 +148,12 @@ final class SuwayomiConnections: @unchecked Sendable {
         lock.withLock { children.values.filter { $0.parentKey == parentKey } }
     }
 
+    /// SUWA-12 M1: `<connection>.<server source id>` of a registered connection (its child may not be
+    /// registered yet: it came by iCloud and the server hasn't answered here).
+    func isServerSourceOfConnection(_ key: String) -> Bool {
+        false // pendiente[M1#2]
+    }
+
     /// False for what must not be offered as a source (Explorar, search, migration targets): a connection,
     /// and a child the server doesn't have anymore.
     func isListed(_ key: String) -> Bool {

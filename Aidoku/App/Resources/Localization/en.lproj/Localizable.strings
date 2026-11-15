@@ -919,6 +919,7 @@
 // SUWA-12
 "SUWAYOMI_POPULAR" = "Popular";
 "SUWAYOMI_LATEST" = "Latest";
+"SUWAYOMI_SERVER_SOURCE_PROVISIONAL" = "Server Source";
 "EXPLORE_SOURCES" = "Sources";
 "EXPLORE_EXTENSIONS" = "Extensions";
 "EXPLORE_MIGRATE" = "Migrate";

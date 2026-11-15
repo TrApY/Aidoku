@@ -792,6 +792,7 @@
 // SUWA-12
 "SUWAYOMI_POPULAR" = "Populares";
 "SUWAYOMI_LATEST" = "Recientes";
+"SUWAYOMI_SERVER_SOURCE_PROVISIONAL" = "Fuente del servidor";
 "EXPLORE_SOURCES" = "Fuentes";
 "EXPLORE_EXTENSIONS" = "Extensiones";
 "EXPLORE_MIGRATE" = "Migrar";

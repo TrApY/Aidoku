@@ -14,8 +14,17 @@ struct MangaSourceNotice: Equatable {
     var webView: Bool
 
     /// nil: no notice (the source is there, or the installed sources are still loading: no flicker).
-    static func make(sourcesLoaded: Bool, hasSource: Bool, inLibrary: Bool, hasWebUrl: Bool) -> MangaSourceNotice? {
+    /// - pendingServerSource: a server source of a Suwayomi connection that isn't registered yet (SUWA-12
+    ///   M1): it will be, so no «not installed» nor Migrar; the network error is the normal one.
+    static func make(
+        sourcesLoaded: Bool,
+        hasSource: Bool,
+        inLibrary: Bool,
+        hasWebUrl: Bool,
+        pendingServerSource: Bool = false
+    ) -> MangaSourceNotice? {
         guard sourcesLoaded, !hasSource else { return nil }
+         // pendiente[M1#6]
         return .init(migrate: inLibrary, webView: hasWebUrl)
     }
 }

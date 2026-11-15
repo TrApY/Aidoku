@@ -128,6 +128,9 @@ struct SuwayomiHelper: Sendable {
         ]
 
         var request = URLRequest(url: loginUrl)
+        if let timeout = Self.requestTimeout {
+            request.timeoutInterval = timeout // the conversion and migrations keep every request short
+        }
         request.httpMethod = "POST"
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -326,6 +329,9 @@ extension SuwayomiHelper {
         ]
 
         var request = URLRequest(url: loginUrl)
+        if let timeout = Self.requestTimeout {
+            request.timeoutInterval = timeout // the conversion and migrations keep every request short
+        }
         request.httpMethod = "POST"
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -380,6 +386,9 @@ extension SuwayomiHelper {
         }
 
         var request = URLRequest(url: loginUrl)
+        if let timeout = Self.requestTimeout {
+            request.timeoutInterval = timeout // the conversion and migrations keep every request short
+        }
         request.httpMethod = "POST"
         request.httpBody = try? JSONEncoder().encode(Payload(variables: .init(username: username, password: password)))
         request.setValue("application/json", forHTTPHeaderField: "Accept")

@@ -673,6 +673,17 @@ extension DownloadManager {
         return ByteCountFormatter.string(fromByteCount: totalSize, countStyle: .file)
     }
 
+    /// SUWA-12 M2: the queue stops (not as the user) while the conversion runs, and reads the rewritten
+    /// saved queue when it ends.
+    func suspendForSuwayomiConversion() async {
+        await queue.suspendForExternalChange()
+    }
+
+    func resumeAfterSuwayomiConversion() async {
+        await queue.resumeAfterExternalChange()
+        invalidateDownloadedMangaCache()
+    }
+
     /// Folders were moved outside the queue (SUWA-12 conversion): forget what was read from disk.
     func reloadAfterExternalChange() async {
         await cache.reload()

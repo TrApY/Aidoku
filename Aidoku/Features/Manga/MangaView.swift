@@ -66,7 +66,8 @@ struct MangaView: View {
                     sourcesLoaded: viewModel.sourcesLoaded,
                     hasSource: viewModel.source != nil,
                     inLibrary: viewModel.bookmarked,
-                    hasWebUrl: openWebAction != nil
+                    hasWebUrl: openWebAction != nil,
+                    pendingServerSource: SuwayomiConnections.shared.isServerSourceOfConnection(viewModel.manga.sourceKey)
                 ) {
                     sourceMissingNotice(notice)
                 }

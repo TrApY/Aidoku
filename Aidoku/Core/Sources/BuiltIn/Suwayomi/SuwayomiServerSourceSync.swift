@@ -10,6 +10,7 @@
 //
 
 import AidokuRunner
+import CoreData
 import Foundation
 
 enum SuwayomiServerSourceSync {
@@ -37,6 +38,22 @@ enum SuwayomiServerSourceSync {
             changes.append(gone)
         }
         return changes
+    }
+
+    /// SUWA-12 M1: children the data asks for that aren't registered (rows converted on another device
+    /// that came by iCloud while this one can't reach the server): registered without the server, with
+    /// the last list the server gave here, or a provisional name the next sync corrects.
+    static func planFromData(
+        parentKey: String,
+        sourceKeysInData: Set<String>,
+        existing: [SuwayomiServerSourceConfig],
+        snapshot: [SuwayomiServerSource]
+    ) -> [SuwayomiServerSourceConfig] {
+        [] // pendiente[M1#1]
+    }
+
+    static func snapshotKey(parentKey: String) -> String {
+        "\(parentKey).serverSourcesSnapshot"
     }
 
     struct Result: Equatable, Sendable {
@@ -111,6 +128,10 @@ extension SuwayomiServerSourceSync {
                     body: SuwayomiServerSourcesPayload(),
                     timeout: SuwayomiServerSources.sourcesTimeout
                 )
+                // kept for when the server can't be reached (M1: children asked for by the data)
+                if let data = try? JSONEncoder().encode(response.data.sources.nodes) {
+                    UserDefaults.standard.set(data, forKey: snapshotKey(parentKey: parentKey))
+                }
                 return response.data.sources.nodes
             },
             prepare: { changes in
@@ -129,9 +150,8 @@ extension SuwayomiServerSourceSync {
             saved.append(config.key)
         }
         if result.answered {
-            // the marks per device («Fuentes del servidor») and the cached list are gone
+            // the marks per device («Fuentes del servidor») are gone; the list is kept (M1)
             UserDefaults.standard.removeObject(forKey: "\(parentKey).serverSources")
-            UserDefaults.standard.removeObject(forKey: "\(parentKey).serverSourcesSnapshot")
         }
         if result.added + result.updated + result.unavailable > 0 {
             await SourceManager.shared.publishSourceChanges(keys: Array(Set(saved)))
@@ -140,5 +160,54 @@ extension SuwayomiServerSourceSync {
             "Suwayomi sources of \(parentKey): answered \(result.answered), added \(result.added), "
                 + "updated \(result.updated), unavailable \(result.unavailable)"
         )
+    }
+}
+
+// MARK: Children asked for by the data (SUWA-12 M1)
+extension SuwayomiServerSourceSync {
+    /// Registers, without asking the server, the children some row uses and this device doesn't have.
+    static func registerFromData() async {
+        let configs = await SourceManager.shared.customSourceConfigs()
+        let parents = configs.compactMap { config -> String? in
+            if case let .suwayomi(values) = config { return values.key }
+            return nil
+        }
+        guard !parents.isEmpty else { return }
+        let children = configs.compactMap { config -> SuwayomiServerSourceConfig? in
+            if case let .suwayomiServerSource(values) = config { return values }
+            return nil
+        }
+        let keysInData: Set<String> = await CoreDataManager.shared.container.performBackgroundTask { context in
+            var keys = Set<String>()
+            for entity in ["Manga", "History"] {
+                let request = NSFetchRequest<NSDictionary>(entityName: entity)
+                request.resultType = .dictionaryResultType
+                request.propertiesToFetch = ["sourceId"]
+                request.returnsDistinctResults = true
+                request.predicate = NSPredicate(format: "sourceId BEGINSWITH %@", SuwayomiSourceRunner.sourceKeyPrefix)
+                for row in (try? context.fetch(request)) ?? [] {
+                    if let key = row["sourceId"] as? String { keys.insert(key) }
+                }
+            }
+            return keys
+        }
+        var added: [String] = []
+        for parent in parents {
+            let snapshot = UserDefaults.standard.data(forKey: snapshotKey(parentKey: parent))
+                .flatMap { try? JSONDecoder().decode([SuwayomiServerSource].self, from: $0) } ?? []
+            let missing = planFromData(
+                parentKey: parent,
+                sourceKeysInData: keysInData,
+                existing: children.filter { $0.parentKey == parent },
+                snapshot: snapshot
+            )
+            for config in missing where await SourceManager.shared.addOrUpdateCustomSource(config: .suwayomiServerSource(config)) {
+                added.append(config.key)
+            }
+        }
+        if !added.isEmpty {
+            LogManager.logger.info("Suwayomi server sources registered from the data (no server): \(added.count)")
+            await SourceManager.shared.publishSourceChanges(keys: added)
+        }
     }
 }

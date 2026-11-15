@@ -36,9 +36,18 @@ actor SuwayomiStartup {
             return await running.value
         }
         let task = Task<SuwayomiSourceConversion.Report, Never> {
-            await SuwayomiServerSourceSync.syncAll()
-            let parents = await Self.connectionKeys()
-            return await SuwayomiSourceConversion.run(parentKeys: parents, environment: Self.appEnvironment())
+            // the queue stops while folders move and its saved state is rewritten (M2)
+            await DownloadManager.shared.suspendForSuwayomiConversion()
+            // every request short, so the start's wait isn't spent on one (M2)
+            let report = await SuwayomiHelper.$requestTimeout.withValue(SuwayomiServerSources.sourcesTimeout) {
+                // children the data asks for, without the server (M1)
+                await SuwayomiServerSourceSync.registerFromData()
+                await SuwayomiServerSourceSync.syncAll()
+                let parents = await Self.connectionKeys()
+                return await SuwayomiSourceConversion.run(parentKeys: parents, environment: Self.appEnvironment())
+            }
+            await DownloadManager.shared.resumeAfterSuwayomiConversion()
+            return report
         }
         running = task
         let report = await task.value

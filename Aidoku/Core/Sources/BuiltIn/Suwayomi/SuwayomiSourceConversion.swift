@@ -68,20 +68,34 @@ enum SuwayomiSourceConversion {
             }
         }
         guard !idsByParent.isEmpty else {
-            await rewriteSourceKeySettings(parentKeys: parentKeys, moved: [:], env: env)
+            await rewriteSettingsIfNeeded(parentKeys: parentKeys, env: env)
             return .init(outcome: .nothingToConvert)
         }
 
-        // 2. where each manga is (no writes); a server that doesn't answer: nothing now, next start again
+        // 1b. manga whose rows are already under a server source (converted on another device, came by
+        // iCloud): what is still under the parent here (downloads, settings) follows them, no server needed
         var targets: [String: [String: String]] = [:] // parent → manga id → child key
-        var report = Report(outcome: .done)
         for (parent, ids) in idsByParent {
+            let local = await childKeysInRows(parent: parent, mangaIds: ids, env: env)
+            if !local.isEmpty {
+                targets[parent] = local
+                idsByParent[parent] = ids.filter { local[$0] == nil }
+            }
+        }
+
+        // 2. where each manga is (no writes); a server that doesn't answer: nothing now, next start again
+        var report = Report(outcome: .done)
+        var serverDown = false
+        for (parent, ids) in idsByParent where !ids.isEmpty {
             let serverSources: [String: String]
             do {
                 serverSources = try await env.resolve(parent, ids)
             } catch {
                 LogManager.logger.warn("Suwayomi conversion of \(parent) postponed, the server didn't answer: \(error)")
-                return .init(outcome: .serverUnavailable)
+                serverDown = true
+                report.pending += ids.count
+                report.pendingIds[parent, default: []].append(contentsOf: ids)
+                continue
             }
             let children = Dictionary(
                 (await env.children(parent)).filter(\.available).map { ($0.serverSourceId, $0.key) },
@@ -96,10 +110,16 @@ enum SuwayomiSourceConversion {
                     report.pendingIds[parent, default: []].append(id)
                 }
             }
-            targets[parent] = map
+            targets[parent, default: [:]].merge(map) { local, _ in local }
+        }
+        if serverDown {
+            report.outcome = .serverUnavailable
         }
         guard targets.values.contains(where: { !$0.isEmpty }) else {
-            await rewriteSourceKeySettings(parentKeys: parentKeys, moved: [:], env: env)
+            if serverDown {
+                return .init(outcome: .serverUnavailable) // nothing written
+            }
+            await rewriteSettingsIfNeeded(parentKeys: parentKeys, env: env)
             log(report)
             return report
         }
@@ -211,6 +231,12 @@ extension SuwayomiSourceConversion {
 
 // MARK: Core Data
 extension SuwayomiSourceConversion {
+    /// SUWA-12 M1: manga id → the server source its rows already use, for the ids with no row under
+    /// `parent` and rows under exactly one of its server sources.
+    static func childKeysInRows(parent: String, mangaIds: [String], env: Environment) async -> [String: String] {
+        [:] // pendiente[M1#3]
+    }
+
     /// Moves every row of (`parent`, `mangaId`) to `child` in one save; rows that already exist under
     /// `child` are merged keeping the most complete. Returns the merged rows, nil if it couldn't be saved.
     static func rekey(parent: String, child: String, mangaId: String, env: Environment) async -> Int? {
@@ -325,12 +351,13 @@ extension SuwayomiSourceConversion {
         if kept.value(forKey: "fileInfo") == nil, let file = old.value(forKey: "fileInfo") as? NSManagedObject {
             file.setValue(kept, forKey: "manga")
         }
-        // fields only the old one has
-        for (name, _) in kept.entity.attributesByName where kept.value(forKey: name) == nil {
-            if name != "sourceId", let value = old.value(forKey: name) {
-                kept.setValue(value, forKey: name)
-            }
-        }
+        for (name, _) in kept.entity.attributesByName where kept.value(forKey: name) == nil { if name != "sourceId", let value = old.value(forKey: name) { kept.setValue(value, forKey: name) } } // pendiente[B3#4]
+    }
+
+    private static func isDefault(_ value: Any, _ attribute: NSAttributeDescription) -> Bool {
+        if let string = value as? String, string.isEmpty { return true }
+        guard let defaultValue = attribute.defaultValue else { return false }
+        return (value as AnyObject).isEqual(defaultValue)
     }
 
     private static func mergeChapter(_ old: NSManagedObject, into kept: NSManagedObject) {
@@ -424,6 +451,12 @@ extension SuwayomiSourceConversion {
                 env.defaults.removeObject(forKey: key)
             }
         }
+    }
+
+    /// Settings holding source keys, rewritten when nothing is converted (SUWA-12 B4): only if something
+    /// would change, and then after a backup (as any conversion); no backup, no rewrite.
+    static func rewriteSettingsIfNeeded(parentKeys: [String], env: Environment) async {
+        await rewriteSourceKeySettings(parentKeys: parentKeys, moved: [:], env: env) // pendiente[B4#5]
     }
 
     /// Settings whose values hold source keys: pinned sources, disabled sources, library filters, the
