@@ -368,6 +368,28 @@ actor DownloadQueue {
         }
     }
 
+    /// Runs a system background task (pending: the old wiring, which keeps the task alive).
+    @discardableResult
+    nonisolated func handleBackgroundTask<T: SystemBackgroundTask>(
+        _ task: T,
+        pause: @escaping @Sendable () async -> Void = { await DownloadManager.shared.pauseDownloads(byUser: false) },
+        resumeTasks: Bool = true
+    ) -> Task<Void, Never> {
+        // completed exactly once: by the expiry or when the downloads are done, whichever is first
+        let completion = BackgroundTaskCompletion { success in task.setTaskCompleted(success: success) }
+        task.expirationHandler = {
+            _ = self.backgroundTaskWillExpire(task, completion: completion, pause: pause)
+        }
+        return Task {
+            await self.setBackgroundTask(task)
+            if resumeTasks {
+                await self.initAndResumeTasks()
+            }
+            // wait until downloads complete (woken when the queue empties, not polled), or until expiry
+            await self.completeWhenEmpty(task, completion: completion)
+        }
+    }
+
 #if DEBUG
     /// Waits for the queue to empty now. For tests.
     var emptyWaiterCount: Int { emptyWaiters.count }
@@ -425,21 +447,7 @@ extension DownloadQueue {
 
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskIdentifier, using: nil) { @Sendable [weak self] task in
             guard let self, let task = task as? BGContinuedProcessingTask else { return }
-
-            // completed exactly once: by the expiry or when the downloads are done, whichever is first
-            let completion = BackgroundTaskCompletion { success in task.setTaskCompleted(success: success) }
-
-            task.expirationHandler = {
-                _ = self.backgroundTaskWillExpire(task, completion: completion)
-            }
-
-            Task { @Sendable in
-                await self.setBackgroundTask(task)
-                await self.initAndResumeTasks()
-
-                // wait until downloads complete (woken when the queue empties, not polled), or until expiry
-                await self.completeWhenEmpty(task, completion: completion)
-            }
+            self.handleBackgroundTask(task)
         }
     }
 #endif
@@ -543,3 +551,14 @@ final class BackgroundTaskCompletion: @unchecked Sendable {
         return claimed
     }
 }
+
+/// What the queue needs of a system background task (a protocol, so tests can stand in for it).
+protocol SystemBackgroundTask: AnyObject, ProgressReporting {
+    var expirationHandler: (() -> Void)? { get set }
+    func setTaskCompleted(success: Bool)
+}
+
+#if !targetEnvironment(simulator)
+@available(iOS 26.0, *)
+extension BGContinuedProcessingTask: SystemBackgroundTask {}
+#endif

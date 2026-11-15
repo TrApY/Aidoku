@@ -248,6 +248,76 @@ struct DownloadQueueTests {
         #expect(weakTask == nil)
     }
 
+    /// A task that is no longer the current one (another request registered in between) is still completed.
+    @Test func aTaskThatIsNoLongerCurrentIsStillCompleted() async {
+        let queue = await makeQueue()
+        let old = FakeBackgroundTask()
+        let new = FakeBackgroundTask()
+        let log = CompletionLog()
+        let completion = BackgroundTaskCompletion { success in log.add(success) }
+        await queue.setBackgroundTask(old)
+        await queue.setBackgroundTask(new)
+        await queue.completeWhenEmpty(old, completion: completion) // empty queue: done at once
+        #expect(log.calls == [true])
+        #expect(await queue.isCurrentBackgroundTask(new)) // the newer task is not let go
+    }
+
+    /// Only an expiry that completes the current task pauses the downloads.
+    @Test func onlyAnExpiryOfTheCurrentRunningTaskPauses() async {
+        let queue = await makeQueue()
+        let pauses = CompletionLog()
+        let pause: @Sendable () async -> Void = { pauses.add(true) }
+        // late: the task had finished (completed) and a newer one runs
+        let done = FakeBackgroundTask()
+        let doneCompletion = BackgroundTaskCompletion { _ in }
+        await queue.setBackgroundTask(done)
+        await queue.completeWhenEmpty(done, completion: doneCompletion)
+        let newer = FakeBackgroundTask()
+        await queue.setBackgroundTask(newer)
+        await queue.backgroundTaskWillExpire(done, completion: doneCompletion, pause: pause).value
+        #expect(pauses.calls.isEmpty)
+        #expect(await queue.isCurrentBackgroundTask(newer))
+        // not completed yet but no longer the current task
+        let stale = FakeBackgroundTask()
+        await queue.backgroundTaskWillExpire(stale, completion: BackgroundTaskCompletion { _ in }, pause: pause).value
+        #expect(pauses.calls.isEmpty)
+        // the current task expires: pause once
+        await queue.backgroundTaskWillExpire(newer, completion: BackgroundTaskCompletion { _ in }, pause: pause).value
+        #expect(pauses.calls.count == 1)
+        #expect(!(await queue.isCurrentBackgroundTask(newer)))
+    }
+
+    /// The system's task, its expiration handler and the completion don't keep each other alive.
+    @Test func theSystemTaskIsReleased() async {
+        let queue = await makeQueue()
+        weak var finished: FakeSystemTask?
+        weak var expired: FakeSystemTask?
+        do {
+            let task = FakeSystemTask()
+            finished = task
+            await queue.handleBackgroundTask(task, pause: {}, resumeTasks: false).value // empty queue: done
+            #expect(task.completions == [true])
+            #expect(task.expirationHandler == nil)
+        }
+        #expect(finished == nil)
+        do {
+            await queue.pause(byUser: true)
+            await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
+            let task = FakeSystemTask()
+            expired = task
+            let run = queue.handleBackgroundTask(task, pause: {}, resumeTasks: false)
+            #expect(await waitForWaiters(queue, 1))
+            task.expirationHandler?() // the system expires it
+            await run.value
+            #expect(task.completions == [false])
+            #expect(task.expirationHandler == nil)
+            await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000) // the expiry's own task lets go of it
+        #expect(expired == nil)
+        cleanUp()
+    }
+
     private func waitForWaiters(_ queue: DownloadQueue, _ count: Int) async -> Bool {
         let deadline = Date().addingTimeInterval(5)
         while await queue.emptyWaiterCount < count && Date() < deadline {
@@ -359,4 +429,12 @@ private final class CompletionLog: @unchecked Sendable {
     private var stored: [Bool] = []
     var calls: [Bool] { lock.withLock { stored } }
     func add(_ success: Bool) { lock.withLock { stored.append(success) } }
+}
+
+/// Stands in for the system's background task, with its expiration handler.
+private final class FakeSystemTask: NSObject, SystemBackgroundTask, @unchecked Sendable {
+    let progress = Progress()
+    var expirationHandler: (() -> Void)?
+    private(set) var completions: [Bool] = []
+    func setTaskCompleted(success: Bool) { completions.append(success) }
 }
