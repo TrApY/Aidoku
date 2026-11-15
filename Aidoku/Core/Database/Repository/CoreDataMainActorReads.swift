@@ -15,6 +15,6 @@ final class CoreDataMainActorReads: MainActorReads {
     }
 
     func isTracking(_ manga: MangaIdentifier) -> Bool {
-        false // STUB (rojo de L1)
+        CoreDataManager.shared.hasTrack(mangaId: manga, context: container.viewContext)
     }
 }
