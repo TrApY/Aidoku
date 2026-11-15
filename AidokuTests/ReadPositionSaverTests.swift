@@ -146,9 +146,10 @@ struct ReadPositionSaverTests {
         h.scheduler.advance(by: 2.1) // the save of 5 starts (async, still running)
         let old = h.local.last?.generation ?? -1
         h.turn(6)
-        h.scheduler.advance(by: 2.1) // the save of 6 starts
+        h.scheduler.advance(by: 31) // the saves of 6 start (local, then the tracker)
         let recent = h.local.last?.generation ?? -1
-        // going to the background on 6: nothing new to write locally, the save of 6 is doing it
+        #expect(h.tracker.map(\.position.page) == [6])
+        // going to the background on 6: nothing new to save, the saves of 6 are doing it
         _ = h.saver.claimImmediateSave(pageKey: "c1#6")
         #expect(h.saver.isCurrent(recent))
         #expect(!h.saver.isCurrent(old)) // the older save of 5 must not write after it
