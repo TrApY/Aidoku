@@ -290,20 +290,20 @@ import Testing
         try await withLibraryManga(key: "49", target: 2) { manga, newestFirst, manager in
             let tracker = FakePageTracker(progress: ["c1": .init(completed: true, page: 20, date: .now)])
             await addFakeTrack(tracker, id: "fake-49", manga: manga)
+            let finished = TriggerFlag()
             await TrackerManager.shared.syncPageTrackerHistory(
                 manga: manga,
                 chapters: newestFirst,
                 trackerLookup: { $0 == tracker.id ? tracker : nil },
-                downloadAhead: { await manager.ensureAheadDownloaded(mangaId: $0, onlyOnWifi: false) }
+                downloadAhead: {
+                    await manager.ensureAheadDownloaded(mangaId: $0, onlyOnWifi: false)
+                    await finished.set()
+                }
             )
-            // the trigger runs on its own: wait for it (at most 5 s)
-            var second = status(manager, manga, "c2")
-            for _ in 0..<100 where second != .queued {
-                try await Task.sleep(nanoseconds: 50_000_000)
-                second = status(manager, manga, "c2")
-            }
+            // the trigger runs on its own: wait until it has finished queueing (at most 10 s)
+            #expect(await finished.wait(seconds: 10))
             // c1 read elsewhere: the window is c2, c3
-            #expect(second == .queued)
+            #expect(status(manager, manga, "c2") == .queued)
             #expect(status(manager, manga, "c3") == .queued)
             #expect(status(manager, manga, "c1") == .none)
             #expect(status(manager, manga, "c4") == .none)
@@ -328,27 +328,31 @@ import Testing
             )
             let elapsed = Date().timeIntervalSince(start)
             #expect(elapsed < 1.5) // details, refresh and .historySet don't wait for it
-            var done = await triggered.value
-            for _ in 0..<100 where !done {
-                try await Task.sleep(nanoseconds: 50_000_000)
-                done = await triggered.value
-            }
-            #expect(done) // but it runs
+            #expect(await triggered.wait(seconds: 10)) // but it runs
             await removeFakeTrack(tracker, manga: manga)
         }
     }
 
     @Test func noQueueingIfWifiIsLostBeforeQueueing() async throws {
         try await withLibraryManga(key: "53", target: 2) { manga, _, manager in
-            let checks = CheckCounter()
-            // Wi-Fi for the first checks (trigger start, pending-run start), lost right before queueing
+            let connection = ConnectionBox(.wifi)
+            // Wi-Fi when the trigger starts; lost once the chapters to queue are known, right before queueing
             let queued = await manager.ensureAheadDownloaded(
                 manga: manga,
                 onlyOnWifi: true,
-                connectionProvider: { checks.next() <= 2 ? .wifi : .cellular }
+                connectionProvider: { connection.value },
+                willQueue: { _ in connection.set(.cellular) }
             )
             #expect(queued.isEmpty)
             #expect(status(manager, manga, "c1") == .none)
+            // control: with Wi-Fi all along the same trigger queues
+            connection.set(.wifi)
+            let queuedWithWifi = await manager.ensureAheadDownloaded(
+                manga: manga,
+                onlyOnWifi: true,
+                connectionProvider: { connection.value }
+            )
+            #expect(queuedWithWifi.map(\.key) == ["c1", "c2"])
         }
     }
 
@@ -396,20 +400,48 @@ import Testing
     }
 }
 
+/// Set once something has happened; `wait` returns as soon as it is (or false after the time limit).
 private actor TriggerFlag {
     private(set) var value = false
-    func set() { value = true }
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func set() {
+        value = true
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+
+    func wait(seconds: Double) async -> Bool {
+        if value { return true }
+        let timeout = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            self.timeOut()
+        }
+        await withCheckedContinuation { waiters.append($0) }
+        timeout.cancel()
+        return value
+    }
+
+    private func timeOut() {
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
 }
 
-/// Counts connection checks (thread-safe).
-private final class CheckCounter: @unchecked Sendable {
+/// The current connection, changed by the test (thread-safe).
+private final class ConnectionBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var count = 0
-    func next() -> Int {
+    private var current: NetworkDataType
+    init(_ value: NetworkDataType) { current = value }
+    var value: NetworkDataType {
         lock.lock()
         defer { lock.unlock() }
-        count += 1
-        return count
+        return current
+    }
+    func set(_ value: NetworkDataType) {
+        lock.lock()
+        current = value
+        lock.unlock()
     }
 }
 

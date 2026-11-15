@@ -177,7 +177,8 @@ extension DownloadManager {
         manga: AidokuRunner.Manga,
         connection: NetworkDataType? = nil,
         onlyOnWifi: Bool? = nil,
-        connectionProvider: (@Sendable () -> NetworkDataType)? = nil
+        connectionProvider: (@Sendable () -> NetworkDataType)? = nil,
+        willQueue: (@Sendable ([AidokuRunner.Chapter]) async -> Void)? = nil
     ) async -> [AidokuRunner.Chapter] {
         let mangaId = manga.identifier
         let canQueue = {
@@ -224,6 +225,9 @@ extension DownloadManager {
                 language: filters.language,
                 scanlators: filters.scanlators ?? []
             )
+            if !toQueue.isEmpty {
+                await willQueue?(toQueue) // tests: e.g. the connection changes here
+            }
             // the connection may have changed while reading the library (several awaits)
             if !toQueue.isEmpty && canQueue() {
                 retried.formUnion(toQueue.map(\.key))

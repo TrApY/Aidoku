@@ -30,9 +30,13 @@ actor DownloadQueue {
     private var progressBlocks: [ChapterIdentifier: (Int, Int) -> Void] = [:]
 
     private var paused = false
+#if DEBUG
     /// Tasks created and not finished, per source, and the most seen at once (one is the rule). For tests.
     private var aliveTasks: [String: Int] = [:]
     private(set) var maxAliveTasksPerSource = 0
+#endif
+    /// How the tasks find a source (injectable for tests).
+    private let sourceLookup: DownloadTask.SourceLookup
     /// Paused from the download queue UI (not by the Wi-Fi rule or the background task expiring).
     private var userPaused = false
     private var registeredTask = false
@@ -43,10 +47,16 @@ actor DownloadQueue {
 
     private static let taskIdentifier = (Bundle.main.bundleIdentifier ?? "") + ".download"
 
-    init(cache: DownloadCache, onCompletion: (() -> Void)? = nil, stateKey: String? = "Data.downloadQueueState") {
+    init(
+        cache: DownloadCache,
+        onCompletion: (() -> Void)? = nil,
+        stateKey: String? = "Data.downloadQueueState",
+        sourceLookup: @escaping DownloadTask.SourceLookup = DownloadTask.defaultSourceLookup
+    ) {
         self.cache = cache
         self.onCompletion = onCompletion
         self.stateKey = stateKey
+        self.sourceLookup = sourceLookup
     }
 
     /// The task of a source, created if needed. Stored before any suspension point, so a reentrant call
@@ -56,10 +66,14 @@ actor DownloadQueue {
         if let task = tasks[sourceKey] {
             return task
         }
-        let task = DownloadTask(id: sourceKey, cache: cache, downloads: queue[sourceKey] ?? [], delegate: self)
+        let task = DownloadTask(
+            id: sourceKey, cache: cache, downloads: queue[sourceKey] ?? [], delegate: self, sourceLookup: sourceLookup
+        )
         tasks[sourceKey] = task
+#if DEBUG
         aliveTasks[sourceKey, default: 0] += 1
         maxAliveTasksPerSource = max(maxAliveTasksPerSource, aliveTasks[sourceKey] ?? 0)
+#endif
         return task
     }
 
@@ -368,7 +382,9 @@ extension DownloadQueue: DownloadTaskDelegate {
     func taskPaused(task _: DownloadTask) async {}
 
     func taskFinished(task: DownloadTask) async {
+#if DEBUG
         aliveTasks[task.id, default: 1] -= 1
+#endif
         tasks.removeValue(forKey: task.id)
         queue.removeValue(forKey: task.id)
         saveQueueState()

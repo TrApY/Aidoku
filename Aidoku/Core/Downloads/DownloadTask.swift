@@ -46,11 +46,23 @@ actor DownloadTask: Identifiable {
         case pageProcessorFailed
     }
 
-    init(id: String, cache: DownloadCache, downloads: [Download], delegate: DownloadTaskDelegate? = nil) {
+    typealias SourceLookup = @Sendable (String) async -> AidokuRunner.Source?
+    static let defaultSourceLookup: SourceLookup = { await SourceManager.shared.source(for: $0) }
+
+    private let sourceLookup: SourceLookup
+
+    init(
+        id: String,
+        cache: DownloadCache,
+        downloads: [Download],
+        delegate: DownloadTaskDelegate? = nil,
+        sourceLookup: @escaping SourceLookup = DownloadTask.defaultSourceLookup
+    ) {
         self.id = id
         self.cache = cache
         self.downloads = downloads
         self.delegate = delegate
+        self.sourceLookup = sourceLookup
     }
 
     func setDelegate(delegate: DownloadTaskDelegate?) {
@@ -175,7 +187,7 @@ extension DownloadTask {
         // attempt to download first chapter in the queue
         if
             let download = downloads.first,
-            let source = await SourceManager.shared.source(for: download.chapterIdentifier.sourceKey)
+            let source = await sourceLookup(download.chapterIdentifier.sourceKey)
         {
             // if chapter already downloaded, skip
             let directory = cache.directory(for: download.chapterIdentifier)
@@ -522,7 +534,7 @@ extension DownloadTask {
                 if
                     !coverPath.exists,
                     let coverUrl = download.manga.cover.flatMap({ URL(string: $0) }),
-                    let source = await SourceManager.shared.source(for: download.chapterIdentifier.sourceKey)
+                    let source = await sourceLookup(download.chapterIdentifier.sourceKey)
                 {
                     let request = await source.getModifiedImageRequest(url: coverUrl, context: nil)
                     let result = try? await URLSession.shared.data(for: request)

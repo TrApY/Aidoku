@@ -100,31 +100,104 @@ struct DownloadQueueTests {
         #expect(!(await queue.isPaused()))
     }
 
-    /// Running task for a server that never answers, paused; everything of the source cancelled; then a
-    /// new download: it must reach that (empty) task.
+    /// A running task (its source waits until the test lets it go, no network), paused; everything of the
+    /// source cancelled; then a new download: it must reach that task, left with nothing.
     @Test func downloadsReachTheTaskAfterCancellingWhilePaused() async throws {
-        await SourceManager.shared.waitForSourcesLoad()
-        let sourceKey = try #require(await SourceManager.shared.createCustomSource(.suwayomi(.init(
-            name: "Cola", server: URL(string: "http://10.255.255.1:4567")!, username: "x", password: "x"
-        ))))
-        let manga = AidokuRunner.Manga(sourceKey: sourceKey, key: "1", title: "Cola")
-        defer {
-            DownloadManager.directory.appendingPathComponent(sourceKey).removeItem()
+        let gate = PageListGate()
+        let source = AidokuRunner.Source(
+            key: "downloadqueuetest.blocking",
+            name: "Cola",
+            version: 1,
+            contentRating: .safe,
+            runner: BlockingRunner(gate: gate)
+        )
+        let manga = AidokuRunner.Manga(sourceKey: source.key, key: UUID().uuidString, title: "Cola")
+        let queue = await MainActor.run {
+            DownloadQueue(cache: DownloadCache(), stateKey: nil, sourceLookup: { $0 == source.key ? source : nil })
         }
-        let queue = await makeQueue()
+        defer {
+            Task { await gate.open() } // the waiting page list fails, the task sees it was cancelled
+            DownloadManager.directory.appendingPathComponent(source.key).removeItem()
+        }
+        let chapter = { (key: String) in ChapterIdentifier(sourceKey: source.key, mangaKey: manga.key, chapterKey: key) }
+
         await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .always)
+        #expect(await gate.waitUntilEntered(seconds: 10)) // c1 is downloading
         await queue.pause(byUser: true)
-        await queue.cancelDownloads(for: [.init(sourceKey: sourceKey, mangaKey: "1", chapterKey: "c1")])
-        var left = await queue.queue[sourceKey]
-        for _ in 0..<40 where left != nil {
+        await queue.cancelDownloads(for: [chapter("c1")])
+        var left = await queue.queue[source.key]
+        for _ in 0..<100 where left != nil {
             try await Task.sleep(nanoseconds: 50_000_000)
-            left = await queue.queue[sourceKey]
+            left = await queue.queue[source.key]
         }
         #expect(left == nil)
-        #expect(await queue.taskChapterKeys(sourceKey: sourceKey)?.isEmpty == true) // the task is still there
+        #expect(await queue.taskChapterKeys(sourceKey: source.key)?.isEmpty == true) // the task is still there
+
         await queue.add(chapters: [.init(key: "c2", chapterNumber: 2)], manga: manga, start: .never)
-        #expect(await queue.taskChapterKeys(sourceKey: sourceKey) == ["c2"])
-        await queue.cancelDownloads(for: [.init(sourceKey: sourceKey, mangaKey: "1", chapterKey: "c2")])
-        await SourceManager.shared.remove(sourceKey: sourceKey)
+        #expect(await queue.taskChapterKeys(sourceKey: source.key) == ["c2"])
+        await queue.cancelDownloads(for: [chapter("c2")])
+    }
+}
+
+/// Lets a page list request wait until the test opens it.
+private actor PageListGate {
+    private var isOpen = false
+    private var entered = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func pass() async throws {
+        entered = true
+        enteredWaiters.forEach { $0.resume() }
+        enteredWaiters = []
+        if !isOpen {
+            await withCheckedContinuation { waiting.append($0) }
+        }
+        throw CancellationError()
+    }
+
+    func open() {
+        isOpen = true
+        waiting.forEach { $0.resume() }
+        waiting = []
+    }
+
+    func waitUntilEntered(seconds: Double) async -> Bool {
+        if entered { return true }
+        let timeout = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            self.giveUp()
+        }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+        timeout.cancel()
+        return entered
+    }
+
+    private func giveUp() {
+        enteredWaiters.forEach { $0.resume() }
+        enteredWaiters = []
+    }
+}
+
+/// A source whose page list waits at the gate (then fails).
+private final class BlockingRunner: AidokuRunner.Runner, @unchecked Sendable {
+    let gate: PageListGate
+    let features = AidokuRunner.SourceFeatures()
+
+    init(gate: PageListGate) {
+        self.gate = gate
+    }
+
+    func getSearchMangaList(query: String?, page: Int, filters: [AidokuRunner.FilterValue]) async throws -> AidokuRunner.MangaPageResult {
+        .init(entries: [], hasNextPage: false)
+    }
+
+    func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
+        manga
+    }
+
+    func getPageList(manga: AidokuRunner.Manga, chapter: AidokuRunner.Chapter) async throws -> [AidokuRunner.Page] {
+        try await gate.pass()
+        return []
     }
 }
