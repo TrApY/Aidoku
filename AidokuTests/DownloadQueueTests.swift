@@ -310,12 +310,35 @@ struct DownloadQueueTests {
             task.expirationHandler?() // the system expires it
             await run.value
             #expect(task.completions == [false])
-            #expect(task.expirationHandler == nil)
+            // not cleared from inside the handler itself (no cycle to break: everything refers to it weakly)
+            #expect(task.expirationHandler != nil)
             await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
         }
-        try? await Task.sleep(nanoseconds: 300_000_000) // the expiry's own task lets go of it
+        // the expiry's own task lets go of it
+        let deadline = Date().addingTimeInterval(5)
+        while expired != nil && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
         #expect(expired == nil)
         cleanUp()
+    }
+
+    /// The task expires before it is registered with the queue: once registered, it is let go at once
+    /// (the queue must not keep a completed task, or start() would never ask for a new one).
+    @Test func aTaskThatExpiredBeforeRegisteringIsLetGo() async {
+        defer { cleanUp() }
+        let queue = await makeQueue()
+        await queue.pause(byUser: true)
+        await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
+        let task = FakeBackgroundTask()
+        let log = CompletionLog()
+        let completion = BackgroundTaskCompletion { success in log.add(success) }
+        await queue.backgroundTaskWillExpire(task, completion: completion, pause: {}).value // not registered yet
+        await queue.setBackgroundTask(task) // the task's own run registers it late
+        await queue.completeWhenEmpty(task, completion: completion)
+        #expect(log.calls == [false])
+        #expect(!(await queue.isCurrentBackgroundTask(task)))
+        await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
     }
 
     private func waitForWaiters(_ queue: DownloadQueue, _ count: Int) async -> Bool {
