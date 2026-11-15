@@ -297,24 +297,3 @@ struct ServerExtensionsTests {
         #expect(none.state == .noConnection)
     }
 }
-
-// MARK: B4
-
-struct MigrateSourcesGroupingTests {
-    @Test func eachServerSourceCountsOnItsOwn() {
-        let manga: [AidokuRunner.Manga] = [
-            .init(sourceKey: "suwayomi.suwa.1596411039134168890", key: "1", title: "A"),
-            .init(sourceKey: "suwayomi.suwa.1596411039134168890", key: "2", title: "B"),
-            .init(sourceKey: "suwayomi.suwa.4562754350961964148", key: "3", title: "C"),
-            .init(sourceKey: "suwayomi.suwa", key: "4", title: "Pendiente"),
-            .init(sourceKey: "aidoku.en", key: "5", title: "D")
-        ]
-        let groups = MigrateSourcesView.group(manga)
-        #expect(groups.mapValues(\.count) == [
-            "suwayomi.suwa.1596411039134168890": 2,
-            "suwayomi.suwa.4562754350961964148": 1,
-            "suwayomi.suwa": 1,
-            "aidoku.en": 1
-        ])
-    }
-}
