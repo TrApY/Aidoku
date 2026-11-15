@@ -952,18 +952,21 @@ extension MangaManager {
                     context: context
                 )
 
-                var maxChapterRead = storedOldHistory
-                    .compactMap { $0.chapter?.chapter != nil ? $0.chapter : nil }
-                    .max { $0.chapter!.decimalValue < $1.chapter!.decimalValue }?
-                    .chapter?.floatValue
-
-                if maxChapterRead == nil || maxChapterRead == -1 {
-                    // try finding max volume read instead, in case of no chapters
-                    maxChapterRead = storedOldHistory
-                        .compactMap { $0.chapter?.volume != nil ? $0.chapter : nil }
-                        .max { $0.volume!.decimalValue < $1.volume!.decimalValue }?
-                        .volume?.floatValue
-                }
+                // read = completed only; unfinished chapters keep their page; dates are kept
+                let historyPlan = MigrationHistory.plan(
+                    old: storedOldHistory.map {
+                        .init(
+                            chapter: $0.chapter?.chapter?.floatValue,
+                            volume: $0.chapter?.volume?.floatValue,
+                            completed: $0.completed,
+                            progress: Int($0.progress),
+                            total: Int($0.total),
+                            dateRead: $0.dateRead,
+                            scrollPosition: $0.scrollPosition?.doubleValue
+                        )
+                    },
+                    newChapters: newChapters
+                )
 
                 // remove old chapters and history
                 if !copy {
@@ -985,21 +988,29 @@ extension MangaManager {
                     )
                 }
 
-                // mark new chapters as read
-                if let maxChapterRead {
-                    var chaptersToMark = newChapters.filter({ $0.chapterNumber ?? Float.greatestFiniteMagnitude <= maxChapterRead })
-                    if chaptersToMark.isEmpty {
-                        // fall back to using volume numbers instead, in case the source we're migrating to uses volumes
-                        chaptersToMark = newChapters.filter({ $0.volumeNumber ?? Float.greatestFiniteMagnitude <= maxChapterRead })
+                // mark new chapters as read, with the old reading dates
+                for completed in historyPlan.completed {
+                    CoreDataManager.shared.setCompleted(
+                        chapterIds: [.init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: completed.chapterKey)],
+                        date: completed.date,
+                        context: context
+                    )
+                }
+                // the unfinished chapter keeps its page (unless the new chapter already has its own history)
+                for unfinished in historyPlan.inProgress {
+                    let chapterId = ChapterIdentifier(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: unfinished.chapterKey)
+                    if let existing = CoreDataManager.shared.getHistory(chapterId: chapterId, context: context),
+                       existing.completed || existing.progress > 0 {
+                        continue
                     }
-                    if !chaptersToMark.isEmpty {
-                        CoreDataManager.shared.setCompleted(
-                            chapterIds: chaptersToMark.map {
-                                .init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: $0.key)
-                            },
-                            context: context
-                        )
-                    }
+                    CoreDataManager.shared.setProgress(
+                        unfinished.progress,
+                        chapterId: chapterId,
+                        totalPages: unfinished.total > 0 ? unfinished.total : nil,
+                        scrollPosition: unfinished.scrollPosition,
+                        dateRead: unfinished.date,
+                        context: context
+                    )
                 }
 
                 // migrate trackers
