@@ -141,10 +141,10 @@ struct StoreDump: Equatable {
     static func naturalKey(_ object: NSManagedObject) -> String {
         func text(_ key: String) -> String {
             switch object.value(forKey: key) {
-                case let string as String: string
+                case let string as String: escaped(string)
                 case let date as Date: dateString(date)
                 case nil: "∅"
-                case let other?: "\(other)"
+                case let other?: escaped("\(other)")
             }
         }
         func join(_ keys: String...) -> String { keys.map(text).joined(separator: "\u{1F}") }
@@ -182,12 +182,22 @@ struct StoreDump: Equatable {
             case .dateAttributeType:
                 return (value as? Date).map(dateString) ?? "date?"
             case .stringAttributeType:
-                return "s" + ((value as? String) ?? "")
+                return "s" + escaped((value as? String) ?? "")
             case .binaryDataAttributeType:
                 return "x" + hex((value as? Data) ?? Data())
             default:
                 return "\(value)"
         }
+    }
+
+    /// A text with the separators of the dump (U+1E between fields, U+1F inside a key) and the escape (U+1B)
+    /// escaped, so that no text can look like two fields.
+    static func escaped(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: { $0 == "\u{1B}" || $0 == "\u{1E}" || $0 == "\u{1F}" }) else { return text }
+        return text
+            .replacingOccurrences(of: "\u{1B}", with: "\u{1B}0")
+            .replacingOccurrences(of: "\u{1E}", with: "\u{1B}1")
+            .replacingOccurrences(of: "\u{1F}", with: "\u{1B}2")
     }
 
     /// Seconds since 2001-01-01 (what the store keeps), with all its decimals.
@@ -412,7 +422,7 @@ struct StoreDump: Equatable {
                     case SQLITE_NULL: row.append("∅")
                     case SQLITE_INTEGER: row.append("i\(sqlite3_column_int64(statement, column))")
                     case SQLITE_FLOAT: row.append("d\(sqlite3_column_double(statement, column))")
-                    case SQLITE_TEXT: row.append("s" + String(cString: sqlite3_column_text(statement, column)))
+                    case SQLITE_TEXT: row.append("s" + escaped(String(cString: sqlite3_column_text(statement, column))))
                     default:
                         let count = Int(sqlite3_column_bytes(statement, column))
                         let bytes = sqlite3_column_blob(statement, column).map { Data(bytes: $0, count: count) } ?? Data()
