@@ -14,7 +14,15 @@ final class CoreDataChapterRepository: ChapterRepository, @unchecked Sendable {
         self.container = container
     }
 
-    // STUB (rojo de L4): el contrato aún no tiene implementación
-    func chapters(of manga: MangaIdentifier) async -> [AidokuRunner.Chapter] { [] }
-    func chapter(_ id: ChapterIdentifier) async -> AidokuRunner.Chapter? { nil }
+    func chapters(of manga: MangaIdentifier) async -> [AidokuRunner.Chapter] {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getChapters(mangaId: manga, context: context).map { $0.toNewChapter() }
+        }
+    }
+
+    func chapter(_ id: ChapterIdentifier) async -> AidokuRunner.Chapter? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getChapter(chapterId: id, context: context)?.toNewChapter()
+        }
+    }
 }

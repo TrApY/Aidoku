@@ -19,10 +19,10 @@ final class CoreDataMainActorReads: MainActorReads {
     }
 
     func progress(of chapter: ChapterIdentifier) -> ChapterProgress {
-        ChapterProgress(completed: false, progress: nil) // STUB (rojo de L4)
+        CoreDataHistoryRepository.progress(CoreDataManager.shared.getProgress(chapterId: chapter, context: container.viewContext))
     }
 
     func record(of chapter: ChapterIdentifier) -> HistoryRecord? {
-        nil // STUB (rojo de L4)
+        CoreDataManager.shared.getHistory(chapterId: chapter, context: container.viewContext).map(CoreDataHistoryRepository.record)
     }
 }

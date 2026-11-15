@@ -13,12 +13,61 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
         self.container = container
     }
 
-    // STUB (rojo de L4): el contrato aún no tiene implementación
-    func progress(of chapter: ChapterIdentifier) async -> ChapterProgress { ChapterProgress(completed: false, progress: nil) }
-    func record(of chapter: ChapterIdentifier) async -> HistoryRecord? { nil }
-    func readingHistory(of manga: MangaIdentifier) async -> [String: ReadingHistoryEntry] { [:] }
-    func recent(limit: Int, offset: Int) async -> [HistoryRecord] { [] }
-    func hasHistory(of manga: MangaIdentifier) async -> Bool { false }
-    func earliestReadDate(of manga: MangaIdentifier) async -> Date? { nil }
-    func highestReadNumber(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> Float? { nil }
+    static func record(_ object: HistoryObject) -> HistoryRecord {
+        HistoryRecord(
+            chapterId: object.identifier,
+            progress: Int(object.progress),
+            total: Int(object.total),
+            completed: object.completed,
+            dateRead: object.dateRead,
+            scrollPosition: object.scrollPosition?.doubleValue
+        )
+    }
+
+    static func progress(_ stored: (completed: Bool, progress: Int?)) -> ChapterProgress {
+        ChapterProgress(completed: stored.completed, progress: stored.progress)
+    }
+
+    func progress(of chapter: ChapterIdentifier) async -> ChapterProgress {
+        await container.performBackgroundTask { context in
+            Self.progress(CoreDataManager.shared.getProgress(chapterId: chapter, context: context))
+        }
+    }
+
+    func record(of chapter: ChapterIdentifier) async -> HistoryRecord? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getHistory(chapterId: chapter, context: context).map(Self.record)
+        }
+    }
+
+    func readingHistory(of manga: MangaIdentifier) async -> [String: ReadingHistoryEntry] {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getReadingHistory(mangaId: manga, context: context)
+                .mapValues { ReadingHistoryEntry(page: $0.page, date: $0.date) }
+        }
+    }
+
+    func recent(limit: Int, offset: Int) async -> [HistoryRecord] {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getRecentHistory(limit: limit, offset: offset, context: context).map(Self.record)
+        }
+    }
+
+    func hasHistory(of manga: MangaIdentifier) async -> Bool {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.hasHistory(mangaId: manga, context: context)
+        }
+    }
+
+    func earliestReadDate(of manga: MangaIdentifier) async -> Date? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getEarliestReadDate(mangaId: manga, context: context)
+        }
+    }
+
+    func highestReadNumber(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> Float? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getHighestReadNumber(mangaId: manga, mode: mode, context: context)
+        }
+    }
 }

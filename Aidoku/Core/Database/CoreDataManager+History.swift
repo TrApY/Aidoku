@@ -175,46 +175,52 @@ extension CoreDataManager {
     // format: [chapterId: (page (-1 if completed), read date)]
     func getReadingHistory(mangaId: MangaIdentifier) async -> [String: (page: Int, date: Int)] {
         await container.performBackgroundTask { context in
-            let objects = self.getHistoryForManga(mangaId: mangaId, context: context)
-
-            var needsSave = false
-            var historyDict: [String: (page: Int, date: Int)] = [:]
-
-            let inLibrary = self.hasLibraryManga(mangaId: mangaId, context: context)
-
-            for history in objects {
-                // remove duplicate read history objects for the same chapter
-                if historyDict[history.chapterId] != nil {
-                    needsSave = true
-                    context.delete(history)
-                    continue
-                }
-                // link history to chapter if link is missing
-                if inLibrary && history.chapter == nil {
-                    if let chapter = self.getChapter(
-                        chapterId: .init(
-                            sourceKey: mangaId.sourceKey,
-                            mangaKey: mangaId.mangaKey,
-                            chapterKey: history.chapterId
-                        ),
-                        context: context
-                    ) {
-                        history.chapter = chapter
-                        needsSave = true
-                    }
-                }
-                historyDict[history.chapterId] = (
-                    history.completed ? -1 : Int(history.progress),
-                    Int(history.dateRead?.timeIntervalSince1970 ?? -1)
-                )
-            }
-
-            if needsSave {
-                try? context.save()
-            }
-
-            return historyDict
+            self.getReadingHistory(mangaId: mangaId, context: context)
         }
+    }
+
+    /// The reading history of a manga, on `context`; removes repeated histories and links missing chapters (and
+    /// saves if it did).
+    func getReadingHistory(mangaId: MangaIdentifier, context: NSManagedObjectContext) -> [String: (page: Int, date: Int)] {
+        let objects = getHistoryForManga(mangaId: mangaId, context: context)
+
+        var needsSave = false
+        var historyDict: [String: (page: Int, date: Int)] = [:]
+
+        let inLibrary = hasLibraryManga(mangaId: mangaId, context: context)
+
+        for history in objects {
+            // remove duplicate read history objects for the same chapter
+            if historyDict[history.chapterId] != nil {
+                needsSave = true
+                context.delete(history)
+                continue
+            }
+            // link history to chapter if link is missing
+            if inLibrary && history.chapter == nil {
+                if let chapter = getChapter(
+                    chapterId: .init(
+                        sourceKey: mangaId.sourceKey,
+                        mangaKey: mangaId.mangaKey,
+                        chapterKey: history.chapterId
+                    ),
+                    context: context
+                ) {
+                    history.chapter = chapter
+                    needsSave = true
+                }
+            }
+            historyDict[history.chapterId] = (
+                history.completed ? -1 : Int(history.progress),
+                Int(history.dateRead?.timeIntervalSince1970 ?? -1)
+            )
+        }
+
+        if needsSave {
+            try? context.save()
+        }
+
+        return historyDict
     }
 
     @MainActor
@@ -297,6 +303,15 @@ extension CoreDataManager {
         mangaId: MangaIdentifier,
         context: NSManagedObjectContext
     ) -> Float? {
+        getHighestReadNumber(mangaId: mangaId, mode: .stored(for: mangaId), context: context)
+    }
+
+    /// The highest read number (chapter or volume) of a manga as `mode` counts it.
+    func getHighestReadNumber(
+        mangaId: MangaIdentifier,
+        mode displayMode: ChapterTitleDisplayMode,
+        context: NSManagedObjectContext
+    ) -> Float? {
         let request = HistoryObject.fetchRequest()
         request.predicate = NSPredicate(
             format: "mangaId == %@ AND sourceId == %@ AND completed == true",
@@ -304,12 +319,6 @@ extension CoreDataManager {
         )
         request.fetchLimit = 1
 
-        let key = "Manga.chapterDisplayMode.\(mangaId.description)"
-        let displayMode: ChapterTitleDisplayMode = if mangaId.sourceKey.hasPrefix(KomgaSourceRunner.sourceKeyPrefix) {
-            UserDefaults.standard.bool(forKey: "\(mangaId.sourceKey).useChapters") ? .chapter : .volume
-        } else {
-            .init(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .default
-        }
         switch displayMode {
             case .default:
                 // Default mode: return highest chapter number
