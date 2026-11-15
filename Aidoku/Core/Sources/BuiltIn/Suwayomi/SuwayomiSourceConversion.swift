@@ -59,7 +59,6 @@ enum SuwayomiSourceConversion {
 
     /// Converts what is under each of `parentKeys`.
     static func run(parentKeys: [String], environment env: Environment) async -> Report {
-        if true { return .init(outcome: .nothingToConvert) } // pending
         // 1. what is there to convert (no writes)
         var idsByParent: [String: [String]] = [:]
         for parent in parentKeys {
@@ -196,7 +195,6 @@ extension SuwayomiSourceConversion {
     /// `<prefix>.<parent>.<mangaId>` (Reader.readingMode, Reader.pagedPageOffset, Manga.chapterDisplayMode,
     /// DownloadAhead, …): the prefix and the manga id. The parent's own settings (`<parent>.…`) are not.
     static func perMangaKey(_ key: String, parent: String) -> (prefix: String, mangaId: String)? {
-        if true { return nil } // pending
         let marker = ".\(parent)."
         guard let range = key.range(of: marker, options: .backwards) else { return nil }
         let prefix = String(key[..<range.lowerBound])
