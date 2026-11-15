@@ -106,8 +106,20 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
         return try await api.getSeriesReadProgress(sourceKey: sourceKey, seriesId: seriesId)
     }
 
-    /// Forgets every manga tracked with the server (pending).
+    /// Forgets every manga tracked with the servers (as removing a server source does), instead of
+    /// crashing: there's no account to log out of, the server login lives in the source settings.
     func logout() async {
+        await CoreDataManager.shared.container.performBackgroundTask { context in
+            for item in CoreDataManager.shared.getTracks(trackerId: self.id, context: context) {
+                context.delete(item)
+            }
+            do {
+                try context.save()
+            } catch {
+                LogManager.logger.error("Error removing suwayomi track items: \(error)")
+            }
+        }
+        markedInLibrary.removeAll(withPrefix: "")
     }
 
     func removeTrackItems(sourceKey: String) async {

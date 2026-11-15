@@ -136,7 +136,18 @@ struct SuwayomiMangaUpdateResponse: Decodable, Sendable {
 
     struct DataContainer: Decodable, Sendable {
         let manga: SuwayomiMangaNode
-        let chapters: ChapterConnection
+        /// Absent when not asked for.
+        let chapters: ChapterConnection?
+    }
+
+    var chapterNodes: [SuwayomiChapterNode] { data.chapters?.nodes ?? [] }
+
+    /// The first answer with what a second one asked for again.
+    func updated(with newer: SuwayomiMangaUpdateResponse, details: Bool, chapters: Bool) -> SuwayomiMangaUpdateResponse {
+        .init(data: .init(
+            manga: details ? newer.data.manga : data.manga,
+            chapters: chapters ? newer.data.chapters : data.chapters
+        ))
     }
 
     struct ChapterConnection: Decodable, Sendable {

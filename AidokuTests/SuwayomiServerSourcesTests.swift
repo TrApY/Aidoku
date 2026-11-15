@@ -239,13 +239,13 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         let full = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-initialized"))
         #expect(full.data.manga.initialized == true)
         #expect(full.data.manga.author == "TYPE-MOON")
-        #expect(!full.data.chapters.nodes.isEmpty)
+        #expect(!full.chapterNodes.isEmpty)
         #expect(SuwayomiServerSources.remoteFetchPlan(full, needsDetails: true, needsChapters: true).isEmpty)
 
         // details fetched but no chapters yet, outside the server library: only the chapters
         let noChaptersData = try fixture("manga-update-initialized-no-chapters")
         let noChapters = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: noChaptersData)
-        #expect(noChapters.data.chapters.nodes.isEmpty)
+        #expect(noChapters.chapterNodes.isEmpty)
         #expect(SuwayomiServerSources.remoteFetchPlan(noChapters, needsDetails: true, needsChapters: true) == .init(fetchManga: false, fetchChapters: true))
         #expect(SuwayomiServerSources.remoteFetchPlan(noChapters, needsDetails: true, needsChapters: false).isEmpty)
 

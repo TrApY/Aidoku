@@ -81,8 +81,9 @@ actor SuwayomiSourceRunner: Runner {
 
     /// Max time per server source when searching everywhere (shorter in tests).
     private let searchAllTimeout: TimeInterval
-    /// Categories and tags for the filters are asked again after this time (pending: always asked).
+    /// Categories and tags for the filters are asked again after this time.
     private let filterCacheMaxAge: TimeInterval
+    private var filterCache: (categories: [FilterItem], tags: [FilterItem], at: Date)?
 
     init(
         sourceKey: String,
@@ -147,7 +148,7 @@ actor SuwayomiSourceRunner: Runner {
                 // searching an installed source: the library filters don't apply
                 let response: SuwayomiFetchSourceMangaResponse = try await helper.request(
                     body: SuwayomiServerSources.searchPayload(sourceId: serverSourceId, query: query, page: page),
-                    timeout: SuwayomiServerSources.fetchTimeout
+                    timeout: SuwayomiServerSources.searchSourceTimeout
                 )
                 return SuwayomiServerSources.mangaPage(response, sourceKey: sourceKey, baseUrl: baseUrl)
             case .all:
@@ -277,23 +278,24 @@ actor SuwayomiSourceRunner: Runner {
 
         struct Payload: Encodable {
             let variables: Variables
+            // only what the caller needs: details and/or chapters (the state fields decide remote fetches)
             let query = """
-                query GetMangaUpdate($mangaId: Int!) {
+                query GetMangaUpdate($mangaId: Int!, $details: Boolean!, $chapters: Boolean!) {
                   manga(id: $mangaId) {
-                    artist
-                    author
-                    description
                     id
                     initialized
                     inLibrary
-                    status
-                    thumbnailUrl
-                    title
-                    url
-                    genre
-                    realUrl
+                    artist @include(if: $details)
+                    author @include(if: $details)
+                    description @include(if: $details)
+                    status @include(if: $details)
+                    thumbnailUrl @include(if: $details)
+                    title @include(if: $details)
+                    url @include(if: $details)
+                    genre @include(if: $details)
+                    realUrl @include(if: $details)
                   }
-                  chapters(condition: {mangaId: $mangaId}, orderBy: SOURCE_ORDER, orderByType: DESC) {
+                  chapters(condition: {mangaId: $mangaId}, orderBy: SOURCE_ORDER, orderByType: DESC) @include(if: $chapters) {
                     nodes {
                       id
                       url
@@ -310,26 +312,34 @@ actor SuwayomiSourceRunner: Runner {
 
             struct Variables: Encodable {
                 let mangaId: Int
+                let details: Bool
+                let chapters: Bool
             }
         }
 
         let baseUrl = try helper.getConfiguredServer()
         var response: SuwayomiMangaUpdateResponse = try await helper.request(
-            body: Payload(variables: .init(mangaId: mangaId))
+            body: Payload(variables: .init(mangaId: mangaId, details: needsDetails, chapters: needsChapters))
         )
         let plan = SuwayomiServerSources.remoteFetchPlan(response, needsDetails: needsDetails, needsChapters: needsChapters)
         if !plan.isEmpty {
             // manga only browsed from a server source: the server hasn't fetched it from the origin yet
             let result = await fetchFromOrigin(mangaId: mangaId, plan: plan)
-            if result.fetchedSomething {
-                response = try await helper.request(body: Payload(variables: .init(mangaId: mangaId)))
+            // ask again only for what was asked for and just fetched
+            let detailsAgain = needsDetails && result.mangaFetched
+            let chaptersAgain = needsChapters && result.chaptersFetched
+            if detailsAgain || chaptersAgain {
+                let newer: SuwayomiMangaUpdateResponse = try await helper.request(
+                    body: Payload(variables: .init(mangaId: mangaId, details: detailsAgain, chapters: chaptersAgain))
+                )
+                response = response.updated(with: newer, details: detailsAgain, chapters: chaptersAgain)
             }
-            if response.data.chapters.nodes.isEmpty {
+            if !needsChapters || response.chapterNodes.isEmpty {
                 if needsChapters, let error = result.chaptersError {
                     // chapters asked, none stored and the fetch failed: not the same as «no chapters»
                     throw error
                 }
-                if !result.fetchedSomething, let error = result.mangaError {
+                if !result.mangaFetched && !result.chaptersFetched, let error = result.mangaError {
                     // never fetched and nothing stored to fall back on
                     throw error
                 }
@@ -341,7 +351,7 @@ actor SuwayomiSourceRunner: Runner {
             manga = manga.copy(from: updatedManga)
         }
         if needsChapters {
-            manga.chapters = response.data.chapters.nodes.map {
+            manga.chapters = response.chapterNodes.map {
                 $0.intoChapter(baseUrl: baseUrl)
             }
         }
@@ -598,6 +608,7 @@ actor SuwayomiSourceRunner: Runner {
 
     /// Another server: its sources and library are not the old one's.
     private func forgetServerState() {
+        filterCache = nil
         serverSourcesRefresh?.cancel()
         serverSourcesRefresh = nil
         serverSourcesCache = nil
@@ -690,8 +701,9 @@ actor SuwayomiSourceRunner: Runner {
     private func fetchFromOrigin(
         mangaId: Int,
         plan: SuwayomiServerSources.RemoteFetchPlan
-    ) async -> (fetchedSomething: Bool, mangaError: Error?, chaptersError: Error?) {
-        var fetchedSomething = false
+    ) async -> (mangaFetched: Bool, chaptersFetched: Bool, mangaError: Error?, chaptersError: Error?) {
+        var mangaFetched = false
+        var chaptersFetched = false
         var mangaError: Error?
         var chaptersError: Error?
         if plan.fetchManga {
@@ -700,7 +712,7 @@ actor SuwayomiSourceRunner: Runner {
                     body: SuwayomiFetchMangaPayload(variables: .init(id: mangaId)),
                     timeout: SuwayomiServerSources.fetchTimeout
                 )
-                fetchedSomething = true
+                mangaFetched = true
             } catch {
                 LogManager.logger.error("Suwayomi fetchManga \(mangaId) failed: \(error)")
                 mangaError = error
@@ -712,7 +724,7 @@ actor SuwayomiSourceRunner: Runner {
                     body: SuwayomiFetchChaptersPayload(variables: .init(mangaId: mangaId)),
                     timeout: SuwayomiServerSources.fetchTimeout
                 )
-                fetchedSomething = true
+                chaptersFetched = true
             } catch where SuwayomiServerSources.isNoChaptersFound(error) {
                 // the origin has no chapters: an empty list, not an error
             } catch {
@@ -720,7 +732,7 @@ actor SuwayomiSourceRunner: Runner {
                 chaptersError = error
             }
         }
-        return (fetchedSomething, mangaError, chaptersError)
+        return (mangaFetched, chaptersFetched, mangaError, chaptersError)
     }
 
     private func updateSourceConfig(updateSourceList: Bool = false) async {
@@ -732,12 +744,8 @@ actor SuwayomiSourceRunner: Runner {
 // MARK: Search Filters
 extension SuwayomiSourceRunner {
     func getSearchFilters() async throws -> [AidokuRunner.Filter] {
-        async let categories = getCategories()
-        async let tags = getTags()
         async let serverSources = try? selectedServerSources(timeout: SuwayomiServerSources.sourcesTimeout)
-
-        let categoryItems = try await categories
-        let tagItems = try await tags
+        let (categoryItems, tagItems) = try await filterData()
 
         var filters: [AidokuRunner.Filter] = []
         if let searchIn = SuwayomiServerSources.searchInFilter(sources: await serverSources ?? []) {
@@ -895,6 +903,21 @@ extension SuwayomiSourceRunner {
     struct FilterItem {
         let id: String
         let title: String
+    }
+
+    /// Categories and library tags, kept `filterCacheMaxAge` (opening the filters doesn't ask each time).
+    private func filterData() async throws -> (categories: [FilterItem], tags: [FilterItem]) {
+        if let filterCache, Date().timeIntervalSince(filterCache.at) < filterCacheMaxAge {
+            return (filterCache.categories, filterCache.tags)
+        }
+        let requestedServer = server
+        async let categories = getCategories()
+        async let tags = getTags()
+        let result = try await (categories: categories, tags: tags)
+        if server == requestedServer {
+            filterCache = (result.categories, result.tags, Date())
+        }
+        return result
     }
 
     private func getCategories() async throws -> [FilterItem] {

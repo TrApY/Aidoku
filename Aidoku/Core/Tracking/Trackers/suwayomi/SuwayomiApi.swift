@@ -79,11 +79,16 @@ actor SuwayomiApi {
             return
         }
 
+        // only the unread chapters up to that number (floor(number) <= last read, i.e. number < below):
+        // the tracker knows the number, not the chapter ids
         struct GetChaptersPayload: Encodable {
             let variables: Variables
             let query = """
-                query GetChaptersForTrackUpdate($mangaId: Int!) {
-                  chapters(condition: {mangaId: $mangaId}) {
+                query GetChaptersForTrackUpdate($mangaId: Int!, $below: Float!) {
+                  chapters(
+                    condition: {mangaId: $mangaId}
+                    filter: {chapterNumber: {lessThan: $below}, isRead: {equalTo: false}}
+                  ) {
                     nodes {
                       id
                       chapterNumber
@@ -94,12 +99,13 @@ actor SuwayomiApi {
 
             struct Variables: Encodable {
                 let mangaId: Int
+                let below: Float
             }
         }
 
         let helper = makeHelper(sourceKey: sourceKey)
         let chapters: SuwayomiTrackChaptersResponse = try await helper.request(
-            body: GetChaptersPayload(variables: .init(mangaId: mangaId))
+            body: GetChaptersPayload(variables: .init(mangaId: mangaId, below: floor(lastReadChapter) + 1))
         )
         let ids = chapters.data.chapters.nodes
             .filter { floor($0.chapterNumber ?? 0) <= lastReadChapter }
