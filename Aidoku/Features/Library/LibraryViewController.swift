@@ -1628,7 +1628,7 @@ extension LibraryViewController {
         /// «Descarga adelantada» setting, removed with the manga.
         let downloadAhead: Int
 
-        /// What undoing the removal needs, read before removing (pending: setting not captured).
+        /// What undoing the removal needs, read before removing.
         nonisolated static func make(mangaId: MangaIdentifier, context: NSManagedObjectContext) -> Self? {
             guard let manga = CoreDataManager.shared.getManga(mangaId: mangaId, context: context)?.toManga() else {
                 return nil
@@ -1638,7 +1638,7 @@ extension LibraryViewController {
                 chapters: CoreDataManager.shared.getChapters(mangaId: mangaId, context: context).map { $0.toChapter() },
                 trackItems: CoreDataManager.shared.getTracks(mangaId: mangaId, context: context).map { $0.toItem() },
                 categories: CoreDataManager.shared.getCategories(mangaId: mangaId, context: context).compactMap { $0.title },
-                downloadAhead: 0
+                downloadAhead: DownloadAheadSetting.get(for: mangaId)
             )
         }
     }

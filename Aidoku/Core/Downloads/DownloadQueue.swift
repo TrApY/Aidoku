@@ -116,9 +116,12 @@ actor DownloadQueue {
     }
 
     /// - unlessUserPaused: do nothing if the user paused the queue (automatic resume, e.g. Wi-Fi is back).
-    ///   Returns whether it resumed (pending).
+    ///   Returns whether it resumed. Checked inside the queue, so a pause can't slip in between.
     @discardableResult
     func resume(unlessUserPaused: Bool) async -> Bool {
+        if unlessUserPaused && userPaused {
+            return false
+        }
         await resume()
         return true
     }

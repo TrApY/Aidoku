@@ -224,7 +224,8 @@ extension DownloadManager {
                 language: filters.language,
                 scanlators: filters.scanlators ?? []
             )
-            if !toQueue.isEmpty {
+            // the connection may have changed while reading the library (several awaits)
+            if !toQueue.isEmpty && canQueue() {
                 retried.formUnion(toQueue.map(\.key))
                 // automatic: don't resume a queue the user paused
                 await download(manga: manga, chapters: toQueue, start: .unlessUserPaused)

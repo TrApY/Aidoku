@@ -495,8 +495,6 @@ actor TrackerManager {
                     ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: $0)
                 }
             )
-            // «descarga adelantada»: chapters read on another device move the window too
-            await downloadAhead(manga.identifier) // pending: awaited
         }
         for (chapterKey, page) in progressed {
             NotificationCenter.default.post(
@@ -510,6 +508,14 @@ actor TrackerManager {
                     page
                 )
             )
+        }
+        // «descarga adelantada»: chapters read on another device move the window too (on its own: details,
+        // refresh and other trackers don't wait for it)
+        if !completed.isEmpty {
+            let mangaId = manga.identifier
+            Task {
+                await downloadAhead(mangaId)
+            }
         }
     }
 
