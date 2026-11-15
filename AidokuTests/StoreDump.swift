@@ -213,8 +213,12 @@ struct StoreDump: Equatable {
     // MARK: - Metadata that changes when the app opens a store
 
     /// Metadata tables that change on their own when the app's stack opens a copy without CloudKit and saves
-    /// nothing (measured in F3 P4; see the report). The rest must stay byte for byte.
-    static let changesWhenOpened: Set<String> = []
+    /// nothing; the rest (CloudKit mirroring ANSCK*, persistent history, primary keys, model cache) stays byte for
+    /// byte. Z_METADATA keeps the store's metadata plist, with NSPersistenceFrameworkVersion: Core Data rewrites it
+    /// when the store was last written by another version of the framework (measured in F3 P4: the iPad copy, from
+    /// iPadOS 27.2, says 1634; the iOS 27.0 simulator writes 1629; the iPhone copy, from iOS 27.0.1, already said 1629
+    /// and does not change). Model hashes and checksum stay the same.
+    static let changesWhenOpened: Set<String> = ["Aidoku.sqlite/Z_METADATA", "Local.sqlite/Z_METADATA"]
 
     static func metadataThatStays(in dump: StoreDump) -> Set<String> {
         Set(dump.metadata.keys).subtracting(changesWhenOpened)
@@ -237,7 +241,6 @@ struct StoreDump: Equatable {
     /// Every table of each store file in `directory` and, for the metadata ones, count and hash of all their rows.
     /// Read-only (SQLITE_OPEN_READONLY) on a temporary copy of the three files of each store.
     static func tables(in directory: URL) throws -> (names: [String: [String]], metadata: [String: Table]) {
-        return ([:], [:]) // STUB: rojo
         var names: [String: [String]] = [:]
         var metadata: [String: Table] = [:]
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("suwa13-sql-\(UUID().uuidString)")
@@ -257,7 +260,7 @@ struct StoreDump: Equatable {
                 throw DumpError.sqlite("open \(file)")
             }
             defer { sqlite3_close(db) }
-            let tables = try query(db, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map { $0[0] }
+            let tables = try query(db, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map { String($0[0].dropFirst()) }
             names[file] = tables
             for table in tables where metadataPrefixes.contains(where: { table.hasPrefix($0) }) {
                 let columns = try query(db, "SELECT COUNT(*) FROM pragma_table_info('\(table)')")[0][0]
