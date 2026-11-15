@@ -185,10 +185,6 @@ func expectMetadataListed(_ dump: StoreDump) {
 
         #expect(first.entities.mapValues(\.count) == Self.expectedCounts)
         #expect(first.entities.filter { $0.value.duplicateKeys > 0 }.mapValues(\.duplicateKeys) == ["Chapter": 1])
-        // every row of each kind differs from the others (nil, 0, false, -1, "" and 0.0 are told apart)
-        for (name, entity) in first.entities {
-            #expect(Set(entity.lines).count == entity.count, "\(name)")
-        }
         #expect(first.differences(to: second) == [])
         #expect(first == second)
         let fromFiles = try StoreDump.dumpCopy(of: directory)
@@ -287,6 +283,54 @@ func expectMetadataListed(_ dump: StoreDump) {
         var dump = StoreDump()
         dump.metadata = try StoreDump.tables(in: copy).metadata
         return dump
+    }
+
+    /// C3: the dump sees each kind of change: a field, nil against 0.0 and against false, a relationship moved
+    /// to another row, a row more and a row less (and only in the entities it touches).
+    @Test func everyKindOfChangeShows() throws {
+        let directory = try Self.extremeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try StoreDump.appContainer(directory: directory)
+        defer { StoreDump.close(container) }
+        let context = container.newBackgroundContext()
+        func one(_ entity: String, _ format: String, _ args: CVarArg...) throws -> NSManagedObject {
+            let request = NSFetchRequest<NSManagedObject>(entityName: entity)
+            request.predicate = NSPredicate(format: format, argumentArray: args)
+            return try #require(try context.fetch(request).first)
+        }
+        var previous = try StoreDump.make(context: context)
+        func change(_ what: String, shows entities: Set<String>, _ edit: () throws -> Void) throws {
+            try context.performAndWait {
+                try edit()
+                try context.save()
+            }
+            let next = try StoreDump.make(context: context)
+            let differing = Set(previous.differences(to: next).map { line in String(line.prefix { $0 != ":" }) })
+            #expect(differing == entities, "\(what)")
+            previous = next
+        }
+        try change("a field", shows: ["Chapter"]) {
+            try one("Chapter", "mangaId == %@ AND id == %@", "m2", "c10").setValue("t10 ", forKey: "title")
+        }
+        try change("scrollPosition nil → 0.0", shows: ["History"]) {
+            try one("History", "chapterId == %@", "c0").setValue(0.0, forKey: "scrollPosition")
+        }
+        try change("completed nil → false", shows: ["History"]) {
+            try one("History", "chapterId == %@", "c0").setValue(false, forKey: "completed")
+        }
+        try change("History.chapter to another chapter", shows: ["History", "Chapter"]) {
+            let other = try one("Chapter", "mangaId == %@ AND id == %@", "m2", "c5")
+            try one("History", "chapterId == %@", "c2").setValue(other, forKey: "chapter")
+        }
+        try change("a row more", shows: ["Track"]) {
+            let track = NSEntityDescription.insertNewObject(forEntityName: "Track", into: context)
+            for (key, value) in ["id": "t2", "trackerId": "anilist", "sourceId": "test", "mangaId": "m1"] {
+                track.setValue(value, forKey: key)
+            }
+        }
+        try change("a row less", shows: ["Vocab"]) {
+            context.delete(try one("Vocab", "word == %@", ""))
+        }
     }
 
     /// Deleting follows the model's rules:
