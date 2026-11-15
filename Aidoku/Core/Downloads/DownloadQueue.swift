@@ -344,31 +344,34 @@ actor DownloadQueue {
         waiting.forEach { $0.continuation.resume(returning: false) }
     }
 
-    /// Once the background task's downloads are done: lets go of the task and completes it (if it is
-    /// still the current one and the expiry didn't complete it first).
+    /// Once the background task's downloads are done: lets go of the task (only if it is still the
+    /// current one) and completes it (unless the expiry completed it first).
     func completeWhenEmpty(_ task: AnyObject, completion: BackgroundTaskCompletion) async {
         guard await waitUntilEmpty(for: task, completion: completion) else { return } // expired: already completed
-        // still this task (not one that came later): let it go and complete it
-        guard finishBackgroundTask(task) else { return }
-        completion.complete(success: true)
+        _ = finishBackgroundTask(task) // not a newer one
+        completion.complete(success: true) // always: a task that is no longer current must end too
     }
 
     /// The system is expiring the background task: complete it now (if the queue emptying didn't), then
-    /// end its wait, pause the downloads and let go of it.
+    /// end its wait and let go of it. The downloads are paused only if this expiry completed the task and
+    /// it is still the current one (a late expiry must not pause a newer task's downloads).
     nonisolated func backgroundTaskWillExpire(
         _ task: AnyObject,
         completion: BackgroundTaskCompletion,
         pause: @escaping @Sendable () async -> Void = { await DownloadManager.shared.pauseDownloads(byUser: false) }
     ) -> Task<Void, Never> {
-        completion.complete(success: false)
+        let completedHere = completion.complete(success: false)
         return Task {
             await self.backgroundTaskExpired(task)
-            await pause() // system pause: automatic downloads may start it again
+            if completedHere, await self.isCurrentBackgroundTask(task) {
+                await pause() // system pause: automatic downloads may start it again
+            }
             _ = await self.finishBackgroundTask(task) // not a newer one
         }
     }
 
-    /// Runs a system background task (pending: the old wiring, which keeps the task alive).
+    /// Runs a system background task. The task holds its expiration handler, which holds the completion:
+    /// both refer back to the task weakly, and the handler is dropped once the task is completed.
     @discardableResult
     nonisolated func handleBackgroundTask<T: SystemBackgroundTask>(
         _ task: T,
@@ -376,8 +379,12 @@ actor DownloadQueue {
         resumeTasks: Bool = true
     ) -> Task<Void, Never> {
         // completed exactly once: by the expiry or when the downloads are done, whichever is first
-        let completion = BackgroundTaskCompletion { success in task.setTaskCompleted(success: success) }
-        task.expirationHandler = {
+        let completion = BackgroundTaskCompletion { [weak task] success in
+            task?.expirationHandler = nil
+            task?.setTaskCompleted(success: success)
+        }
+        task.expirationHandler = { [weak self, weak task] in
+            guard let self, let task else { return }
             _ = self.backgroundTaskWillExpire(task, completion: completion, pause: pause)
         }
         return Task {
