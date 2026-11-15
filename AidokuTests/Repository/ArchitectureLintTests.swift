@@ -19,7 +19,6 @@ import Testing
 
     static let allowed: Set<String> = [
         "Aidoku/App/AppDelegate.swift",
-        "Aidoku/App/Common/UIKit/CategorySelectViewController.swift",
         "Aidoku/Core/Backup/BackupManager.swift",
         "Aidoku/Core/Backup/Models/BackupCategory.swift",
         "Aidoku/Core/Backup/Models/BackupChapter.swift",
@@ -56,7 +55,6 @@ import Testing
         "Aidoku/Features/Library/LibraryViewController.swift",
         "Aidoku/Features/Library/LibraryViewModel.swift",
         "Aidoku/Features/Manga/MangaCoverPageView.swift",
-        "Aidoku/Features/Manga/MangaDetailsHeaderView.swift",
         "Aidoku/Features/Manga/MangaView+ViewModel.swift",
         "Aidoku/Features/Migration/MigrateSourcesView.swift",
         "Aidoku/Features/Reader/ReaderViewController.swift",
