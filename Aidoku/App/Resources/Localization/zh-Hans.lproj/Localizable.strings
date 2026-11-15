@@ -325,7 +325,6 @@
 "COVER" = "封面";
 "CROP_BORDERS" = "裁剪边缘";
 "REORDER" = "重新排序";
-"COPY" = "复制";
 "PIN" = "置顶";
 "UNPIN" = "取消置顶";
 "%@_TRACKER_LOGIN_NEEDED" = "需要 %@ 登录";
@@ -731,13 +730,11 @@
 "CATEGORY_SEARCH" = "在分类中查找";
 "SET_TRACK_CHAPTER_OFFSET" = "设置章节偏移";
 "TRACK_CHAPTER_OFFSET_TEXT" = "图源与追踪器章节号不一致时，调整此作品的自动追踪更新。";
-"MIGRATE_CONFIRM_TEXT" = "切换图源迁移将清除原条目的阅读记录。";
 "SELECT_PINNED_SOURCES" = "选择置顶图源";
 "SEARCH_MANUALLY" = "手动搜索";
 "DONT_MIGRATE" = "跳过迁移";
 "SELECTED_%i_OF_%i" = "已选 (%i/%i)";
 "MIGRATE_%i_OF_%i" = "迁移 (%i/%i)";
-"SHOW_ENTRY" = "查看作品";
 "NEW_CHAPTER_NOTIFICATIONS" = "新章节通知";
 "NEW_CHAPTER_NOTIFICATIONS_TEXT" = "书库后台刷新时发送通知。";
 "1_NEW_CHAPTER_AVAILABLE" = "新章节已更新";
@@ -827,6 +824,5 @@
 "DOWNLOAD_INCOMPLETE" = "下载未完成";
 "DISABLE" = "禁用";
 "ENABLE" = "启用";
-"MIGRATE_WITH_HISTORY" = "迁移并保留历史";
 "AUTO_SCROLL" = "自动滚动";
 "AUTO_SCROLL_SPEED" = "自动滚动速度";

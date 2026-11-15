@@ -261,7 +261,6 @@
 "DONE" = "Selesai";
 "PAUSE" = "Jeda";
 "RESUME" = "Lanjutkan";
-"COPY" = "Salin";
 "WARNING" = "Peringatan";
 "INVALID" = "Tidak valid";
 "ENABLE_PERMISSION" = "Aktifkan Izin";
@@ -737,13 +736,11 @@
 "X_SERIES_HAVE_NEW_CHAPTERS" = "%d seri memiliki bab baru";
 "SET_TRACK_CHAPTER_OFFSET" = "Atur Offset Bab";
 "TRACK_CHAPTER_OFFSET_TEXT" = "Sesuaikan pembaruan bab pelacak otomatis untuk judul ini ketika nomor bab sumber berbeda dari nomor bab pelacak.";
-"MIGRATE_CONFIRM_TEXT" = "Riwayat membaca untuk entri asli akan dihapus saat bermigrasi ke sumber yang berbeda.";
 "SELECT_PINNED_SOURCES" = "Pilih Sumber yang Dipin";
 "SEARCH_MANUALLY" = "Cari Secara Manual";
 "DONT_MIGRATE" = "Jangan Migrasi";
 "SELECTED_%i_OF_%i" = "Dipilih (%i/%i)";
 "MIGRATE_%i_OF_%i" = "Migrasi (%i/%i)";
-"SHOW_ENTRY" = "Tampilkan Entri";
 "DOWNLOAD_INCOMPLETE" = "Unduhan Tidak Lengkap";
 "LIBRARY_REFRESH_INTERRUPTED" = "Penyegaran Pustaka Terhenti";
 "LIBRARY_REFRESH_INTERRUPTED_TEXT" = "Penyegaran pustaka terakhir terhenti sebelum selesai. Apakah Anda ingin melanjutkan?";
@@ -821,6 +818,5 @@
 "RESTORE_MISSING_SOURCES_TEXT" = "Apakah Anda ingin mencari dan menginstal sumber yang hilang?";
 "INSTALL_SOURCES" = "Instal Sumber";
 "INSTALLING_SOURCES" = "Menginstal sumber…";
-"MIGRATE_WITH_HISTORY" = "Migrasi dan Pertahankan Riwayat";
 "AUTO_SCROLL" = "Gulir Otomatis";
 "AUTO_SCROLL_SPEED" = "Kecepatan Gulir Otomatis";

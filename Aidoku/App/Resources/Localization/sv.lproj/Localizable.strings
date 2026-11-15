@@ -313,7 +313,6 @@
 "SOURCE_LIST_ADD_TEXT" = "Ange URL:en för källistan";
 "LIST_ALL" = "Alla";
 "ADDING_SOURCES_GUIDE_BUTTON" = "Lägger till källguide";
-"COPY" = "Kopiera";
 "WARNING" = "Varning";
 "NO_WIFI_ALERT_TITLE" = "Inget Wi-Fi";
 "PAUSE" = "Paus";
@@ -721,10 +720,8 @@
 "CATEGORY_SEARCH" = "Hitta i Kategori";
 "SET_TRACK_CHAPTER_OFFSET" = "Justera Kapitelnumrering";
 "TRACK_CHAPTER_OFFSET_TEXT" = "Justera automatiska tracker-uppdateringar för denna titel när källans kapitelnummer skiljer sig från trackerns kapitelnummer.";
-"MIGRATE_CONFIRM_TEXT" = "Läshistoriken för originalobjekten kommer att tas bort när du migrerar till en annan källa.";
 "SELECT_PINNED_SOURCES" = "Välj fästa källor";
 "SELECTED_%i_OF_%i" = "Valda (%i/%i)";
 "SEARCH_MANUALLY" = "Sök manuellt";
 "DONT_MIGRATE" = "Migrera ej";
 "MIGRATE_%i_OF_%i" = "Migrerade (%i/%i)";
-"SHOW_ENTRY" = "Visa objekt";

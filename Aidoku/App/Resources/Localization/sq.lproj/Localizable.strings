@@ -21,7 +21,6 @@
 "REMOVE_DOWNLOADS" = "Hiqi shkarkimet";
 "PAUSE" = "Pauze";
 "RESUME" = "Rifillo";
-"COPY" = "Kopjo";
 "CANCEL_DOWNLOAD" = "Anulo shkarkimin";
 "MISSING_SOURCES_TEXT" = "Kopja e rikthyer mund të përmbajë të dhëna nga burimet e mëposhtme, të cilat nuk janë të instaluara aktualisht:";
 "RESTORE_BACKUP" = "Rikthe në këtë kopje rezervë?";

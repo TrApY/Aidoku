@@ -348,7 +348,6 @@
 "PILLARBOX_AMOUNT" = "留白比例";
 "%@_TRACKER_LOGIN_NEEDED" = "需要登入%@";
 "%@_TRACKER_LOGIN_NEEDED_TEXT" = "您的%@權杖已過期，因此該追蹤平台將停止運作，直到您在設定中重新登入。";
-"COPY" = "拷貝";
 "READER_BG_COLOR_WHITE" = "白色";
 "READER_BG_COLOR_BLACK" = "黑色";
 "AUTH_TO_OPEN" = "驗證以開啟。";
@@ -743,11 +742,9 @@
 "SYNC_WITH_TRACKER_INFO_1" = "追蹤器判定已有 1 個章節已讀。您要將此章節標示為已讀嗎？";
 "UNSET_AS_SINGLE_PAGE" = "取消設定為單頁";
 "CONTINUOUS_WITH_GAPS" = "連續滾動（有間距）";
-"MIGRATE_CONFIRM_TEXT" = "遷移至不同來源時，原本的閱讀紀錄將會被移除。";
 "SELECT_PINNED_SOURCES" = "選擇釘選來源";
 "SEARCH_MANUALLY" = "手動搜尋";
 "DONT_MIGRATE" = "跳過遷移";
 "SELECTED_%i_OF_%i" = "已選 (%i/%i)";
 "MIGRATE_%i_OF_%i" = "遷移 (%i/%i)";
-"SHOW_ENTRY" = "查看作品";
 "TOGGLE_PAGE_OFFSET" = "切換封面單獨顯示";

@@ -312,7 +312,6 @@
 "MARK_PREVIOUS" = "ここまでを操作";
 "WITH_UNREAD_CHAPTERS" = "未読の章あり";
 "FINISHED" = "完了済み";
-"COPY" = "コピー";
 "COVER" = "表紙";
 "REORDER" = "整理し直す";
 "PIN" = "ピン留め";
@@ -771,13 +770,11 @@
 "CONTINUOUS_WITH_GAPS" = "隙間あり連続スクロール";
 "ADD" = "追加";
 "MARK_DUPLICATE_CHAPTERS" = "重複した章を既読にする";
-"MIGRATE_CONFIRM_TEXT" = "別のソースに移行すると、元の項目の読書履歴は削除されます。";
 "SELECT_PINNED_SOURCES" = "ピン留めするソースを選択";
 "SEARCH_MANUALLY" = "手動検索";
 "DONT_MIGRATE" = "移行しない";
 "SELECTED_%i_OF_%i" = "選択済み (%i/%i)";
 "MIGRATE_%i_OF_%i" = "移行 (%i/%i)";
-"SHOW_ENTRY" = "作品を表示";
 "SOURCE_BREAKING_CHANGE" = "ソースの仕様変更";
 "SOURCE_BREAKING_CHANGE_TEXT" = "このソースに互換性のない仕様変更があったため、ライブラリと履歴を維持するには移行が必要です。";
 "ALL_CHAPTERS_LOCKED" = "すべての章がロックされています";

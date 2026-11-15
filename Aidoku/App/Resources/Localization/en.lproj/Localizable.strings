@@ -24,7 +24,6 @@
 "RESUME" = "Resume";
 "LOADING_ELLIPSIS" = "Loading…";
 "SHARE" = "Share";
-"COPY" = "Copy";
 "WARNING" = "Warning";
 "ENABLE_PERMISSION" = "Enable Permission";
 "PHOTOS_ACCESS_DENIED_TEXT" = "Access was previously denied. Please allow Aidoku access to your Photos to save images to your Camera Roll. You can enable access in privacy settings.";
@@ -830,16 +829,13 @@
 "NOT_FOUND" = "Not Found";
 "MOST_CHAPTERS_SLOWER" = "Most Chapters (slower)";
 "FIRST_ALTERNATIVE" = "First Alternative";
-"MIGRATE_%i_ITEMS?" = "Migrate %i items?";
-"MIGRATE_ONE_ITEM?" = "Migrate 1 item?";
-"MIGRATE_CONFIRM_TEXT" = "Reading history for the original entries will be removed when migrating to a different source.";
-"MIGRATE_WITH_HISTORY" = "Migrate and Keep History";
+"MIGRATE_%i_ITEMS?" = "Migrate %i entries?";
+"MIGRATE_ONE_ITEM?" = "Migrate 1 entry?";
 "SELECT_PINNED_SOURCES" = "Select Pinned Sources";
 "SEARCH_MANUALLY" = "Search Manually";
 "DONT_MIGRATE" = "Don't Migrate";
 "SELECTED_%i_OF_%i" = "Selected (%i/%i)";
 "MIGRATE_%i_OF_%i" = "Migrate (%i/%i)";
-"SHOW_ENTRY" = "Show Entry";
 
 "SOURCE_BREAKING_CHANGE" = "Source Breaking Change";
 "SOURCE_BREAKING_CHANGE_TEXT" = "This source had a breaking change and requires migration to keep your library and history.";
@@ -901,3 +897,24 @@
 "MANGA_SOURCE_ERROR_HINT" = "This source isn't responding. You can retry, open it on the web or migrate the series to another source.";
 "MANGA_SOURCE_NOT_INSTALLED" = "The source of this series isn't installed.";
 "MANGA_SOURCE_NOT_INSTALLED_HINT" = "You can open it on the web or migrate the series to another source.";
+
+// SUWA-11 fase 2: migration sheet
+"MIGRATION_DATA_TO_INCLUDE" = "Select data to include";
+"MIGRATION_READ_CHAPTERS" = "Read chapters";
+"MIGRATION_CATEGORIES" = "Categories";
+"MIGRATION_TRACKING" = "Tracking";
+"MIGRATION_ORIGINAL_ENTRY" = "Original entry";
+"MIGRATION_KEEP_ORIGINAL" = "Keep the original entry in the library";
+"MIGRATION_DELETE_DOWNLOADS" = "Delete the original downloads";
+"MIGRATION_START" = "Start migration";
+"MIGRATION_VIEW_ENTRY" = "View entry";
+"MIGRATION_NOTE_REPLACE_DELETE" = "The original library entry will be replaced and its downloads deleted. Downloads are not moved to the destination.";
+"MIGRATION_NOTE_REPLACE_DELETE_MANY" = "The original library entries will be replaced and their downloads deleted. Downloads are not moved to the destination.";
+"MIGRATION_NOTE_REPLACE_KEEP_DOWNLOADS" = "The original library entry will be replaced and its downloads kept. Downloads are not moved to the destination.";
+"MIGRATION_NOTE_REPLACE_KEEP_DOWNLOADS_MANY" = "The original library entries will be replaced and their downloads kept. Downloads are not moved to the destination.";
+"MIGRATION_NOTE_KEEP" = "The original entry stays in the library.";
+"MIGRATION_NOTE_KEEP_MANY" = "The original entries stay in the library.";
+"MIGRATION_NOTE_KEEP_DELETE" = "The original entry stays in the library, but its downloads will be deleted. Downloads are not moved to the destination.";
+"MIGRATION_NOTE_KEEP_DELETE_MANY" = "The original entries stay in the library, but their downloads will be deleted. Downloads are not moved to the destination.";
+"MIGRATION_NOTE_HISTORY_LOST" = "Without the read chapters, its reading history is lost.";
+"MIGRATION_NOTE_HISTORY_LOST_MANY" = "Without the read chapters, their reading history is lost.";

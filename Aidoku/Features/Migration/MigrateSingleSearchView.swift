@@ -21,6 +21,8 @@ struct MigrateSingleSearchView: View {
     @State private var results: [SearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var targetSeries: AidokuRunner.Manga?
+    /// The destination's row: its source and the name shown (a server source's own name for Suwayomi).
+    @State private var targetRow: SearchResult?
     @State private var isMigrating = false
     @State private var isLoading = false
     @State private var didFirstLoad = false
@@ -67,6 +69,7 @@ struct MigrateSingleSearchView: View {
                                     dismiss()
                                 } else {
                                     targetSeries = manga
+                                    targetRow = searchResult
                                     showMigrateAlert = true
                                 }
                             }
@@ -114,23 +117,20 @@ struct MigrateSingleSearchView: View {
         )
         .environment(\.autocorrectionDisabled, true)
         .navigationBarBackButtonHidden(isMigrating)
-        .alert(NSLocalizedString("MIGRATE_ONE_ITEM?"), isPresented: $showMigrateAlert) {
-            Button(NSLocalizedString("CANCEL"), role: .cancel) {
-                targetSeries = nil
-            }
-            Button(NSLocalizedString("COPY")) {
-                migrate(copy: true)
-            }
-            Button(NSLocalizedString("MIGRATE")) {
-                migrate(copy: false)
-            }
-            Button(NSLocalizedString("MIGRATE_WITH_HISTORY")) {
-                migrate(copy: true, forceRemoveFromLibrary: true)
-            }
-            Button(NSLocalizedString("SHOW_ENTRY")) {
-                guard let targetSeries else { return }
-                path.push(MangaViewController(manga: targetSeries, parent: path.rootViewController))
-            }
+        .sheet(isPresented: $showMigrateAlert) {
+            MigrationOptionsView(
+                count: 1,
+                destination: targetSeries,
+                destinationSource: targetRow?.source,
+                destinationSourceName: targetRow?.title,
+                showEntry: {
+                    guard let targetSeries else { return }
+                    path.push(MangaViewController(manga: targetSeries, parent: path.rootViewController))
+                },
+                start: { options in
+                    migrate(options: options)
+                }
+            )
         }
         .onAppear {
             guard !didFirstLoad else { return }
@@ -141,7 +141,7 @@ struct MigrateSingleSearchView: View {
 }
 
 extension MigrateSingleSearchView {
-    func migrate(copy: Bool, forceRemoveFromLibrary: Bool = false) {
+    func migrate(options: MigrationOptions) {
         guard
             let targetSeries,
             let appDelegate = UIApplication.shared.appDelegate
@@ -152,8 +152,7 @@ extension MigrateSingleSearchView {
         appDelegate.showLoadingIndicator {
             Task {
                 await MangaManager.shared.migrate(
-                    copy: copy,
-                    forceRemoveFromLibrary: forceRemoveFromLibrary,
+                    options: options,
                     fromSeries: [selectedSeries],
                     toSeries: [selectedSeries.identifier: targetSeries]
                 )

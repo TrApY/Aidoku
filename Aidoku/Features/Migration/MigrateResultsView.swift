@@ -66,43 +66,20 @@ struct MigrateResultsView: View {
             ToolbarItem(placement: .confirmationAction) {
                 if isLoading {
                     ProgressView()
-                } else if forceMigrate {
-                    Button(NSLocalizedString("MIGRATE")) {
-                        startMigration(copy: false)
-                    }
                 } else {
-                    Menu(NSLocalizedString("CONTINUE")) {
-                        Button(NSLocalizedString("COPY")) {
-                            startMigration(copy: true)
-                        }
-                        Button(NSLocalizedString("MIGRATE")) {
-                            showingConfirmAlert = true
-                        }
+                    Button(NSLocalizedString(forceMigrate ? "MIGRATE" : "CONTINUE")) {
+                        showingConfirmAlert = true
                     }
+                    .disabled(matchedCount == 0)
                 }
             }
         }
         .interactiveDismissDisabled(forceMigrate)
-        .alert(
-            {
-                let itemCount = migratedManga.filter({ item in
-                    item.value != nil && selectedSeries.contains(where: { manga in manga.identifier == item.key })
-                }).count
-                return itemCount == 1
-                    ? NSLocalizedString("MIGRATE_ONE_ITEM?")
-                    : String(format: NSLocalizedString("MIGRATE_%i_ITEMS?"), itemCount)
-            }(),
-            isPresented: $showingConfirmAlert
-        ) {
-            Button(NSLocalizedString("CANCEL"), role: .cancel) {}
-            Button(NSLocalizedString("MIGRATE_WITH_HISTORY")) {
-                startMigration(copy: true, forceRemoveFromLibrary: true)
+        .sheet(isPresented: $showingConfirmAlert) {
+            // the same choices as for one entry, applied to all
+            MigrationOptionsView(count: matchedCount) { options in
+                startMigration(options: options)
             }
-            Button(NSLocalizedString("CONTINUE")) {
-                startMigration(copy: false)
-            }
-        } message: {
-            Text(NSLocalizedString("MIGRATE_CONFIRM_TEXT"))
         }
         .task {
             guard !didFirstLoad else { return }
@@ -207,15 +184,21 @@ extension MigrateResultsView {
         }
     }
 
-    func startMigration(copy: Bool, forceRemoveFromLibrary: Bool = false) {
+    /// Entries with a destination.
+    var matchedCount: Int {
+        migratedManga.filter { item in
+            item.value != nil && selectedSeries.contains(where: { $0.identifier == item.key })
+        }.count
+    }
+
+    func startMigration(options: MigrationOptions) {
         guard let appDelegate = UIApplication.shared.appDelegate else { return }
         appDelegate.showLoadingIndicator(style: .progress) {
             Task {
                 UIApplication.shared.isIdleTimerDisabled = true
 
                 await MangaManager.shared.migrate(
-                    copy: copy,
-                    forceRemoveFromLibrary: forceRemoveFromLibrary,
+                    options: options,
                     fromSeries: selectedSeries,
                     toSeries: migratedManga,
                     withChapters: newChapters,

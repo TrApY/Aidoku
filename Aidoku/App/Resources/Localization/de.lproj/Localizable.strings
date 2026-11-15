@@ -311,7 +311,6 @@
 "PILLARBOX_AMOUNT" = "Randgröße";
 "PILLARBOX_ORIENTATION_INFO" = "Pillarbox Orientierung bestimmt in welcher Orientierung ein schwarzer Rand hinzugefügt werden soll.";
 "COVER" = "Deckblatt";
-"COPY" = "Kopieren";
 "CROP_BORDERS" = "Ränder bearbeiten";
 "PIN" = "Fixieren";
 "UNPIN" = "Lösen";

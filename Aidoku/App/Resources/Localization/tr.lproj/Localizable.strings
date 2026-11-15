@@ -309,7 +309,6 @@
 "BOTH" = "İkisi de";
 "CROP_BORDERS" = "Kenarları Kırp";
 "PILLARBOX_ORIENTATION_INFO" = "Pillarbox Oryantasyonu, pillarboxing'in hangi oryantasyonlar için etkinleştirilmesi gerektiğini belirler.";
-"COPY" = "Kopyala";
 "PIN" = "Başa tuttur";
 "UNPIN" = "Başa Tutturmayı Kaldır";
 "REORDER" = "Yeniden sırala";
@@ -555,7 +554,6 @@
 "CLEAR_SOURCE_CACHE" = "Kaynak Önbelleğini Temizle";
 "CLEAR_SOURCE_CACHE_TEXT" = "Kaynak URL'leri için önbelleğe alınmış ağ verileri temizlenecek. Bu durum, yükleme sürelerinin geçici olarak uzamasına neden olabilir.";
 "TRACK_CHAPTER_OFFSET_TEXT" = "Kaynak bölüm numaraları izleyici bölüm numaralarından farklı olduğunda, bu başlık için otomatik izleyici bölüm güncellemelerini ayarlayın.";
-"MIGRATE_CONFIRM_TEXT" = "Farklı bir kaynağa taşıma yapıldığında, orijinal ögelerin okuma geçmişi kaldırılacaktır.";
 "SOURCE_BREAKING_CHANGE" = "Kaynakta Kritik Değişiklik";
 "SOURCE_BREAKING_CHANGE_TEXT" = "Bu kaynakta kritik bir değişiklik oldu; kütüphanenizi ve geçmişinizi korumak için taşıma yapılması gerekiyor.";
 "LOGIN_VIA_OIDC" = "OIDC ile Giriş Yap";
@@ -741,7 +739,6 @@
 "SEARCH_MANUALLY" = "Manuel Ara";
 "SELECTED_%i_OF_%i" = "Seçilen (%i/%i)";
 "MIGRATE_%i_OF_%i" = "Taşı (%i/%i)";
-"SHOW_ENTRY" = "Ögeyi Göster";
 "FILTER_SEPARATOR" = ", ";
 "KAVITA" = "Kavita";
 "FORMAT_EPUB" = "EPUB";

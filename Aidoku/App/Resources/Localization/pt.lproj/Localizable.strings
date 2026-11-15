@@ -315,7 +315,6 @@
 "REORDER" = "Reordenar";
 "PIN" = "Fixar";
 "UNPIN" = "Desfixar";
-"COPY" = "Copiar";
 "BACKUP_ERROR" = "Erro de restauro de backup";
 "BACKUP_ERROR_TEXT" = "Foi encontrado um erro durante o restauro: %@. O backup pode ser inválido.";
 "DELETE_DOWNLOAD_AFTER_READING" = "Apagar download após leitura";

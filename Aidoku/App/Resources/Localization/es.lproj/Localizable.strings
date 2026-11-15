@@ -295,8 +295,8 @@
 "AVAILABLE" = "Disponible";
 "NOT_FOUND" = "No encontrado";
 "FIRST_ALTERNATIVE" = "Primera alternativa";
-"MIGRATE_%i_ITEMS?" = "¿Migrar %i elementos?";
-"MIGRATE_ONE_ITEM?" = "¿Migrar 1 elemento?";
+"MIGRATE_%i_ITEMS?" = "¿Migrar %i entradas?";
+"MIGRATE_ONE_ITEM?" = "¿Migrar 1 entrada?";
 "SYNC_LOCAL_HISTORY" = "Sincronizar el historial local";
 "MIGRATE" = "Migrar";
 "SELECTED" = "Seleccionado";
@@ -315,7 +315,6 @@
 "REORDER" = "Reordenar";
 "PIN" = "Anclar";
 "UNPIN" = "Desanclar";
-"COPY" = "Copiar";
 "BACKUP_ERROR" = "Error de la copia de seguridad";
 "BACKUP_ERROR_TEXT" = "Se ha producido un error al restaurar: %@. La copia de seguridad puede no ser válida.";
 "PAUSE" = "Pausa";
@@ -723,13 +722,11 @@
 "CATEGORY_SEARCH" = "Encontrar en Categoría";
 "SET_TRACK_CHAPTER_OFFSET" = "Establecer desplazamiento de capítulo";
 "TRACK_CHAPTER_OFFSET_TEXT" = "Ajustar las actualizaciones automáticas de capítulos del sistema de seguimiento para este título cuando los números de capítulo de la fuente difieran de los números de capítulo del sistema de seguimiento.";
-"MIGRATE_CONFIRM_TEXT" = "Se borrará el historial de lectura de las series originales al migrarlas a otra fuente.";
 "SELECT_PINNED_SOURCES" = "Seleccionar fuentes fijadas";
 "SEARCH_MANUALLY" = "Buscar manualmente";
 "DONT_MIGRATE" = "No migrar";
 "SELECTED_%i_OF_%i" = "Seleccionadas (%i/%i)";
 "MIGRATE_%i_OF_%i" = "Migrar (%i/%i)";
-"SHOW_ENTRY" = "Ver ficha";
 "EPUB_NAME" = "EPUB";
 "SUWAYOMI_TAGLINE" = "Servidor de lectura Manga";
 "SUWAYOMI_INFO" = "Suwayomi es un servidor lector de manga auto‐hospedado que ejecuta extensiones creadas para Mihon (Tachiyomi). Necesitará un servidor Suwayomi configurado y en funcionamiento para poder utilizar esta fuente.";
@@ -767,10 +764,30 @@
 "PILLARBOX_AMOUNTS_INFO" = "Margen (porcentaje del ancho) para cada orientación. Con 0 no hay pillarbox en esa orientación.";
 
 // SUWA-11: global search and migration
-"MIGRATE_WITH_HISTORY" = "Migrar y conservar historial";
 "SUWAYOMI_LIBRARY_ROW_%@" = "Biblioteca (%@)";
 "GLOBAL_SEARCH" = "Búsqueda global";
 "WEBVIEW" = "WebView";
 "MANGA_SOURCE_ERROR_HINT" = "Esta fuente no responde. Puedes reintentar, abrirla en la web o migrar el manga a otra fuente.";
 "MANGA_SOURCE_NOT_INSTALLED" = "La fuente de esta serie no está instalada.";
 "MANGA_SOURCE_NOT_INSTALLED_HINT" = "Puedes abrirla en la web o migrar el manga a otra fuente.";
+
+// SUWA-11 fase 2: migration sheet
+"MIGRATION_DATA_TO_INCLUDE" = "Seleccionar datos para incluir";
+"MIGRATION_READ_CHAPTERS" = "Capítulos leídos";
+"MIGRATION_CATEGORIES" = "Categorías";
+"MIGRATION_TRACKING" = "Seguimiento";
+"MIGRATION_ORIGINAL_ENTRY" = "Gestión de la entrada original";
+"MIGRATION_KEEP_ORIGINAL" = "Conservar la entrada original en la biblioteca";
+"MIGRATION_DELETE_DOWNLOADS" = "Eliminar las descargas originales";
+"MIGRATION_START" = "Iniciar migración";
+"MIGRATION_VIEW_ENTRY" = "Ver ficha";
+"MIGRATION_NOTE_REPLACE_DELETE" = "La entrada original de la biblioteca se reemplazará y se borrarán sus descargas. Las descargas no pasan al destino.";
+"MIGRATION_NOTE_REPLACE_DELETE_MANY" = "Las entradas originales de la biblioteca se reemplazarán y se borrarán sus descargas. Las descargas no pasan al destino.";
+"MIGRATION_NOTE_REPLACE_KEEP_DOWNLOADS" = "La entrada original de la biblioteca se reemplazará y sus descargas se conservan. Las descargas no pasan al destino.";
+"MIGRATION_NOTE_REPLACE_KEEP_DOWNLOADS_MANY" = "Las entradas originales de la biblioteca se reemplazarán y sus descargas se conservan. Las descargas no pasan al destino.";
+"MIGRATION_NOTE_KEEP" = "La entrada original se queda en la biblioteca.";
+"MIGRATION_NOTE_KEEP_MANY" = "Las entradas originales se quedan en la biblioteca.";
+"MIGRATION_NOTE_KEEP_DELETE" = "La entrada original se queda en la biblioteca, pero se borrarán sus descargas. Las descargas no pasan al destino.";
+"MIGRATION_NOTE_KEEP_DELETE_MANY" = "Las entradas originales se quedan en la biblioteca, pero se borrarán sus descargas. Las descargas no pasan al destino.";
+"MIGRATION_NOTE_HISTORY_LOST" = "Sin los capítulos leídos se pierde su historial de lectura.";
+"MIGRATION_NOTE_HISTORY_LOST_MANY" = "Sin los capítulos leídos se pierde su historial de lectura.";

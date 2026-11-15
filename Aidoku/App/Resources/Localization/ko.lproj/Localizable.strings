@@ -310,7 +310,6 @@
 "PILLARBOX_ORIENTATION" = "필라박스 방향";
 "PILLARBOX_ORIENTATION_INFO" = "필라박스 박향은 필러박스를 활성화해야 하는 방향을 결정합니다.";
 "BOTH" = "둘 다";
-"COPY" = "복사하기";
 "COVER" = "커버";
 "REORDER" = "재주문";
 "PIN" = "고정";
