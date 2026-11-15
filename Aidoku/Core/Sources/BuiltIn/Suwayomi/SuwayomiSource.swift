@@ -81,6 +81,8 @@ actor SuwayomiSourceRunner: Runner {
 
     /// Max time per server source when searching everywhere (shorter in tests).
     private let searchAllTimeout: TimeInterval
+    /// Categories and tags for the filters are asked again after this time (pending: always asked).
+    private let filterCacheMaxAge: TimeInterval
 
     init(
         sourceKey: String,
@@ -89,9 +91,11 @@ actor SuwayomiSourceRunner: Runner {
         transport: SuwayomiHelper.Transport? = nil,
         searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout,
         serverSourcesMaxAge: TimeInterval = 5 * 60,
-        serverSourcesRetryDelay: TimeInterval = 60
+        serverSourcesRetryDelay: TimeInterval = 60,
+        filterCacheMaxAge: TimeInterval = 10 * 60
     ) {
         self.sourceKey = sourceKey
+        self.filterCacheMaxAge = filterCacheMaxAge
         self.searchAllTimeout = searchAllTimeout
         self.serverSourcesMaxAge = serverSourcesMaxAge
         self.serverSourcesRetryDelay = serverSourcesRetryDelay

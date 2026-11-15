@@ -7,6 +7,7 @@
 //
 
 import AidokuRunner
+import CoreData
 import Foundation
 import Testing
 
@@ -33,7 +34,7 @@ final class SuwayomiFakeServer: @unchecked Sendable {
     private let lock = NSLock()
     private var responses: [String: [Result<Data, Error>]] = [:]
     private var delays: [String: TimeInterval] = [:]
-    private var calls: [(operation: String, variables: [String: Any])] = []
+    private var calls: [(operation: String, variables: [String: Any], timeout: TimeInterval)] = []
 
     /// Queue of answers for an operation; the last one repeats.
     func respond(_ operation: String, source: String? = nil, delay: TimeInterval = 0, _ results: Result<Data, Error>...) {
@@ -50,6 +51,10 @@ final class SuwayomiFakeServer: @unchecked Sendable {
 
     func variables(_ operation: String) -> [[String: Any]] {
         lock.withLock { calls.filter { $0.operation == operation }.map(\.variables) }
+    }
+
+    func timeouts(_ operation: String) -> [TimeInterval] {
+        lock.withLock { calls.filter { $0.operation == operation }.map(\.timeout) }
     }
 
     var transport: SuwayomiHelper.Transport {
@@ -70,7 +75,7 @@ final class SuwayomiFakeServer: @unchecked Sendable {
         let operation = query.split(whereSeparator: { $0 == " " || $0 == "(" || $0 == "{" }).dropFirst().first.map(String.init) ?? ""
         let variables = body["variables"] as? [String: Any] ?? [:]
         return lock.withLock {
-            calls.append((operation, variables))
+            calls.append((operation, variables, request.timeoutInterval))
             let sourceKey = (variables["source"] as? String).map { "\(operation)|\($0)" }
             let key = sourceKey.flatMap { responses[$0] != nil ? $0 : nil } ?? operation
             guard var queue = responses[key], let first = queue.first else {
@@ -97,7 +102,8 @@ private let nexus = "4086183896761281232" // flagged NSFW
     private func makeRunner(
         selected: [String]? = nil,
         searchAllTimeout: TimeInterval = 20,
-        serverSourcesMaxAge: TimeInterval = 5 * 60
+        serverSourcesMaxAge: TimeInterval = 5 * 60,
+        filterCacheMaxAge: TimeInterval = 10 * 60
     ) -> SuwayomiSourceRunner {
         let defaults = UserDefaults.standard
         defaults.set("https://suwayomi.example:4567", forKey: "\(key).server")
@@ -112,7 +118,8 @@ private let nexus = "4086183896761281232" // flagged NSFW
             server: "https://suwayomi.example:4567",
             transport: server.transport,
             searchAllTimeout: searchAllTimeout,
-            serverSourcesMaxAge: serverSourcesMaxAge
+            serverSourcesMaxAge: serverSourcesMaxAge,
+            filterCacheMaxAge: filterCacheMaxAge
         )
     }
 
@@ -515,6 +522,108 @@ private let nexus = "4086183896761281232" // flagged NSFW
             )
         }
     }
+
+    // MARK: Audit (SUWA-9)
+
+    @Test func detailsOnlyDoesNotAskForChapters() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaUpdate", .success(try fixture("manga-update-initialized")))
+        let runner = makeRunner()
+        let manga = try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "54", title: "x"),
+            needsDetails: true,
+            needsChapters: false
+        )
+        #expect(manga.authors == ["TYPE-MOON"])
+        #expect(manga.chapters == nil)
+        let variables = server.variables("GetMangaUpdate")
+        #expect(variables.count == 1)
+        #expect(variables.first?["details"] as? Bool == true)
+        #expect(variables.first?["chapters"] as? Bool == false)
+    }
+
+    @Test func noSecondFullQueryWhenNothingNeededWasFetched() async throws {
+        defer { cleanUp() }
+        // details never fetched, chapters stored: chapters asked for, so the server fetches the details,
+        // but nothing asked for changed: no second query
+        let stored = String(decoding: try fixture("manga-update-initialized"), as: UTF8.self)
+            .replacingOccurrences(of: "\"initialized\": true", with: "\"initialized\": false")
+        server.respond("GetMangaUpdate", .success(Data(stored.utf8)))
+        server.respond("FetchManga", .success(try fixture("fetch-manga")))
+        let runner = makeRunner()
+        let manga = try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "54", title: "x"),
+            needsDetails: false,
+            needsChapters: true
+        )
+        #expect(manga.chapters?.count == 26)
+        #expect(server.count("FetchManga") == 1)
+        #expect(server.count("GetMangaUpdate") == 1)
+        #expect(server.variables("GetMangaUpdate").first?["details"] as? Bool == false)
+    }
+
+    @Test func secondQueryAsksOnlyForWhatWasFetched() async throws {
+        defer { cleanUp() }
+        server.respond(
+            "GetMangaUpdate",
+            .success(try fixture("manga-update-not-initialized")),
+            .success(try fixture("manga-update-initialized"))
+        )
+        server.respond("FetchManga", .success(try fixture("fetch-manga")))
+        server.respond("FetchChapters", .success(try fixture("fetch-chapters")))
+        let runner = makeRunner()
+        let manga = try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "56", title: "x"),
+            needsDetails: false,
+            needsChapters: true
+        )
+        #expect(manga.chapters?.count == 26)
+        let variables = server.variables("GetMangaUpdate")
+        #expect(variables.count == 2)
+        #expect(variables.last?["details"] as? Bool == false)
+        #expect(variables.last?["chapters"] as? Bool == true)
+    }
+
+    private func respondFilterData() {
+        server.respond("GetCategories", .success(Data(#"{"data":{"categories":{"nodes":[{"id":0,"name":"Default"},{"id":3,"name":"Leyendo"}]}}}"#.utf8)))
+        server.respond("GetMangaTags", .success(Data(#"{"data":{"mangas":{"nodes":[{"genre":["Acción","Drama"]},{"genre":["Acción"]}]}}}"#.utf8)))
+    }
+
+    @Test func filtersAskForCategoriesAndTagsOnce() async throws {
+        defer { cleanUp() }
+        respondFilterData()
+        let runner = makeRunner()
+        let first = try await runner.getSearchFilters()
+        let second = try await runner.getSearchFilters()
+        #expect(first.map(\.id) == second.map(\.id))
+        #expect(server.count("GetMangaTags") == 1)
+        #expect(server.count("GetCategories") == 1)
+
+        // a new server: asked again
+        UserDefaults.standard.set("https://otro.example:4567", forKey: "\(key).server")
+        try await runner.handleNotification(notification: "server_change")
+        _ = try await runner.getSearchFilters()
+        #expect(server.count("GetMangaTags") == 2)
+        #expect(server.count("GetCategories") == 2)
+    }
+
+    @Test func filterDataIsAskedAgainWhenOld() async throws {
+        defer { cleanUp() }
+        respondFilterData()
+        let runner = makeRunner(filterCacheMaxAge: 0)
+        _ = try await runner.getSearchFilters()
+        _ = try await runner.getSearchFilters()
+        #expect(server.count("GetMangaTags") == 2)
+    }
+
+    @Test func searchingOneSourceWaitsThirtySeconds() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        server.respond("FetchSourceManga", source: olympus, .success(try fixture("fetch-source-manga-olympus-search")))
+        let runner = makeRunner(selected: [olympus])
+        _ = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [.select(id: "searchIn", value: olympus)])
+        #expect(server.timeouts("FetchSourceManga") == [30])
+    }
 }
 
 @Suite(.serialized) struct SuwayomiTrackerLibraryTests {
@@ -555,5 +664,39 @@ private let nexus = "4086183896761281232" // flagged NSFW
         try await tracker.update(trackId: "\(key)|56", update: TrackUpdate()) // remembered
         #expect(server.count("GetInLibrary") == 2)
         #expect(server.count("AddToServerLibrary") == 1)
+    }
+
+    @Test func markingReadAsksOnlyForUnreadChaptersUpToTheNumber() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        server.respond("GetInLibrary", .success(Data(#"{"data":{"manga":{"inLibrary":true}}}"#.utf8)))
+        server.respond(
+            "GetChaptersForTrackUpdate",
+            .success(Data(#"{"data":{"chapters":{"nodes":[{"id":11,"chapterNumber":1},{"id":12,"chapterNumber":2}]}}}"#.utf8)),
+            .success(Data(#"{"data":{"chapters":{"nodes":[]}}}"#.utf8))
+        )
+        server.respond("MarkChaptersRead", .success(Data(#"{"data":{"updateChapters":{"chapters":[{"id":11},{"id":12}]}}}"#.utf8)))
+        let tracker = makeTracker()
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate(lastReadChapter: 2.5))
+        let asked = server.variables("GetChaptersForTrackUpdate")
+        #expect(asked.first?["below"] as? Double == 3) // chapters numbered below 3 (floor ≤ 2.5)
+        #expect(server.variables("MarkChaptersRead").first?["ids"] as? [Int] == [11, 12])
+        // everything up to there already read on the server: no mutation
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate(lastReadChapter: 2))
+        #expect(server.count("MarkChaptersRead") == 1)
+    }
+
+    @Test func logoutForgetsTrackedMangaWithoutCrashing() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        let tracker = makeTracker()
+        let mangaId = MangaIdentifier(sourceKey: key, mangaKey: "77")
+        await CoreDataManager.shared.container.performBackgroundTask { context in
+            _ = CoreDataManager.shared.createTrack(id: "\(self.key)|77", trackerId: tracker.id, mangaId: mangaId, title: nil, context: context)
+            try? context.save()
+        }
+        await tracker.logout()
+        let left = await CoreDataManager.shared.container.performBackgroundTask { context in
+            CoreDataManager.shared.hasTrack(trackerId: tracker.id, mangaId: mangaId, context: context)
+        }
+        #expect(!left)
     }
 }

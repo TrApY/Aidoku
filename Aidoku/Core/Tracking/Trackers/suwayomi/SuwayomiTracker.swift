@@ -106,8 +106,8 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
         return try await api.getSeriesReadProgress(sourceKey: sourceKey, seriesId: seriesId)
     }
 
-    func logout() {
-        fatalError("logout not implemented for suwayomi tracker")
+    /// Forgets every manga tracked with the server (pending).
+    func logout() async {
     }
 
     func removeTrackItems(sourceKey: String) async {

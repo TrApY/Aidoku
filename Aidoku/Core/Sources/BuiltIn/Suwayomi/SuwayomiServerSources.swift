@@ -250,6 +250,8 @@ enum SuwayomiServerSources {
     static let searchInFilterId = "searchIn"
     /// Fetching from the origin websites can be slow.
     static let fetchTimeout: TimeInterval = 90
+    /// Searching one server source (pending: the fetch timeout).
+    static let searchSourceTimeout: TimeInterval = 90
     /// Listing the installed sources must not block settings or listings when the server is down.
     static let sourcesTimeout: TimeInterval = 10
 
