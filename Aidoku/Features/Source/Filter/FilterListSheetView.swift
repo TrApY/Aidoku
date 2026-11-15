@@ -92,17 +92,10 @@ struct FilterListSheetView: View {
                 enabledFilters = newEnabledFilters
             }
 
-            if #available(iOS 26.0, *) {
-                scrollView
-                    .toolbar {
-                        toolbarContentiOS26
-                    }
-            } else {
-                scrollView
-                    .toolbar {
-                        toolbarContentiOS18
-                    }
-            }
+            scrollView
+                .toolbar {
+                    toolbarContentiOS26
+                }
         }
     }
 
@@ -125,7 +118,6 @@ struct FilterListSheetView: View {
         }
     }
 
-    @available(iOS 26.0, *)
     @ToolbarContentBuilder
     var toolbarContentiOS26: some ToolbarContent {
         commonToolbarContent

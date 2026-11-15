@@ -85,10 +85,6 @@ class SettingSelectViewController: UITableViewController {
 
         NotificationCenter.default.publisher(for: .init("Reader.orientation"))
             .sink { [weak self] _ in
-                guard #available(iOS 16.0, *) else {
-                    UIViewController.attemptRotationToDeviceOrientation()
-                    return
-                }
                 self?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
             .store(in: &cancellables)

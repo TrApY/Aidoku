@@ -40,11 +40,7 @@ class SourceInfoHeaderView: UIView {
 
         let iconUrl = source.url.appendingPathComponent("Icon.png")
         let path: String
-        if #available(iOS 16.0, *) {
-            path = iconUrl.path()
-        } else {
-            path = iconUrl.path
-        }
+        path = iconUrl.path()
         iconView.image = UIImage(contentsOfFile: path)
         iconView.layer.borderColor = UIColor.quaternarySystemFill.cgColor
         iconView.layer.borderWidth = 1

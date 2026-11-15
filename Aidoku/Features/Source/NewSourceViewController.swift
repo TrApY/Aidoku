@@ -248,15 +248,13 @@ class NewSourceViewController: UIViewController {
         navigationItem.searchController = searchController
         navigationItem.hidesSearchBarWhenScrolling = false
 
-        if #available(iOS 16, *) {
-            navigationItem.preferredSearchBarPlacement = .stacked
-        }
+        navigationItem.preferredSearchBarPlacement = .stacked
 
         searchController.hidesNavigationBarDuringPresentation = true
         searchController.searchBar.delegate = self
 
         // fix iPadOS 26 bug
-        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+        if UIDevice.current.userInterfaceIdiom == .pad {
             typealias SetClearAsCancelButtonVisibility = @convention(c) (NSObject, Selector, NSInteger) -> Void
             let selector = NSSelectorFromString("_setClearAsCancelButtonVisibilityWhenEmpty:")
             let methodIMP = searchController.method(for: selector)
@@ -531,22 +529,6 @@ extension NewSourceViewController {
             // hide search filters
             self.searchFilterController.view.alpha = 0
 
-            // fix for ios 15 navbar background not updating size properly
-            if UIDevice.current.systemVersion.hasPrefix("15.") {
-                if
-                    let navigationBar = self.navigationController?.navigationBar,
-                    let backgroundView = navigationBar.value(forKey: "_backgroundView") as? UIView
-                {
-                    let newFrame = CGRect(
-                        x: backgroundView.frame.origin.x,
-                        y: backgroundView.frame.origin.y,
-                        width: navigationBar.bounds.width,
-                        height: navigationBar.bounds.height - backgroundView.frame.origin.y
-                    )
-                    (navigationBar.value(forKey: "_backgroundView") as? UIView)?.frame = newFrame
-                }
-            }
-
             UIView.animate(withDuration: 0.2) {
                 // fade out search background
                 self.searchOverlayView.alpha = 0
@@ -708,33 +690,7 @@ extension NewSourceViewController {
 
     // toggles the navigation bar background to opaque or transparent
     private func setNavigationBarOpaque(_ opaque: Bool) {
-        if #available(iOS 26.0, *) {
-            // navigation bar should remain clear on ios 26
-            return
-        }
-
-        guard
-            !onlySearch,
-            let navigationBar = navigationController?.navigationBar
-        else { return }
-
-        if opaque {
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = .systemBackground
-            appearance.shadowColor = .clear
-
-            navigationBar.standardAppearance = appearance
-            navigationBar.scrollEdgeAppearance = appearance
-        } else {
-            if let originalNavbarAppearance {
-                navigationBar.standardAppearance = originalNavbarAppearance
-                // bug fix: there's a second separator view that appears when animating
-                // here, we hide it, then when the animation resets in hideSearchView, we fully restore the appearance
-                navigationBar.standardAppearance.shadowColor = .clear
-            }
-            navigationBar.scrollEdgeAppearance = originalNavbarEdgeAppearance
-        }
+        // navigation bar should remain clear on ios 26 and later
     }
 
     private func handleFilterHeaderVisibility() {
