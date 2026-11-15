@@ -15,6 +15,7 @@ extension DataRepositories {
     init(container: NSPersistentContainer) {
         self.init(
             tracks: CoreDataTrackRepository(container: container),
+            categories: CoreDataCategoryRepository(container: container),
             mainActorReads: CoreDataMainActorReads(container: container)
         )
     }

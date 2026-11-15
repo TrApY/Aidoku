@@ -6,8 +6,6 @@
 //  and its signatures, and adds it to `DataRepositories`.
 //
 
-/// L2: categories and filter groups.
-protocol CategoryRepository: Sendable {}
 /// L3 and L7: library membership and the library queries.
 protocol LibraryRepository: Sendable {}
 /// L4 and L5: reading history.

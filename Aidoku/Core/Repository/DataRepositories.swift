@@ -11,11 +11,13 @@
 /// One repository per domain. Each lot of F4 adds its field here.
 struct DataRepositories: Sendable {
     var tracks: any TrackRepository
+    var categories: any CategoryRepository
     /// The few synchronous main-thread reads the reader and the tracker still need (D8; gone in F9/F11).
     var mainActorReads: any MainActorReads
 
-    init(tracks: any TrackRepository, mainActorReads: any MainActorReads) {
+    init(tracks: any TrackRepository, categories: any CategoryRepository, mainActorReads: any MainActorReads) {
         self.tracks = tracks
+        self.categories = categories
         self.mainActorReads = mainActorReads
     }
 }

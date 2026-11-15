@@ -6,6 +6,7 @@
 //  store of its own that is removed at the end. Never the app's store.
 //
 
+import AidokuRunner
 import CoreData
 import Foundation
 import Testing
@@ -15,6 +16,8 @@ import Testing
 /// A store with its repositories, and how to remove it.
 struct FixtureStore: Sendable {
     let repos: DataRepositories
+    /// Puts these manga in the library (no chapters), until the library has its repository (L3).
+    let addToLibrary: @Sendable ([MangaIdentifier]) async -> Void
     let tearDown: @Sendable () async -> Void
 }
 
@@ -35,7 +38,20 @@ struct CoreDataFixture: RepositoryFixture {
     func make() async throws -> FixtureStore {
         let store = try Self.container()
         let repos = DataRepositories(container: store.container)
-        return FixtureStore(repos: repos) { Self.remove(store.container, directory: store.directory) }
+        let container = store.container
+        return FixtureStore(
+            repos: repos,
+            addToLibrary: { ids in
+                await container.performBackgroundTask { context in
+                    for id in ids {
+                        let manga = AidokuRunner.Manga(sourceKey: id.sourceKey, key: id.mangaKey, title: id.mangaKey)
+                        CoreDataManager.shared.addToLibrary(manga: manga, chapters: [], context: context)
+                    }
+                    try? context.save()
+                }
+            },
+            tearDown: { Self.remove(store.container, directory: store.directory) }
+        )
     }
 
     static func container() throws -> (container: NSPersistentContainer, directory: URL) {
