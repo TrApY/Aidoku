@@ -140,26 +140,6 @@ struct FilterListSheetView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    var toolbarContentiOS18: some ToolbarContent {
-        commonToolbarContent
-
-        ToolbarItem(placement: .bottomBar) {
-            HStack {
-                Button(NSLocalizedString("RESET")) {
-                    newEnabledFilters = []
-                    dismiss()
-                }
-                Spacer()
-                if sourceKey != nil {
-                    Button(NSLocalizedString("SAVE")) {
-                        promptSearchSave()
-                    }
-                }
-            }
-        }
-    }
-
     func promptSearchSave() {
         var alertTextField: UITextField?
         UIApplication.shared.appDelegate?.presentAlert(

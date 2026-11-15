@@ -91,18 +91,6 @@ struct MigrateSelectSeriesView: View {
             selectAllButton
         }
     }
-
-    @ToolbarContentBuilder
-    var toolbarContentiOS18: some ToolbarContent {
-        commonToolbarContent
-
-        ToolbarItem(placement: .bottomBar) {
-            HStack {
-                Spacer()
-                selectAllButton
-            }
-        }
-    }
 }
 
 extension MigrateSelectSeriesView {

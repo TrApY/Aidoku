@@ -874,48 +874,6 @@ extension SettingView {
         }
     }
 
-    // use uikit alert for ios 15, since it doesn't support text fields in alerts
-    private func showLoginAlertView(value: LoginSetting) {
-        guard let delegate = UIApplication.shared.appDelegate else {
-            return
-        }
-        var usernameTextField: UITextField?
-        var passwordTextField: UITextField?
-        delegate.presentAlert(
-            title: setting.title,
-            message: NSLocalizedString("LOGIN_BASIC_TEXT"),
-            actions: [
-                UIAlertAction(title: NSLocalizedString("CANCEL"), style: .cancel),
-                UIAlertAction(title: NSLocalizedString("LOGIN"), style: .default) { _ in
-                    guard
-                        let username = usernameTextField?.text,
-                        let password = passwordTextField?.text
-                    else { return }
-                    handleBasicLogin(username: username, password: password)
-                }
-            ],
-            textFieldHandlers: [
-                { textField in
-                    let useEmail = value.useEmail ?? false
-                    textField.placeholder = useEmail ? NSLocalizedString("EMAIL") : NSLocalizedString("USERNAME")
-                    textField.textContentType = useEmail ? .emailAddress : .username
-                    textField.keyboardType = useEmail ? .emailAddress : .default
-                    textField.autocorrectionType = .no
-                    textField.autocapitalizationType = .none
-                    textField.returnKeyType = .next
-                    usernameTextField = textField
-                },
-                { textField in
-                    textField.isSecureTextEntry = true
-                    textField.placeholder = NSLocalizedString("PASSWORD")
-                    textField.textContentType = .password
-                    textField.returnKeyType = .done
-                    passwordTextField = textField
-                }
-            ]
-        )
-    }
-
     private func handleBasicLogin(username: String, password: String) {
         guard !(username.isEmpty || password.isEmpty) else {
             return

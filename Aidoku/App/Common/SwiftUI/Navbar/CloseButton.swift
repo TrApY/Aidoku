@@ -16,15 +16,3 @@ struct CloseButton: View {
         }
     }
 }
-
-struct CloseButtonUIKit: UIViewRepresentable {
-    private let action: () -> Void
-
-    init(action: @escaping () -> Void) { self.action = action }
-
-    func makeUIView(context: Context) -> UIButton {
-        UIButton(type: .close, primaryAction: UIAction { _ in action() })
-    }
-
-    func updateUIView(_ uiView: UIButton, context: Context) {}
-}
