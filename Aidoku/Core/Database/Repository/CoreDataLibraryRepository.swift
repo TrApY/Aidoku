@@ -16,7 +16,23 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         self.container = container
     }
 
-    // STUB (rojo de L3): el contrato aún no tiene implementación
-    func contains(_ id: MangaIdentifier) async -> Bool { false }
-    func contained(in ids: [MangaIdentifier]) async -> Set<MangaIdentifier> { [] }
+    func contains(_ id: MangaIdentifier) async -> Bool {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.hasLibraryManga(mangaId: id, context: context)
+        }
+    }
+
+    func contained(in ids: [MangaIdentifier]) async -> Set<MangaIdentifier> {
+        var seen: Set<MangaIdentifier> = []
+        let unique = ids.filter { seen.insert($0).inserted }
+        var found: Set<MangaIdentifier> = []
+        for start in stride(from: 0, to: unique.count, by: Self.batchSize) {
+            let batch = Array(unique[start..<min(start + Self.batchSize, unique.count)])
+            let inLibrary = await container.performBackgroundTask { context in
+                batch.filter { CoreDataManager.shared.hasLibraryManga(mangaId: $0, context: context) }
+            }
+            found.formUnion(inLibrary)
+        }
+        return found
+    }
 }
