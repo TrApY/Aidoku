@@ -48,9 +48,10 @@ protocol ReadPositionKeyed {
 
 enum ReadPositionKey {
     /// Chapter + page, plus the scroll position (rounded to 1 %) when the reader reports one (text reader),
-    /// so moving within one virtual page is a change too (pending: position ignored).
+    /// so moving within one virtual page is a change too.
     static func make(chapterKey: String, page: Int, position: Double?) -> String {
-        "\(chapterKey)#\(page)"
+        guard let position else { return "\(chapterKey)#\(page)" }
+        return "\(chapterKey)#\(page)@" + String(format: "%.2f", position)
     }
 }
 
@@ -83,9 +84,6 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
     /// Last page saved locally / sent (also the opening page, which is already stored).
     private var lastLocalKey: String?
     private var lastTrackerKey: String?
-    /// After a chapter loads, the first page reported is where it opened.
-    private var awaitingOpeningPage = false
-    private var openingKey: String?
 
     /// - isEnabled: false (incognito) schedules nothing.
     /// - saveLocal: progress only (no reading session, no tracker), ~2 s after the last change. Gets the
@@ -107,16 +105,10 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
     func pageChanged(_ position: Position) {
         guard isEnabled() else { return }
         let key = position.pageKey
-        if awaitingOpeningPage {
-            awaitingOpeningPage = false
-            openingKey = key
-            lastLocalKey = key
-            lastTrackerKey = key
+        // back on (or still on) the page already saved and sent, e.g. where the chapter opened: nothing to do
+        if key == lastLocalKey && key == lastTrackerKey {
+            dropPending()
             return
-        }
-        if let openingKey {
-            guard key != openingKey else { return } // still where it opened
-            self.openingKey = nil
         }
         pending = position
         pendingLocal = position
@@ -154,19 +146,32 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
     }
 
     /// A chapter was loaded at `pageKey` (the stored position it starts at): reports of that page are
-    /// not a change (pending: the first report is taken instead).
+    /// not a change, whenever (or whether) the reader reports it.
     func chapterOpened(pageKey: String) {
         cancel()
-        awaitingOpeningPage = true
-        openingKey = nil
+        lastLocalKey = pageKey
+        lastTrackerKey = pageKey
     }
 
-    /// A delayed save of `pageKey` was dropped (old generation) without writing: it's not saved (pending).
+    /// A delayed save of `pageKey` was dropped (old generation) without writing: it's not saved.
     func discarded(pageKey: String) {
+        if lastLocalKey == pageKey {
+            lastLocalKey = nil
+        }
+        if lastTrackerKey == pageKey {
+            lastTrackerKey = nil
+        }
     }
 
-    /// Drops what's pending (leaving the reader, changing chapter): the caller saves right away.
+    /// Drops what's pending (leaving the reader, changing chapter): the caller saves right away. Saves
+    /// already running are dropped too (new generation).
     func cancel() {
+        dropPending()
+        generation += 1
+    }
+
+    /// Cancels the timers and what they would save; saves already running go on.
+    private func dropPending() {
         localTimer?.cancel()
         trackerTimer?.cancel()
         localTimer = nil
@@ -175,14 +180,17 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
         pending = nil
         localSince = nil
         trackerSince = nil
-        generation += 1
     }
 
     /// For an immediate save (scene deactivating, going to the background): drops what's pending and
     /// tells whether this page still needs saving (false: already saved and sent, e.g. a second notice).
     func claimImmediateSave(pageKey: String) -> Bool {
+        if pageKey == lastLocalKey && pageKey == lastTrackerKey {
+            // saved and sent (or being written by saves already running, which write this same page)
+            dropPending()
+            return false
+        }
         cancel()
-        guard pageKey != lastLocalKey || pageKey != lastTrackerKey else { return false }
         lastLocalKey = pageKey
         lastTrackerKey = pageKey
         return true
