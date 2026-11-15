@@ -19,11 +19,91 @@ struct FixtureStore: Sendable {
     /// Puts these manga in the library (no chapters) and takes them out, until the library has its writes (L7).
     let addToLibrary: @Sendable ([MangaIdentifier]) async -> Void
     let removeFromLibrary: @Sendable ([MangaIdentifier]) async -> Void
+    /// Puts stored chapters and history rows in the store, as they can be found there, until history has its
+    /// writes (L5) and chapters theirs (L6).
+    let seed: any FixtureSeeder
     let tearDown: @Sendable () async -> Void
 }
 
 protocol RepositoryFixture: Sendable, CustomTestStringConvertible {
     func make() async throws -> FixtureStore
+}
+
+/// A history row as it can be found in a store (not necessarily as the app writes it).
+struct HistorySeed: Sendable {
+    var chapter: ChapterIdentifier
+    /// nil: as a new row starts (-1)
+    var progress: Int?
+    /// nil: as a new row starts (0)
+    var total: Int?
+    var completed = false
+    /// a new row starts at .distantPast; nil on purpose is kept
+    var dateRead: Date? = .distantPast
+    var scrollPosition: Double?
+    /// linked to its stored chapter (if there is one)
+    var linked = true
+}
+
+protocol FixtureSeeder: Sendable {
+    /// Stores these chapters of the manga in this order (source order 0, 1…), creating the manga (not in the
+    /// library) if it is not stored.
+    func addChapters(_ chapters: [AidokuRunner.Chapter], to manga: MangaIdentifier) async
+    /// Adds a history row, without looking for one of the same chapter.
+    func addHistory(_ seed: HistorySeed) async
+    func historyRows(of chapter: ChapterIdentifier) async -> Int
+    func isLinked(_ chapter: ChapterIdentifier) async -> Bool
+}
+
+struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
+    let container: NSPersistentContainer
+
+    func addChapters(_ chapters: [AidokuRunner.Chapter], to manga: MangaIdentifier) async {
+        await container.performBackgroundTask { context in
+            let object = CoreDataManager.shared.getOrCreateManga(
+                AidokuRunner.Manga(sourceKey: manga.sourceKey, key: manga.mangaKey, title: manga.mangaKey),
+                context: context
+            )
+            for (index, chapter) in chapters.enumerated() {
+                CoreDataManager.shared.createChapter(chapter, mangaId: manga, sourceOrder: index, mangaObject: object, context: context)
+            }
+            try? context.save()
+        }
+    }
+
+    func addHistory(_ seed: HistorySeed) async {
+        await container.performBackgroundTask { context in
+            let history = HistoryObject(context: context)
+            history.sourceId = seed.chapter.sourceKey
+            history.mangaId = seed.chapter.mangaKey
+            history.chapterId = seed.chapter.chapterKey
+            if let progress = seed.progress { history.progress = Int16(progress) }
+            if let total = seed.total { history.total = Int16(total) }
+            history.completed = seed.completed
+            history.dateRead = seed.dateRead
+            history.scrollPosition = seed.scrollPosition.map { NSNumber(value: $0) }
+            if seed.linked {
+                history.chapter = CoreDataManager.shared.getChapter(chapterId: seed.chapter, context: context)
+            }
+            try? context.save()
+        }
+    }
+
+    private func rows(_ chapter: ChapterIdentifier, _ context: NSManagedObjectContext) -> [HistoryObject] {
+        let request = HistoryObject.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "chapterId == %@ AND mangaId == %@ AND sourceId == %@",
+            chapter.chapterKey, chapter.mangaKey, chapter.sourceKey
+        )
+        return (try? context.fetch(request)) ?? []
+    }
+
+    func historyRows(of chapter: ChapterIdentifier) async -> Int {
+        await container.performBackgroundTask { context in rows(chapter, context).count }
+    }
+
+    func isLinked(_ chapter: ChapterIdentifier) async -> Bool {
+        await container.performBackgroundTask { context in rows(chapter, context).contains { $0.chapter != nil } }
+    }
 }
 
 /// Every fixture the contract tests run against.
@@ -57,6 +137,7 @@ struct CoreDataFixture: RepositoryFixture {
                     try? context.save()
                 }
             },
+            seed: CoreDataSeeder(container: container),
             tearDown: { Self.remove(store.container, directory: store.directory) }
         )
     }

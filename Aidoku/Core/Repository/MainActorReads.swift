@@ -10,4 +10,8 @@
 protocol MainActorReads: Sendable {
     /// Whether the manga has any track item (TrackerManager.isTracking).
     func isTracking(_ manga: MangaIdentifier) -> Bool
+    /// The page the reader opens a chapter at (ReaderViewController.loadCurrentChapter).
+    func progress(of chapter: ChapterIdentifier) -> ChapterProgress
+    /// The stored scroll position of the page it opens at (ReaderViewController.openingPageKey).
+    func record(of chapter: ChapterIdentifier) -> HistoryRecord?
 }

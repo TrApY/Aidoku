@@ -17,6 +17,8 @@ extension DataRepositories {
             tracks: CoreDataTrackRepository(container: container),
             categories: CoreDataCategoryRepository(container: container),
             library: CoreDataLibraryRepository(container: container),
+            history: CoreDataHistoryRepository(container: container),
+            chapters: CoreDataChapterRepository(container: container),
             mainActorReads: CoreDataMainActorReads(container: container)
         )
     }

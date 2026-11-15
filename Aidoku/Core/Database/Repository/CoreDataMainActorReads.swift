@@ -17,4 +17,12 @@ final class CoreDataMainActorReads: MainActorReads {
     func isTracking(_ manga: MangaIdentifier) -> Bool {
         CoreDataManager.shared.hasTrack(mangaId: manga, context: container.viewContext)
     }
+
+    func progress(of chapter: ChapterIdentifier) -> ChapterProgress {
+        ChapterProgress(completed: false, progress: nil) // STUB (rojo de L4)
+    }
+
+    func record(of chapter: ChapterIdentifier) -> HistoryRecord? {
+        nil // STUB (rojo de L4)
+    }
 }

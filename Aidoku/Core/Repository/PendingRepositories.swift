@@ -6,12 +6,8 @@
 //  and its signatures, and adds it to `DataRepositories`.
 //
 
-/// L4 and L5: reading history.
-protocol HistoryRepository: Sendable {}
 /// L6: stored manga.
 protocol MangaRepository: Sendable {}
-/// L6: chapters.
-protocol ChapterRepository: Sendable {}
 /// L8: chapter updates.
 protocol MangaUpdateRepository: Sendable {}
 /// L9: installed sources.
