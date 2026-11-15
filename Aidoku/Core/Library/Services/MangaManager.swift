@@ -984,6 +984,8 @@ extension MangaManager {
         // migrate/copy data
         let result: (AidokuRunner.Manga, AidokuRunner.Manga)? = await CoreDataManager.shared.container.performBackgroundTask { context in
             do {
+                // the order chosen in the old library entry (its flags), before it may go (SUWA-12 I3)
+                let oldSort: ChapterSortChoice? = nil // pendiente[I3#5]
                 // update manga object in library with new data
                 // remove old entry if the new one already exists in library
                 if !copy {
@@ -1046,6 +1048,11 @@ extension MangaManager {
                           let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: newManga.identifier, context: context) {
                     // without categories (also without the default one it got when added)
                     libraryObject.categories = NSSet()
+                }
+
+                // ... goes to the new entry: replaced, copied or already in the library
+                if let oldSort, let newObject = CoreDataManager.shared.getManga(mangaId: newManga.identifier, context: context) {
+                    newObject.chapterFlags = Int16(ChapterSortMemory.flags(oldSort, into: Int(newObject.chapterFlags)))
                 }
 
                 // migrate history

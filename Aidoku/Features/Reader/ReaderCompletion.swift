@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UIKit
 
 enum ReaderCompletion {
     /// Webtoon / continuous, when the scroll stops: the last page of the chapter on screen, or the
@@ -30,13 +31,43 @@ enum ReaderCompletion {
 
     /// A page change completes the chapter at the last page (or past it, the transition) only if the last
     /// page was seen: in this change or before in this reading session. The paged reader reports it.
+    /// `previousPage`: the page before this change (with the app in front).
     static func pageReportCompletes(
         pages: ClosedRange<Int>,
         totalPages: Int?,
         seenPages: Set<Int>,
+        previousPage: Int? = nil,
         inForeground: Bool
     ) -> Bool {
         guard inForeground, let totalPages, totalPages > 0, pages.upperBound >= totalPages else { return false }
-        return pages.contains(totalPages) || seenPages.contains(totalPages)
+        if pages.contains(totalPages) || seenPages.contains(totalPages) {
+            return true
+        }
+        return false // pendiente[I2#1]
+    }
+}
+
+/// Whether the app is in front for the reader: not from «will resign active» or «did enter background»
+/// until «did become active» (iPadOS lays the app out again for the app switcher then). SUWA-12 I1.
+final class ReaderAppActivity: @unchecked Sendable {
+    private(set) var isActive: Bool
+    private let center: NotificationCenter
+    private var observers: [NSObjectProtocol] = []
+
+    init(center: NotificationCenter = .default, active: Bool) {
+        self.center = center
+        self.isActive = active
+        for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
+                self?.isActive = false
+            })
+        }
+        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
+            self?.isActive = true
+        })
+    }
+
+    deinit {
+        observers.forEach(center.removeObserver)
     }
 }

@@ -44,7 +44,9 @@ class ReaderViewController: BaseObservingViewController {
         }
     }
     private var forceStartPage: Int?
-    private var currentPage = 1
+    private(set) var currentPage = 1
+    /// The app in front (page changes and completions only then). Replaced in tests. SUWA-12 I1
+    lazy var appActivity = ReaderAppActivity(active: UIApplication.shared.applicationState == .active)
     private var currentPosition: Double?
     private var sessionReadPages: Set<Int> = []
     private var sessionStartDate: Date?
@@ -1225,7 +1227,9 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     }
 
     private func setCurrentPages(_ pages: ClosedRange<Int>, position: Double? = nil) {
+         // pendiente[I1#2]
         guard let totalPages = toolbarView.totalPages else { return }
+        let previousPage = currentPage
 
         updateDescriptionButton(pages: pages)
         updateAutoScrollButton()
@@ -1254,7 +1258,8 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             pages: pages,
             totalPages: totalPages,
             seenPages: sessionReadPages,
-            inForeground: UIApplication.shared.applicationState != .background
+            previousPage: previousPage,
+            inForeground: appActivity.isActive
         )
         if completes && !isPrePaginationPlaceholder {
             completionTrigger = "lector: página \(pages.lowerBound)...\(pages.upperBound) de \(totalPages)"
@@ -1335,8 +1340,10 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         toolbarView.sliderView.currentValue = offset
     }
 
-    func setCompleted() {
-        guard !AppSettings.general.incognitoMode.get() else { return }
+    @discardableResult
+    func setCompleted() -> Bool {
+         // pendiente[I1#3]
+        guard !AppSettings.general.incognitoMode.get() else { return false }
 
         let reason = "\(completionTrigger) (\(String(describing: type(of: reader as Any))), página \(currentPage) de \(toolbarView.totalPages ?? 0))"
         completionTrigger = "lector"
@@ -1351,6 +1358,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         if AppSettings.downloads.deleteDownloadAfterReading.get() {
             chaptersToRemoveDownload.append(chapter)
         }
+        return true
     }
 
     private func configureBarToggleTapGestures() {

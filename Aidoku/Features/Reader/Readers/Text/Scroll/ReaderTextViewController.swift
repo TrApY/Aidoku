@@ -854,9 +854,8 @@ extension ReaderTextViewController: UIScrollViewDelegate {
         // Mark as completed when reaching the end of a section
         let sectionEndY = startY + height
         if scrollView.contentOffset.y + screenHeight >= sectionEndY - 50 && !hasReachedEnd {
-            hasReachedEnd = true
             delegate?.setCurrentPage(currentPage, position: Double(progress))
-            delegate?.setCompleted()
+            hasReachedEnd = true; delegate?.setCompleted() // pendiente[I1#4]
         } else {
             delegate?.setCurrentPage(currentPage, position: Double(progress))
         }

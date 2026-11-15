@@ -22,5 +22,6 @@ protocol ReaderHoldingDelegate: AnyObject {
     func setPages(_ pages: [Page])
     func displayPage(_ page: Int) // show page on toolbar but don't set it as current page
     func setSliderOffset(_ offset: CGFloat)
-    func setCompleted()
+    /// false if it didn't count (incognito, the app not in front)
+    @discardableResult func setCompleted() -> Bool
 }
