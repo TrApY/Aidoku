@@ -289,7 +289,7 @@
 "RENAME_CATEGORY_FAIL" = "No se pudo renombrar la categoría";
 "RENAME_CATEGORY" = "Cambiar el nombre de la categoría";
 "RENAME_CATEGORY_FAIL_INFO" = "Los nombres de categoría deben ser únicos.";
-"MIGRATE_SOURCES" = "Migrar las fuentes";
+"MIGRATE_SOURCES" = "Migrar fuentes";
 "OPTIONS" = "Opciones";
 "DESTINATION" = "Destino";
 "AVAILABLE" = "Disponible";
@@ -300,7 +300,7 @@
 "SYNC_LOCAL_HISTORY" = "Sincronizar el historial local";
 "MIGRATE" = "Migrar";
 "SELECTED" = "Seleccionado";
-"MOST_CHAPTERS_SLOWER" = "Mayoría de capítulos (más lento)";
+"MOST_CHAPTERS_SLOWER" = "Más capítulos (más lento)";
 "UPLOAD_DATE" = "Fecha de subida";
 "IS_TRACKING" = "Seguimiento";
 "ALL_CHAPTERS_READ" = "Todos los capítulos leídos";
@@ -723,13 +723,13 @@
 "CATEGORY_SEARCH" = "Encontrar en Categoría";
 "SET_TRACK_CHAPTER_OFFSET" = "Establecer desplazamiento de capítulo";
 "TRACK_CHAPTER_OFFSET_TEXT" = "Ajustar las actualizaciones automáticas de capítulos del sistema de seguimiento para este título cuando los números de capítulo de la fuente difieran de los números de capítulo del sistema de seguimiento.";
-"MIGRATE_CONFIRM_TEXT" = "El historial de lectura de las entradas originales se eliminará al migrar a un origen diferente.";
-"SELECT_PINNED_SOURCES" = "Seleccionar Fuentes Pinchadas";
+"MIGRATE_CONFIRM_TEXT" = "Se borrará el historial de lectura de las series originales al migrarlas a otra fuente.";
+"SELECT_PINNED_SOURCES" = "Seleccionar fuentes fijadas";
 "SEARCH_MANUALLY" = "Buscar manualmente";
 "DONT_MIGRATE" = "No migrar";
-"SELECTED_%i_OF_%i" = "Seleccionado (%i/%i)";
+"SELECTED_%i_OF_%i" = "Seleccionadas (%i/%i)";
 "MIGRATE_%i_OF_%i" = "Migrar (%i/%i)";
-"SHOW_ENTRY" = "Mostrar Apunte";
+"SHOW_ENTRY" = "Ver ficha";
 "EPUB_NAME" = "EPUB";
 "SUWAYOMI_TAGLINE" = "Servidor de lectura Manga";
 "SUWAYOMI_INFO" = "Suwayomi es un servidor lector de manga auto‐hospedado que ejecuta extensiones creadas para Mihon (Tachiyomi). Necesitará un servidor Suwayomi configurado y en funcionamiento para poder utilizar esta fuente.";
@@ -765,3 +765,12 @@
 "PILLARBOX_AMOUNT_PORTRAIT" = "Margen en vertical";
 "PILLARBOX_AMOUNT_LANDSCAPE" = "Margen en horizontal";
 "PILLARBOX_AMOUNTS_INFO" = "Margen (porcentaje del ancho) para cada orientación. Con 0 no hay pillarbox en esa orientación.";
+
+// SUWA-11: global search and migration
+"MIGRATE_WITH_HISTORY" = "Migrar y conservar historial";
+"SUWAYOMI_LIBRARY_ROW_%@" = "Biblioteca (%@)";
+"GLOBAL_SEARCH" = "Búsqueda global";
+"WEBVIEW" = "WebView";
+"MANGA_SOURCE_ERROR_HINT" = "Esta fuente no responde. Puedes reintentar, abrirla en la web o migrar el manga a otra fuente.";
+"MANGA_SOURCE_NOT_INSTALLED" = "La fuente de esta serie no está instalada.";
+"MANGA_SOURCE_NOT_INSTALLED_HINT" = "Puedes abrirla en la web o migrar el manga a otra fuente.";

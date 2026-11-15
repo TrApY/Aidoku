@@ -893,3 +893,11 @@
 "PILLARBOX_AMOUNT_PORTRAIT" = "Portrait Margin";
 "PILLARBOX_AMOUNT_LANDSCAPE" = "Landscape Margin";
 "PILLARBOX_AMOUNTS_INFO" = "Margin (percent of the width) for each orientation. 0 turns pillarboxing off in that orientation.";
+
+// SUWA-11: global search and migration
+"SUWAYOMI_LIBRARY_ROW_%@" = "Library (%@)";
+"GLOBAL_SEARCH" = "Global Search";
+"WEBVIEW" = "WebView";
+"MANGA_SOURCE_ERROR_HINT" = "This source isn't responding. You can retry, open it on the web or migrate the series to another source.";
+"MANGA_SOURCE_NOT_INSTALLED" = "The source of this series isn't installed.";
+"MANGA_SOURCE_NOT_INSTALLED_HINT" = "You can open it on the web or migrate the series to another source.";
