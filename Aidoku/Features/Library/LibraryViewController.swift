@@ -53,6 +53,21 @@ class LibraryViewController: OldMangaCollectionViewController {
     }
 
     private lazy var refreshControl = UIRefreshControl()
+    /// Reading saves the page every few seconds: refresh for it at most once a second, and only while
+    /// the library can be seen (otherwise when it appears again).
+    private lazy var historyRefresh = CoalescedRefresh<MangaIdentifier>(
+        visibility: { [weak self] in
+            guard let self, self.isViewLoaded, self.view.window != nil else { return .hidden }
+            return self.presentedViewController != nil ? .covered : .visible
+        },
+        refresh: { [weak self] mangaIds in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.viewModel.mangaRead(mangaIds: mangaIds)
+                self.updateDataSource()
+            }
+        }
+    )
     private lazy var emptyStackView = EmptyPageStackView()
     private lazy var lockedStackView = LockedPageStackView()
 
@@ -84,6 +99,7 @@ class LibraryViewController: OldMangaCollectionViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        historyRefresh.appeared() // what was read while it was hidden
 
         // fix refresh control snapping height
         refreshControl.didMoveToSuperview()
@@ -462,8 +478,7 @@ class LibraryViewController: OldMangaCollectionViewController {
         addObserver(forName: .historySet) { [weak self] notification in
             guard let self, let item = notification.object as? (chapterId: ChapterIdentifier, page: Int) else { return }
             Task { @MainActor in
-                await self.viewModel.mangaRead(mangaId: item.chapterId.mangaIdentifier)
-                self.updateDataSource()
+                self.historyRefresh.signal(item.chapterId.mangaIdentifier)
             }
         }
     }

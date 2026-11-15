@@ -734,6 +734,17 @@ extension LibraryViewModel {
         return libraryReloaded
     }
 
+    /// Several manga read since the last refresh (oldest first): one reload at most.
+    func mangaRead(mangaIds: [MangaIdentifier]) async {
+        if activeFilters.contains(where: { $0.type == .hasUnread }) {
+            await loadLibrary()
+            return
+        }
+        for mangaId in mangaIds {
+            await mangaRead(mangaId: mangaId)
+        }
+    }
+
     func mangaRead(mangaId: MangaIdentifier) async {
         if activeFilters.contains(where: { $0.type == .hasUnread }) {
             // reload library in case all chapters were read and the manga should be filtered

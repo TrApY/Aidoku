@@ -25,7 +25,14 @@ actor DownloadQueue {
     private let stateKey: String?
     private var onCompletion: (() -> Void)?
 
-    private(set) var queue: [String: [Download]] = [:] // all queued downloads stored under source id
+    private(set) var queue: [String: [Download]] = [:] { // all queued downloads stored under source id
+        didSet {
+            if hasNoDownloads {
+                resumeEmptyWaiters(true)
+            }
+        }
+    }
+    private var emptyWaiters: [CheckedContinuation<Bool, Never>] = []
     private var tasks: [String: DownloadTask] = [:] // tasks for each source
     private var progressBlocks: [ChapterIdentifier: (Int, Int) -> Void] = [:]
 
@@ -203,6 +210,9 @@ actor DownloadQueue {
             }
 
             // create tmp directory so we know it's queued
+            if !DownloadManager.directory.exists {
+                DownloadManager.prepareDirectory() // removed meanwhile: created again out of the backup
+            }
             let tmpDirectory = cache.tmpDirectory(for: identifier)
             tmpDirectory.removeItem() // remove in case it exists from a previous failed download
             tmpDirectory.createDirectory()
@@ -317,13 +327,26 @@ actor DownloadQueue {
     }
 
     /// Waits until the queue is empty (true) or `stopWaitingForEmpty` is called (false), without
-    /// spinning (pending: doesn't wait).
+    /// spinning.
     func waitUntilEmpty() async -> Bool {
-        queue.isEmpty
+        if hasNoDownloads { return true }
+        return await withCheckedContinuation { emptyWaiters.append($0) }
     }
 
     /// Ends the waits (the background task expired).
     func stopWaitingForEmpty() {
+        resumeEmptyWaiters(false)
+    }
+
+    /// No download left (a source whose downloads were cancelled without a task keeps an empty list).
+    private var hasNoDownloads: Bool {
+        queue.values.allSatisfy(\.isEmpty)
+    }
+
+    private func resumeEmptyWaiters(_ emptied: Bool) {
+        let waiters = emptyWaiters
+        emptyWaiters = []
+        waiters.forEach { $0.resume(returning: emptied) }
     }
 
     func hasQueuedDownloads() -> Bool {
@@ -357,6 +380,7 @@ extension DownloadQueue {
 
             task.expirationHandler = {
                 Task {
+                    await self.stopWaitingForEmpty()
                     await DownloadManager.shared.pauseDownloads(byUser: false) // system pause: automatic downloads may start it again
                     await self.setBackgroundTask(nil)
                 }
@@ -367,12 +391,8 @@ extension DownloadQueue {
                 await self.setBackgroundTask(task)
                 await self.initAndResumeTasks()
 
-                // wait until downloads complete
-                while true {
-                    if await self.queue.isEmpty {
-                        break
-                    }
-                }
+                // wait until downloads complete (woken when the queue empties, not polled), or until expiry
+                guard await self.waitUntilEmpty() else { return } // expired: already completed
 
                 await self.setBackgroundTask(nil)
 

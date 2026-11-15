@@ -143,38 +143,21 @@ struct DownloadQueueTests {
         let queue = await makeQueue()
         await queue.pause(byUser: true)
         await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
-        let waiter = Task { await queue.waitUntilEmpty() }
+        let first = WaitResult()
+        Task { await first.set(await queue.waitUntilEmpty()) }
         try await Task.sleep(nanoseconds: 300_000_000)
-        let finishedEarly = await Self.isDone(waiter)
-        #expect(!finishedEarly) // still waiting: the queue has a download
+        #expect(await first.value == nil) // still waiting: the queue has a download
         await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
-        #expect(await Self.value(of: waiter, within: 5) == true)
+        #expect(await first.wait(seconds: 5) == true)
 
         // the background task expiring ends the wait
         await queue.add(chapters: [.init(key: "c2", chapterNumber: 2)], manga: manga, start: .never)
-        let second = Task { await queue.waitUntilEmpty() }
+        let second = WaitResult()
+        Task { await second.set(await queue.waitUntilEmpty()) }
         try await Task.sleep(nanoseconds: 100_000_000)
         await queue.stopWaitingForEmpty()
-        #expect(await Self.value(of: second, within: 5) == false)
+        #expect(await second.wait(seconds: 5) == false)
         await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c2")])
-    }
-
-    private static func isDone(_ task: Task<Bool, Never>) async -> Bool {
-        await value(of: task, within: 0.01) != nil
-    }
-
-    /// The task's value, or nil if it takes longer than `seconds`.
-    private static func value(of task: Task<Bool, Never>, within seconds: Double) async -> Bool? {
-        await withTaskGroup(of: Bool?.self) { group in
-            group.addTask { await task.value }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
     }
 }
 
@@ -238,5 +221,20 @@ private final class BlockingRunner: AidokuRunner.Runner, @unchecked Sendable {
     func getPageList(manga: AidokuRunner.Manga, chapter: AidokuRunner.Chapter) async throws -> [AidokuRunner.Page] {
         try await gate.pass()
         return []
+    }
+}
+
+/// What a wait returned (nil while it hasn't).
+private actor WaitResult {
+    private(set) var value: Bool?
+    func set(_ value: Bool) { self.value = value }
+
+    /// Polls up to `seconds` (never blocks on the wait itself).
+    func wait(seconds: Double) async -> Bool? {
+        let deadline = Date().addingTimeInterval(seconds)
+        while value == nil && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return value
     }
 }

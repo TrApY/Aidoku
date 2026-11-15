@@ -46,8 +46,16 @@ actor DownloadTask: Identifiable {
         case pageProcessorFailed
     }
 
-    /// Session for page and cover downloads (pending: the shared one).
-    static let downloadSession: URLSession = .shared
+    /// Session for page and cover downloads: like the shared one (same cookies and credentials, the
+    /// request's headers), but without URLCache, so a downloaded page isn't stored a second time.
+    static let downloadSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpCookieStorage = .shared
+        config.urlCredentialStorage = .shared
+        return URLSession(configuration: config)
+    }()
 
     typealias SourceLookup = @Sendable (String) async -> AidokuRunner.Source?
     static let defaultSourceLookup: SourceLookup = { await SourceManager.shared.source(for: $0) }
@@ -244,6 +252,9 @@ extension DownloadTask {
 
         let tmpDirectory = cache.tmpDirectory(for: download.chapterIdentifier)
         tmpDirectory.removeItem() // remove in case it exists from a previous failed download
+        if !DownloadManager.directory.exists {
+            DownloadManager.prepareDirectory() // removed meanwhile: created again out of the backup
+        }
         tmpDirectory.createDirectory()
 
         if pages.isEmpty {
@@ -428,7 +439,7 @@ extension DownloadTask {
     private func fetchPageData(for urlRequest: URLRequest, tmpDirectory: URL) async -> (Data, URLResponse)? {
         var attempt = 0
         while true {
-            let result = try? await URLSession.shared.data(for: urlRequest)
+            let result = try? await Self.downloadSession.data(for: urlRequest)
 
             // response was okay, bail out
             if let result, self.isSuccessResponse(result.1) {
@@ -540,7 +551,7 @@ extension DownloadTask {
                     let source = await sourceLookup(download.chapterIdentifier.sourceKey)
                 {
                     let request = await source.getModifiedImageRequest(url: coverUrl, context: nil)
-                    let result = try? await URLSession.shared.data(for: request)
+                    let result = try? await Self.downloadSession.data(for: request)
                     if let data = result?.0, self.isSuccessResponse(result?.1) {
                         try? data.write(to: coverPath)
                     }

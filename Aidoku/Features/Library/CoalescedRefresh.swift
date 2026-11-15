@@ -40,12 +40,46 @@ final class CoalescedRefresh<Key: Hashable> {
         self.refresh = refresh
     }
 
-    /// Something changed (pending: refreshes right away, as before).
+    /// Something changed: refresh a second after the last notice, if it can be seen by then.
     func signal(_ key: Key) {
-        refresh([key])
+        pendingKeys.removeAll { $0 == key }
+        pendingKeys.append(key)
+        guard visibility() != .hidden else {
+            // nothing to do until it appears again
+            timer?.cancel()
+            timer = nil
+            return
+        }
+        schedule()
     }
 
-    /// The screen appeared again (pending).
+    /// The screen appeared again: refresh what changed meanwhile.
     func appeared() {
+        timer?.cancel()
+        timer = nil
+        fire()
+    }
+
+    private func schedule() {
+        timer?.cancel()
+        timer = scheduler.schedule(after: Self.delay) { [weak self] in
+            self?.timer = nil
+            self?.fire()
+        }
+    }
+
+    private func fire() {
+        guard !pendingKeys.isEmpty else { return }
+        switch visibility() {
+            case .visible:
+                let keys = pendingKeys
+                pendingKeys = []
+                refresh(keys)
+            case .covered:
+                // the reader is over it: look again later (no work until then)
+                schedule()
+            case .hidden:
+                break // refreshed on `appeared`
+        }
     }
 }

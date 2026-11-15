@@ -27,11 +27,19 @@ actor DownloadManager {
 
     static let directory = FileManager.default.documentDirectory.appendingPathComponent("Downloads", isDirectory: true)
 
-    /// Creates the downloads directory if needed and keeps it out of the iCloud/iTunes backup
-    /// (pending: not excluded).
+    /// Creates the downloads directory if needed and keeps it out of the iCloud/iTunes backup (the
+    /// mark goes on the directory, so everything inside is left out too).
     static func prepareDirectory(_ url: URL = directory) {
         if !url.exists {
             url.createDirectory()
+        }
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        do {
+            try url.setResourceValues(values)
+        } catch {
+            LogManager.logger.error("Downloads directory not excluded from backup: \(error)")
         }
     }
 
@@ -47,9 +55,8 @@ actor DownloadManager {
     /// - queueStateKey: where the queue is saved (nil: not saved, for tests).
     init(queueStateKey: String? = "Data.downloadQueueState") {
         self.queue = DownloadQueue(cache: cache, stateKey: queueStateKey)
-        if !Self.directory.exists {
-            Self.directory.createDirectory()
-        }
+        // also marks a directory created by an older version
+        Self.prepareDirectory()
         Task {
             await self.queue.setOnCompletion { @Sendable in
                 Task { @MainActor in

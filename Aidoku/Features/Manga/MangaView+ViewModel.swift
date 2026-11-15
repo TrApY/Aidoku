@@ -523,7 +523,7 @@ extension MangaView.ViewModel {
 
             // update manga in db
             if inLibrary {
-                let resultManga: AidokuRunner.Manga? =
+                let (resultManga, foundNewChapters): (AidokuRunner.Manga?, Bool) =
                     await CoreDataManager.shared.container.performBackgroundTask { [
                         newManga,
                         chapterLangFilter,
@@ -536,12 +536,13 @@ extension MangaView.ViewModel {
                             ),
                             let mangaObject = libraryObject.manga
                         else {
-                            return nil
+                            return (nil, false)
                         }
 
                         // update details
                         mangaObject.load(from: newManga)
 
+                        var foundNewChapters = false
                         if let chapters = newManga.chapters {
                             let newChapters = CoreDataManager.shared.setChapters(
                                 chapters,
@@ -549,6 +550,7 @@ extension MangaView.ViewModel {
                                 context: context
                             )
                             if !newChapters.isEmpty {
+                                foundNewChapters = true
                                 // add manga updates
                                 for chapter in newChapters
                                 where
@@ -575,7 +577,7 @@ extension MangaView.ViewModel {
 
                         try? context.save()
 
-                        return mangaObject.toNewManga()
+                        return (mangaObject.toNewManga(), foundNewChapters)
                     }
 
                 if newManga.chapters != nil {
@@ -588,6 +590,13 @@ extension MangaView.ViewModel {
                 }
 
                 NotificationCenter.default.post(name: .updateManga, object: newManga.identifier)
+
+                if foundNewChapters {
+                    // «descarga adelantada»: new chapters may fall in the window (on its own; Wi-Fi rule applies)
+                    Task {
+                        await DownloadManager.shared.ensureAheadDownloaded(mangaId: mangaId)
+                    }
+                }
             }
 
             await loadHistory()

@@ -121,8 +121,7 @@ enum DownloadAheadPlanner {
     }
 
     /// Same, asking the download status only of the chapters in the window (at most `target`), not of
-    /// every chapter of the manga. Same result as `split` + `chaptersToQueue` with every status
-    /// (pending: asks all of them).
+    /// every chapter of the manga. Same result as `split` + `chaptersToQueue` with every status.
     static func chaptersToQueue(
         chapters: [AidokuRunner.Chapter],
         readingHistory: [String: (page: Int, date: Int)],
@@ -132,16 +131,18 @@ enum DownloadAheadPlanner {
         scanlators: [String] = [],
         status: (String) -> DownloadStatus
     ) -> [AidokuRunner.Chapter] {
-        let (downloaded, queued) = split(statuses: chapters.map { ($0.key, status($0.key)) }, retried: retried)
-        return chaptersToQueue(
+        // the window doesn't depend on the download status: find it first
+        let window = chaptersToQueue(
             chapters: chapters,
             readingHistory: readingHistory,
-            downloaded: downloaded,
-            queued: queued,
+            downloaded: [],
+            queued: [],
             target: target,
             language: language,
             scanlators: scanlators
         )
+        let (downloaded, queued) = split(statuses: window.map { ($0.key, status($0.key)) }, retried: retried)
+        return window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
     }
 
     /// Same language and scanlator filter as the manga page's chapter list.
@@ -234,21 +235,17 @@ extension DownloadManager {
             let filters = await CoreDataManager.shared.container.performBackgroundTask { context in
                 CoreDataManager.shared.getMangaChapterFilters(mangaId: mangaId, context: context)
             }
-            let (downloaded, queued) = DownloadAheadPlanner.split(
-                statuses: chapters.map {
-                    ($0.key, getDownloadStatus(for: .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0.key)))
-                },
-                retried: retried
-            )
+            // the download status (files on disk) only of the chapters in the window
             let toQueue = DownloadAheadPlanner.chaptersToQueue(
                 chapters: chapters,
                 readingHistory: readingHistory,
-                downloaded: downloaded,
-                queued: queued,
                 target: target,
+                retried: retried,
                 language: filters.language,
                 scanlators: filters.scanlators ?? []
-            )
+            ) {
+                getDownloadStatus(for: .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0))
+            }
             if !toQueue.isEmpty {
                 await willQueue?(toQueue) // tests: e.g. the connection changes here
             }
