@@ -19,12 +19,8 @@ struct DownloadQueueView: View {
             List {
                 if isPaused {
                     Section {
-                        let padding: CGFloat = if #available(iOS 26.0, *) {
-                            // ios 26 uses larger list cells
-                            16
-                        } else {
-                            12
-                        }
+                        // ios 26 uses larger list cells
+                        let padding: CGFloat = 16
                         HStack {
                             Text(NSLocalizedString("DOWNLOADING_PAUSED"))
                             Spacer()
