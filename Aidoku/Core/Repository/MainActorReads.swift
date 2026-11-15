@@ -1,0 +1,11 @@
+//
+//  MainActorReads.swift
+//  Aidoku
+//
+//  SUWA-13 F4 (D8): synchronous reads on the main thread, only for the places that cannot wait without changing
+//  the order things happen in (the reader opening a chapter, the tracking badge). Retired in F9/F11.
+//
+
+@MainActor
+protocol MainActorReads: Sendable {
+}

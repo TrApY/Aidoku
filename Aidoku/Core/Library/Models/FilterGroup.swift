@@ -5,7 +5,7 @@
 //  Created by Skitty on 2/27/26.
 //
 
-struct FilterGroup: Equatable {
+struct FilterGroup: Equatable, Sendable {
     let title: String
     let filters: [LibraryFilter]
 

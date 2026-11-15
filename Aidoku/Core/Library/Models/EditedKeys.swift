@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct EditedKeys: OptionSet {
+struct EditedKeys: OptionSet, Sendable {
     let rawValue: Int32
 
     static let title = Self(rawValue: 1 << 0)

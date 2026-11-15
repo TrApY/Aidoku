@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct VocabEntry: Hashable {
+struct VocabEntry: Hashable, Sendable {
     let chapterId: ChapterIdentifier
     let word: String
     var reading: String?

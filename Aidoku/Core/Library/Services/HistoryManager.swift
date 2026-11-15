@@ -51,7 +51,7 @@ extension HistoryManager {
         }
     }
 
-    struct ReadingSessionData {
+    struct ReadingSessionData: Sendable {
         let startDate: Date
         let endDate: Date
         let pagesRead: Int
