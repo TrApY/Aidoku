@@ -56,7 +56,7 @@ struct MigrationOptions: Codable, Equatable, Sendable {
     /// What the sheet starts with: the last choice, but the defaults for a migration the app forces (a
     /// source that changed its ids or was uninstalled): nobody chose those options for it.
     static func initial(forced: Bool, defaults: UserDefaults = .standard) -> MigrationOptions {
-        load(from: defaults) // pending
+        forced ? MigrationOptions() : load(from: defaults)
     }
 
     /// Remembers this choice for the next migration (as Tachimanga).
@@ -116,8 +116,11 @@ final class MigrationServerQueue: @unchecked Sendable {
 
     func enqueue(_ trackerId: String, _ work: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
         lock.withLock {
-            // pending: not in order yet
-            let task = Task { await work() }
+            let previous = last[trackerId]
+            let task = Task {
+                await previous?.value
+                await work()
+            }
             last[trackerId] = task
             return task
         }
