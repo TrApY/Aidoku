@@ -67,6 +67,8 @@ actor DownloadManager {
     }
 
     func loadQueueState() async {
+        // the saved queue may hold manga the Suwayomi conversion moves to their server source (SUWA-12)
+        await SuwayomiStartup.shared.waitUntilFinished()
         await queue.loadQueueState()
 
         // fetch loaded downloads to notify ui about
@@ -669,6 +671,12 @@ extension DownloadManager {
             Int64(0)
         }
         return ByteCountFormatter.string(fromByteCount: totalSize, countStyle: .file)
+    }
+
+    /// Folders were moved outside the queue (SUWA-12 conversion): forget what was read from disk.
+    func reloadAfterExternalChange() async {
+        await cache.reload()
+        invalidateDownloadedMangaCache()
     }
 
     /// Invalidate the downloaded manga cache (call when downloads are added/removed)

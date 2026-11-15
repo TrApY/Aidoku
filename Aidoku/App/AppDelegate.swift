@@ -207,6 +207,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         Task {
             await SourceManager.shared.start()
+            // Suwayomi server sources and the conversion of the library to them, before the download queue
+            // and the scheduled backup (SUWA-12)
+            await SourceManager.shared.waitForSourcesLoad()
+            await SuwayomiStartup.shared.run()
             await BackupManager.shared.scheduleAutoBackup()
             if #available(iOS 18.0, *) {
                 DictionaryManager.shared.autoUpdateDictionaries()

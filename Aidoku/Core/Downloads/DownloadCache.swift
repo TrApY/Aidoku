@@ -44,6 +44,12 @@ class DownloadCache {
         loaded = true
     }
 
+    /// Read the folder again on next use (its contents were changed from outside).
+    func reload() {
+        rootDirectory = Directory(url: DownloadManager.directory)
+        loaded = false
+    }
+
     // add chapter to directory cache
     func add(chapter: ChapterIdentifier) {
         let sourceDirectory = rootDirectory.subdirectories[chapter.sourceKey.directoryName]
