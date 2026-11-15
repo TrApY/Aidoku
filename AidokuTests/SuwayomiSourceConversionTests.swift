@@ -255,6 +255,12 @@ final class BackupCounter: @unchecked Sendable {
         ]]]
         defaults.set(try JSONSerialization.data(withJSONObject: queue), forKey: "Data.downloadQueueState")
         defaults.set(try JSONEncoder().encode([ChapterIdentifier(sourceKey: parent, mangaKey: "102", chapterKey: "10201")]), forKey: "Data.chaptersToBeDeleted")
+        let pageState: [String: Any] = ["pendingPageUpdates": [[
+            "trackerId": "suwayomi", "trackId": "\(parent)|103",
+            "chapterId": ["sourceKey": parent, "mangaKey": "103", "chapterKey": "10302"],
+            "progress": ["completed": false, "page": 5, "total": 90], "failCount": 0
+        ]]]
+        defaults.set(try JSONSerialization.data(withJSONObject: pageState), forKey: "Tracker.pageTrackingState")
         for mangaId in ["101", "104"] {
             let folder = store.downloads.appendingPathComponent(parent).appendingPathComponent(mangaId)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -342,6 +348,11 @@ final class BackupCounter: @unchecked Sendable {
         let toDeleteData = try #require(defaults.data(forKey: "Data.chaptersToBeDeleted"))
         let toDelete = try JSONDecoder().decode([ChapterIdentifier].self, from: toDeleteData)
         #expect(toDelete == [ChapterIdentifier(sourceKey: childA, mangaKey: "102", chapterKey: "10201")])
+        // a pending page update: its chapter goes to the new source, the track id stays
+        let pageData = try #require(defaults.data(forKey: "Tracker.pageTrackingState"))
+        let pending = try #require((try JSONSerialization.jsonObject(with: pageData) as? [String: Any])?["pendingPageUpdates"] as? [[String: Any]])
+        #expect((pending.first?["chapterId"] as? [String: Any])?["sourceKey"] as? String == childB)
+        #expect(pending.first?["trackId"] as? String == "\(parent)|103")
         _ = before
     }
 
