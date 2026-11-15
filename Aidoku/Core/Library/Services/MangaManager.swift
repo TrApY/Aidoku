@@ -200,7 +200,8 @@ extension MangaManager {
 
     func removeFromLibrary(mangaId: MangaIdentifier) async {
         let sortInFlags = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let sortInFlags = false // pendiente[H6#10]
+            let sortInFlags = CoreDataManager.shared.getManga(mangaId: mangaId, context: context)
+                .map { ChapterSortMemory.chosen(inFlags: Int($0.chapterFlags)) != nil } ?? false
             CoreDataManager.shared.removeManga(mangaId: mangaId, context: context)
             CoreDataManager.shared.removeChapters(mangaId: mangaId, context: context)
             CoreDataManager.shared.removeTracks(mangaId: mangaId, context: context)
@@ -227,7 +228,10 @@ extension MangaManager {
             await UIApplication.shared.appDelegate?.showLoadingIndicator()
         }
         let sortInFlags = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let sortInFlags: [MangaIdentifier] = [] // pendiente[H6#11]
+            let sortInFlags = mangaIds.filter { mangaId in
+                CoreDataManager.shared.getManga(mangaId: mangaId, context: context)
+                    .map { ChapterSortMemory.chosen(inFlags: Int($0.chapterFlags)) != nil } ?? false
+            }
             CoreDataManager.shared.removeFromLibrary(ids: mangaIds, context: context)
             do {
                 try context.save()
@@ -908,7 +912,7 @@ extension MangaManager {
         defaults: UserDefaults = .standard
     ) {
         var prefixes = ["Reader.readingMode"]
-         // pendiente[H6#12]
+        prefixes.append("Manga.chapterSort") // the order chosen out of the library (SUWA-12 H6)
         for prefix in prefixes {
             guard let value = defaults.object(forKey: "\(prefix).\(oldId)") else { continue }
             defaults.set(value, forKey: "\(prefix).\(newId)")
