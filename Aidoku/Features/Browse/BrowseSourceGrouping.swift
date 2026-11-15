@@ -44,7 +44,7 @@ enum BrowseLanguages {
     /// SUWA-12 D M2: an installed source with library manga is always shown (Explorar) and searched (global
     /// search), whatever its language; the rest as `isVisible`.
     static func shows(languages: [String], sourceKey: String, active: Set<String>, inLibrary: Set<String>) -> Bool {
-        isVisible(languages, active: active) // pendiente[M2#10]
+        inLibrary.contains(sourceKey) || isVisible(languages, active: active)
     }
 
     /// The languages offered to choose from: those of the installed sources, of the external source
@@ -166,7 +166,14 @@ struct BrowseSourceGroups: Equatable {
 /// Source keys with manga in the library (SUWA-12 D M2).
 enum LibrarySourceKeys {
     static func load(container: NSPersistentContainer = CoreDataManager.shared.container) async -> Set<String> {
-        [] // pendiente[M2#11]
+        await container.performBackgroundTask { context in
+            let request = NSFetchRequest<NSDictionary>(entityName: "Manga")
+            request.predicate = NSPredicate(format: "libraryObject != nil")
+            request.resultType = .dictionaryResultType
+            request.propertiesToFetch = ["sourceId"]
+            request.returnsDistinctResults = true
+            return Set(((try? context.fetch(request)) ?? []).compactMap { $0["sourceId"] as? String })
+        }
     }
 }
 
@@ -180,6 +187,6 @@ enum BrowseEmptyState: Equatable {
 
     static func make(shown: Int, installed: Int, isSearching: Bool) -> BrowseEmptyState {
         if shown > 0 || isSearching { return .hidden }
-        return .noSources // pendiente[M2#12]
+        return installed > 0 ? .filteredOut : .noSources
     }
 }
