@@ -190,6 +190,19 @@ struct MangaDetailsHeaderView: View {
             .padding(.bottom, 14)
             .padding(.horizontal, 20)
 
+            // as Tachimanga: the same as pressing the title
+            if let onTitlePressed {
+                Button {
+                    onTitlePressed()
+                } label: {
+                    Label(NSLocalizedString("GLOBAL_SEARCH"), systemImage: "magnifyingglass")
+                        .font(.callout)
+                }
+                .buttonStyle(.borderless)
+                .padding(.bottom, 12)
+                .padding(.horizontal, 20)
+            }
+
             if let description = manga.description, !description.isEmpty {
                 ExpandableTextView(text: description, expanded: $descriptionExpanded)
                     .fixedSize(horizontal: false, vertical: true)

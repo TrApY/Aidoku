@@ -7,6 +7,7 @@
 
 import AidokuRunner
 import NukeUI
+import SafariServices
 import SwiftUI
 
 struct MangaView: View {
@@ -61,18 +62,12 @@ struct MangaView: View {
             List(selection: $selectedChapters) {
                 headerView
 
+                if viewModel.source == nil && viewModel.bookmarked {
+                    sourceMissingNotice
+                }
+
                 if let error = viewModel.error {
-                    ErrorView(
-                        error: error,
-                        restart: { try await viewModel.source?.restart() },
-                        retry: {
-                            viewModel.error = nil
-                            await viewModel.fetchData()
-                        }
-                    )
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                    errorNotice(error)
                 } else {
                     ForEach(viewModel.chapters.indices, id: \.self) { index in
                         let chapter = viewModel.chapters[index]
@@ -576,14 +571,7 @@ extension MangaView {
                     )
                 )
             },
-            migrate: {
-                let migrateView = MigrateSelectDestinationView(
-                    selectedSeries: [viewModel.manga],
-                    selectedSources: viewModel.source.flatMap { [$0.toInfo()] } ?? []
-                )
-                let viewController = SwiftUINavigationViewController(rootView: migrateView)
-                path.present(viewController)
-            },
+            migrate: showMigration,
             showShareSheet: showShareSheet(item:),
             removeDownloads: {
                 showRemoveAllConfirm = true
@@ -766,6 +754,55 @@ extension MangaView {
 }
 
 extension MangaView {
+    /// The «Migrar» flow for this manga (menu «…», and the error notice).
+    func showMigration() {
+        let migrateView = MigrateSelectDestinationView(
+            selectedSeries: [viewModel.manga],
+            selectedSources: viewModel.source.flatMap { [$0.toInfo()] } ?? []
+        )
+        let viewController = SwiftUINavigationViewController(rootView: migrateView)
+        path.present(viewController)
+    }
+
+    /// The source isn't installed: the stored chapters stay below, with a way out.
+    var sourceMissingNotice: some View {
+        ErrorView(
+            error: SourceError.message("MANGA_SOURCE_NOT_INSTALLED"),
+            migrate: { showMigration() },
+            openWeb: openWebAction,
+            footer: NSLocalizedString("MANGA_SOURCE_NOT_INSTALLED_HINT")
+        )
+        .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    /// The source failed: retry, and also open the web page or migrate (library manga).
+    func errorNotice(_ error: Error) -> some View {
+        let migrate: (() -> Void)? = viewModel.bookmarked ? { showMigration() } : nil
+        return ErrorView(
+            error: error,
+            restart: { try await viewModel.source?.restart() },
+            retry: {
+                viewModel.error = nil
+                await viewModel.fetchData()
+            },
+            migrate: migrate,
+            openWeb: openWebAction,
+            footer: NSLocalizedString("MANGA_SOURCE_ERROR_HINT")
+        )
+        .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    /// Opens the manga's web page in the web view (nil if it has none it can open).
+    var openWebAction: (() -> Void)? {
+        guard let url = viewModel.manga.url, url.scheme == "http" || url.scheme == "https" else { return nil }
+        let path = path
+        return { path.present(SFSafariViewController(url: url)) }
+    }
+
     func showShareSheet(chapter: AidokuRunner.Chapter) {
         if viewModel.downloadStatus[chapter.key] == .finished {
             Task {

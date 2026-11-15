@@ -14,6 +14,12 @@ struct ErrorView: View {
     let error: Error
     var restart: (() async throws -> Void)?
     var retry: (() async -> Void)?
+    /// Manga page: migrate the manga to another source.
+    var migrate: (() -> Void)?
+    /// Manga page: open the manga's web page.
+    var openWeb: (() -> Void)?
+    /// Text under the buttons.
+    var footer: String?
 
     @State private var loading = false
 
@@ -52,6 +58,33 @@ struct ErrorView: View {
                             EmptyView()
                     }
                 }
+            }
+
+            if migrate != nil || openWeb != nil {
+                HStack(spacing: 20) {
+                    if let openWeb {
+                        Button(action: openWeb) {
+                            Label(NSLocalizedString("WEBVIEW"), systemImage: "safari")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    if let migrate {
+                        Button(action: migrate) {
+                            Label(NSLocalizedString("MIGRATE"), systemImage: "arrow.left.arrow.right")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                .padding(.top, 4)
+            }
+
+            if let footer {
+                Text(footer)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+                    .padding(.horizontal)
             }
         }
     }
