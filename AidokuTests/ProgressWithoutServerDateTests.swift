@@ -60,9 +60,9 @@ private final class DatelessTracker: PageTracker, @unchecked Sendable {
         ])
         await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.setProgress(12, chapterId: c1, totalPages: 38, dateRead: Date(), completed: false, context: context)
-            _ = CoreDataManager.shared.createTrack(id: "sinfecha-m1", trackerId: tracker.id, mangaId: manga.identifier, title: nil, context: context)
             try? context.save()
         }
+        await DataRepositories.shared.tracks.add(TrackItem(id: "sinfecha-m1", trackerId: tracker.id, mangaId: manga.identifier, title: nil, chapterOffset: 0))
         await TrackerManager.shared.syncPageTrackerHistory(
             manga: manga,
             chapters: chapters,
@@ -73,10 +73,10 @@ private final class DatelessTracker: PageTracker, @unchecked Sendable {
             let first = CoreDataManager.shared.getProgress(chapterId: c1, context: context)
             let second = CoreDataManager.shared.getProgress(chapterId: c2, context: context)
             CoreDataManager.shared.removeHistory(mangaId: manga.identifier, context: context)
-            CoreDataManager.shared.removeTrack(trackerId: tracker.id, mangaId: manga.identifier, context: context)
             try? context.save()
             return (first, second)
         }
+        await DataRepositories.shared.tracks.remove(trackerId: tracker.id, manga: manga.identifier)
         #expect(first.0 == false) // still half read
         #expect(first.1 == 12)
         #expect(second.0 == true) // no history here: created from the server

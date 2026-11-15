@@ -199,9 +199,9 @@ final class DeletedDownloads: @unchecked Sendable {
             CoreDataManager.shared.setProgress(4, chapterId: .init(sourceKey: oldId.sourceKey, mangaKey: oldId.mangaKey, chapterKey: "o2"), totalPages: 20, context: context)
             _ = CoreDataManager.shared.createCategory(title: category, context: context)
             CoreDataManager.shared.addCategoriesToManga(mangaId: oldId, categories: [category], context: context)
-            CoreDataManager.shared.createTrack(id: "track-1", trackerId: trackerId, mangaId: oldId, title: "Viejo", context: context)
             try? context.save()
         }
+        await DataRepositories.shared.tracks.add(TrackItem(id: "track-1", trackerId: trackerId, mangaId: oldId, title: "Viejo", chapterOffset: 0))
     }
 
     private func cleanUp() async {
@@ -228,12 +228,13 @@ final class DeletedDownloads: @unchecked Sendable {
 
     private func state(_ id: MangaIdentifier) async -> State {
         let history = await CoreDataManager.shared.getReadingHistory(mangaId: id).mapValues(\.page)
+        let tracks = await DataRepositories.shared.tracks.items(of: id).map(\.id)
         return await CoreDataManager.shared.container.performBackgroundTask { context in
             State(
                 inLibrary: CoreDataManager.shared.hasLibraryManga(mangaId: id, context: context),
                 history: history,
                 categories: CoreDataManager.shared.getCategories(mangaId: id, context: context).compactMap(\.title),
-                tracks: CoreDataManager.shared.getTracks(mangaId: id, context: context).compactMap(\.id)
+                tracks: tracks
             )
         }
     }
@@ -346,9 +347,9 @@ extension SuwayomiTrackerLibraryTests {
         await MangaManager.shared.addToLibrary(manga: old, chapters: migrationChapters, bindTrackers: false)
         await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.setCompleted(chapterIds: [.init(sourceKey: old.sourceKey, mangaKey: old.key, chapterKey: "c1")], context: context)
-            CoreDataManager.shared.createTrack(id: "\(old.sourceKey)|753", trackerId: "suwayomi", mangaId: migrationOld.identifier, title: nil, context: context)
             try? context.save()
         }
+        await DataRepositories.shared.tracks.add(TrackItem(id: "\(old.sourceKey)|753", trackerId: "suwayomi", mangaId: migrationOld.identifier, title: nil, chapterOffset: 0))
         let tasks = MigrationServerTasks()
         let environment = MigrationEnvironment(
             trackerLookup: { _ in nil },
@@ -390,9 +391,7 @@ extension SuwayomiTrackerLibraryTests {
         await runMigration(MigrationOptions(tracking: false))
         #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
         #expect(server.count("MarkChaptersRead") == 1)
-        let tracks = await CoreDataManager.shared.container.performBackgroundTask { [migrationNew] context in
-            CoreDataManager.shared.getTracks(mangaId: migrationNew.identifier, context: context).compactMap(\.id)
-        }
+        let tracks = await DataRepositories.shared.tracks.items(of: migrationNew.identifier).map(\.id)
         #expect(tracks == ["\(key)|897"])
         await cleanUpMigration()
     }

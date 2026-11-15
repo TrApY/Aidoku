@@ -124,10 +124,7 @@ private final class SavedConfigs: @unchecked Sendable {
             #expect(await SourceManager.shared.addOrUpdateCustomSource(config: .suwayomiServerSource(config)))
         }
         UserDefaults.standard.set(Data([1]), forKey: "\(emperorKey).filters")
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            _ = CoreDataManager.shared.createTrack(id: "\(emperorKey)|897", trackerId: "suwayomi", mangaId: mangaId, title: nil, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.tracks.add(TrackItem(id: "\(emperorKey)|897", trackerId: "suwayomi", mangaId: mangaId, title: nil, chapterOffset: 0))
         let result = await SuwayomiServerSourceSync.sync(
             parentKey: parent,
             existing: configs,
@@ -136,12 +133,8 @@ private final class SavedConfigs: @unchecked Sendable {
         )
         #expect(result.unavailable == 1)
         #expect(UserDefaults.standard.data(forKey: "\(emperorKey).filters") == Data([1]))
-        let tracked = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let has = CoreDataManager.shared.hasTrack(trackerId: "suwayomi", mangaId: mangaId, context: context)
-            CoreDataManager.shared.removeTrack(trackerId: "suwayomi", mangaId: mangaId, context: context)
-            try? context.save()
-            return has
-        }
+        let tracked = await DataRepositories.shared.tracks.contains(trackerId: "suwayomi", manga: mangaId)
+        await DataRepositories.shared.tracks.remove(trackerId: "suwayomi", manga: mangaId)
         #expect(tracked)
         // still a source (its manga open) but not offered
         #expect(await SourceManager.shared.source(for: emperorKey) != nil)

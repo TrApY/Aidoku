@@ -52,20 +52,20 @@ private final class NoDateTracker: PageTracker, @unchecked Sendable {
         await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.addToLibrary(manga: manga, chapters: chapters, context: context)
             CoreDataManager.shared.setRead(mangaId: manga.identifier, date: lastWeek, context: context)
-            _ = CoreDataManager.shared.createTrack(id: "sinfechah-\(mangaKey)", trackerId: tracker.id, mangaId: manga.identifier, title: nil, context: context)
             try? context.save()
         }
+        await DataRepositories.shared.tracks.add(TrackItem(id: "sinfechah-\(mangaKey)", trackerId: tracker.id, mangaId: manga.identifier, title: nil, chapterOffset: 0))
         await TrackerManager.shared.syncPageTrackerHistory(
             manga: manga,
             chapters: chapters,
             trackerLookup: { $0 == tracker.id ? tracker : nil },
             downloadAhead: { _ in }
         )
+        await DataRepositories.shared.tracks.remove(trackerId: tracker.id, manga: manga.identifier)
         return await CoreDataManager.shared.container.performBackgroundTask { context in
             let lastRead = CoreDataManager.shared.getLibraryManga(mangaId: manga.identifier, context: context)?.lastRead
             let completed = CoreDataManager.shared.getProgress(chapterId: c1, context: context).0
             CoreDataManager.shared.removeHistory(mangaId: manga.identifier, context: context)
-            CoreDataManager.shared.removeTrack(trackerId: tracker.id, mangaId: manga.identifier, context: context)
             CoreDataManager.shared.removeManga(mangaId: manga.identifier, context: context)
             try? context.save()
             return (lastRead, completed)

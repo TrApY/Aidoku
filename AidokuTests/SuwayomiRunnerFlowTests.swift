@@ -613,14 +613,9 @@ private let nexus = "4086183896761281232" // flagged NSFW
         defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
         let tracker = makeTracker()
         let mangaId = MangaIdentifier(sourceKey: key, mangaKey: "77")
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            _ = CoreDataManager.shared.createTrack(id: "\(self.key)|77", trackerId: tracker.id, mangaId: mangaId, title: nil, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.tracks.add(TrackItem(id: "\(key)|77", trackerId: tracker.id, mangaId: mangaId, title: nil, chapterOffset: 0))
         await tracker.logout()
-        let left = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.hasTrack(trackerId: tracker.id, mangaId: mangaId, context: context)
-        }
+        let left = await DataRepositories.shared.tracks.contains(trackerId: tracker.id, manga: mangaId)
         #expect(!left)
     }
 

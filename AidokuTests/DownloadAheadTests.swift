@@ -355,17 +355,11 @@ import Testing
     }
 
     private func addFakeTrack(_ tracker: FakePageTracker, id: String, manga: AidokuRunner.Manga) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            _ = CoreDataManager.shared.createTrack(id: id, trackerId: tracker.id, mangaId: manga.identifier, title: nil, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.tracks.add(TrackItem(id: id, trackerId: tracker.id, mangaId: manga.identifier, title: nil, chapterOffset: 0))
     }
 
     private func removeFakeTrack(_ tracker: FakePageTracker, manga: AidokuRunner.Manga) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.removeTrack(trackerId: tracker.id, mangaId: manga.identifier, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.tracks.remove(trackerId: tracker.id, manga: manga.identifier)
     }
 
     @Test func chaptersReadOnAnotherDeviceMoveTheWindow() async throws {
