@@ -216,6 +216,7 @@ extension SuwayomiApi {
     /// When the chapter was read on the server; nil when it has no date (a chapter marked read with
     /// `updateChapters(isRead:)` keeps `lastReadAt` 0). SUWA-12 F.
     static func readDate(lastReadAt: String) -> Date? {
-        Date(suwayomiTimestamp: lastReadAt) // pendiente[A#1]
+        guard let date = Date(suwayomiTimestamp: lastReadAt), date.timeIntervalSince1970 > 0 else { return nil }
+        return date
     }
 }

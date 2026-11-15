@@ -453,7 +453,11 @@ actor TrackerManager {
                     chapterId: chapterId,
                     context: context
                 )
-                 // pendiente[A#2]
+                // without a date from the tracker the local history can't be compared: it stays (SUWA-12 F);
+                // a chapter with no local history still gets the tracker's
+                if existingHistory != nil && progress.date == nil {
+                    continue
+                }
                 if let existingDate = existingHistory?.dateRead, let newDate = progress.date, newDate <= existingDate {
                     // don't update if the existing history is newer than the tracker history
                     continue
