@@ -23,7 +23,13 @@ actor SuwayomiStartup {
 
     /// Runs `operation` after what was queued before it (start, Reintentar, Guardar, Extensiones).
     func serially<T: Sendable>(_ operation: @escaping @Sendable () async -> T) async -> T {
-        await operation() // pendiente[B4#7]
+        let previous = tail
+        let task = Task<T, Never> {
+            await previous?.value
+            return await operation()
+        }
+        tail = Task { _ = await task.value }
+        return await task.value
     }
 
     /// The server sources again (an extension installed, updated or removed in Explorar › Extensiones).
