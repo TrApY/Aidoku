@@ -8,6 +8,9 @@
 //  with a repeated key are all kept (sorted by content) and counted. Plus (T-M) the count and hash of the sqlite
 //  metadata tables (CloudKit mirroring, persistent history, Core Data's own).
 //
+//  Transformables are the bytes in their sqlite column (never re-archived) and Floats carry the REAL in their column
+//  too, both read with sqlite (read-only) from a copy of the store files.
+//
 //  Nothing readable leaves the test: the hashes are of the raw values, and the CSVs (only if SUWA13_OUT is set,
 //  a folder outside the repo) carry titles, names, URLs and paths as hashes.
 //
@@ -55,18 +58,21 @@ struct StoreDump: Equatable {
 
     /// Dump of every entity of the model, read through `context` (one fetch per entity, nothing is changed).
     static func make(context: NSManagedObjectContext) throws -> StoreDump {
-        try context.performAndWait {
+        guard let coordinator = context.persistentStoreCoordinator else { return StoreDump() }
+        let model = coordinator.managedObjectModel
+        // the columns dumped as they are in sqlite (transformables, floats), from a copy of the store files
+        let raw = try rawColumns(stores: coordinator.persistentStores.compactMap(\.url), model: model)
+        return try context.performAndWait {
             var dump = StoreDump()
-            guard let model = context.persistentStoreCoordinator?.managedObjectModel else { return dump }
             for entity in model.entities.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
                 guard let name = entity.name else { continue }
-                dump.entities[name] = try entityDump(entity, context: context)
+                dump.entities[name] = try entityDump(entity, context: context, raw: raw)
             }
             return dump
         }
     }
 
-    private static func entityDump(_ entity: NSEntityDescription, context: NSManagedObjectContext) throws -> Entity {
+    private static func entityDump(_ entity: NSEntityDescription, context: NSManagedObjectContext, raw: RawColumns) throws -> Entity {
         let request = NSFetchRequest<NSManagedObject>(entityName: entity.name!)
         request.includesSubentities = false
         request.returnsObjectsAsFaults = false
@@ -83,8 +89,21 @@ struct StoreDump: Equatable {
             var csv = [csvKey(entity: entity.name!, key)]
             for attribute in attributes {
                 let value = object.value(forKey: attribute.name)
-                fields.append(canonical(value, attribute))
-                csv.append(csvValue(value, attribute))
+                if readsRaw(attribute) {
+                    let stored = try rawValue(object, attribute, raw)
+                    if attribute.attributeType == .transformableAttributeType {
+                        // the bytes in the column, as they are (no re-archiving)
+                        fields.append(stored)
+                        csv.append(stored == "∅" ? stored : "h:" + hash(stored))
+                    } else {
+                        // the Float Core Data gives and the REAL in the column
+                        fields.append(canonical(value, attribute) + "/" + stored)
+                        csv.append(canonical(value, attribute) + "/" + stored)
+                    }
+                } else {
+                    fields.append(canonical(value, attribute))
+                    csv.append(csvValue(value, attribute))
+                }
             }
             for relationship in relationships {
                 let destination = relationship.destinationEntity?.name ?? ""
@@ -163,8 +182,6 @@ struct StoreDump: Equatable {
                 return "s" + ((value as? String) ?? "")
             case .binaryDataAttributeType:
                 return "x" + hex((value as? Data) ?? Data())
-            case .transformableAttributeType:
-                return "x" + hex(transformableBytes(value, attribute))
             default:
                 return "\(value)"
         }
@@ -175,12 +192,62 @@ struct StoreDump: Equatable {
         "t\(date.timeIntervalSinceReferenceDate)"
     }
 
-    /// The bytes the transformer stores for this value (archiving is deterministic for the same value).
-    private static func transformableBytes(_ value: Any, _ attribute: NSAttributeDescription) -> Data {
-        if let data = value as? Data, attribute.valueTransformerName == nil { return data }
-        let name = attribute.valueTransformerName ?? NSValueTransformerName.secureUnarchiveFromDataTransformerName.rawValue
-        let transformer = ValueTransformer(forName: NSValueTransformerName(name)) ?? NSSecureUnarchiveFromDataTransformer()
-        return (transformer.reverseTransformedValue(value) as? Data) ?? Data("\(value)".utf8)
+    // MARK: - Columns read from sqlite
+
+    /// "file/table" → Z_PK → column → typed value (∅, i…, d…, s…, x…), for the attributes in `readsRaw`.
+    typealias RawColumns = [String: [Int64: [String: String]]]
+
+    /// Transformables are dumped as the bytes in their column (two archives that decode the same are told apart),
+    /// and Floats also with the REAL in their column (a REAL written with another precision shows).
+    static func readsRaw(_ attribute: NSAttributeDescription) -> Bool {
+        attribute.attributeType == .transformableAttributeType || attribute.attributeType == .floatAttributeType
+    }
+
+    static func tableName(_ entity: NSEntityDescription) -> String { "Z" + (entity.name ?? "").uppercased() }
+    static func columnName(_ attribute: NSAttributeDescription) -> String { "Z" + attribute.name.uppercased() }
+
+    /// The `readsRaw` columns of every entity, read-only with sqlite from a temporary copy of the store files.
+    private static func rawColumns(stores: [URL], model: NSManagedObjectModel) throws -> RawColumns {
+        var raw: RawColumns = [:]
+        for directory in Set(stores.map { $0.deletingLastPathComponent() }) {
+            let copy = try copyStores(from: directory)
+            defer { try? FileManager.default.removeItem(at: copy) }
+            for store in stores where store.deletingLastPathComponent() == directory {
+                let file = store.lastPathComponent
+                var db: OpaquePointer?
+                guard sqlite3_open_v2(copy.appendingPathComponent(file).path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
+                    throw DumpError.sqlite("open \(file)")
+                }
+                defer { sqlite3_close(db) }
+                let tables = Set(try query(db, "SELECT name FROM sqlite_master WHERE type = 'table'").map { String($0[0].dropFirst()) })
+                for entity in model.entities {
+                    let columns = entity.attributesByName.values.filter(readsRaw).map(columnName).sorted()
+                    let table = tableName(entity)
+                    guard !columns.isEmpty, tables.contains(table) else { continue }
+                    var rows: [Int64: [String: String]] = [:]
+                    for row in try query(db, "SELECT Z_PK, \(columns.joined(separator: ", ")) FROM \(table)") {
+                        guard let pk = Int64(row[0].dropFirst()) else { throw DumpError.raw("\(file)/\(table) Z_PK") }
+                        rows[pk] = Dictionary(uniqueKeysWithValues: zip(columns, row.dropFirst()))
+                    }
+                    raw["\(file)/\(table)"] = rows
+                }
+            }
+        }
+        return raw
+    }
+
+    /// The column of this object's row (found by its Z_PK, from the objectID). Not found: the dump fails.
+    private static func rawValue(_ object: NSManagedObject, _ attribute: NSAttributeDescription, _ raw: RawColumns) throws -> String {
+        let file = object.objectID.persistentStore?.url?.lastPathComponent ?? "?"
+        let table = "\(file)/\(tableName(object.entity))"
+        guard
+            !object.objectID.isTemporaryID,
+            let pk = Int64(object.objectID.uriRepresentation().lastPathComponent.dropFirst()),
+            let value = raw[table]?[pk]?[columnName(attribute)]
+        else {
+            throw DumpError.raw("\(table).\(columnName(attribute))")
+        }
+        return value
     }
 
     // MARK: - CSV (no readable text)
@@ -191,7 +258,7 @@ struct StoreDump: Equatable {
         switch attribute.attributeType {
             case .stringAttributeType:
                 return plainStrings.contains(attribute.name) ? exact : "h:" + hash(exact)
-            case .binaryDataAttributeType, .transformableAttributeType:
+            case .binaryDataAttributeType:
                 return "h:" + hash(exact)
             default:
                 return exact
@@ -278,6 +345,8 @@ struct StoreDump: Equatable {
 
     enum DumpError: Error {
         case sqlite(String)
+        /// a column the dump reads from sqlite was not found for a row
+        case raw(String)
     }
 
     /// Rows of a query, each value typed (∅, i…, d…, s…, x…).
