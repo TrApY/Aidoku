@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct FilterGroupsView: View {
-    @State private var groups: [FilterGroup]
+    @State private var groups: [FilterGroup] = []
 
     @State private var editingGroupTitle: EditingGroupTitle?
     @State private var showCreateSheet = false
@@ -24,11 +24,6 @@ struct FilterGroupsView: View {
     }
 
     @Namespace private var transitionNamespace
-
-    init() {
-        let groups = CoreDataManager.shared.getFilterGroups(context: CoreDataManager.shared.context)
-        self._groups = State(initialValue: groups)
-    }
 
     var body: some View {
         List {
@@ -87,8 +82,19 @@ struct FilterGroupsView: View {
         } message: {
             Text(NSLocalizedString("RENAME_CATEGORY_FAIL_INFO"))
         }
+        .task {
+            let loaded = await DataRepositories.shared.categories.filterGroups()
+            // the first load is not animated (it used to be there from the start)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                groups = loaded
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .updateCategories)) { _ in
-            groups = CoreDataManager.shared.getFilterGroups(context: CoreDataManager.shared.context)
+            Task {
+                groups = await DataRepositories.shared.categories.filterGroups()
+            }
         }
     }
 
@@ -118,33 +124,22 @@ struct FilterGroupsView: View {
             adjustedDestination -= sourceIndices.count
         }
 
-        let context = CoreDataManager.shared.context
+        let titles = sourceIndices.reversed().map { groups[$0].title }
 
-        for offset in sourceIndices.reversed() {
-            let group = groups[offset]
-            CoreDataManager.shared.moveCategory(title: group.title, toPosition: adjustedDestination, context: context)
+        // the list moves first (no flicker); the stored order follows, and the reload after the notification
+        // shows what was stored
+        groups.move(fromOffsets: source, toOffset: destination)
+
+        Task {
+            await DataRepositories.shared.categories.move(titles, to: adjustedDestination)
+            NotificationCenter.default.post(name: .updateCategories, object: nil)
         }
-
-        groups = CoreDataManager.shared.getFilterGroups(context: context)
-
-        CoreDataManager.shared.save()
-
-        NotificationCenter.default.post(name: .updateCategories, object: nil)
     }
 }
 
 extension FilterGroupsView {
     func removeGroup(title: String) async -> Bool {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.removeCategory(title: title, context: context)
-            do {
-                try context.save()
-                return true
-            } catch {
-                LogManager.logger.error("FilterGroupsView.removeGroup(title: \(title)): \(error)")
-                return false
-            }
-        }
+        await DataRepositories.shared.categories.remove(title: title)
     }
 
     func renameGroup(title: String, newTitle: String) {
@@ -152,19 +147,8 @@ extension FilterGroupsView {
             showRenameFailedAlert = true
         } else {
             Task {
-                let newGroups: [FilterGroup]? = await CoreDataManager.shared.container.performBackgroundTask { context in
-                    let success = CoreDataManager.shared.renameCategory(title: title, newTitle: newTitle, context: context)
-                    guard success else { return nil }
-                    do {
-                        try context.save()
-                        return CoreDataManager.shared.getFilterGroups(context: context)
-                    } catch {
-                        LogManager.logger.error("FilterGroupsView.renameGroup(title: \(title), newTitle: \(newTitle)): \(error)")
-                        return nil
-                    }
-                }
-                if let newGroups {
-                    groups = newGroups
+                if await DataRepositories.shared.categories.rename(title, to: newTitle) != nil {
+                    groups = await DataRepositories.shared.categories.filterGroups()
                     NotificationCenter.default.post(name: .updateCategories, object: nil)
                 } else {
                     showRenameFailedAlert = true

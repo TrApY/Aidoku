@@ -52,9 +52,7 @@ class AddToCategoryViewController: BaseTableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "UITableViewCell")
 
         Task {
-            categories = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getCategoryTitles(context: context)
-            }
+            categories = await DataRepositories.shared.categories.titles(includeFilterGroups: false)
             updateDataSource()
         }
     }
@@ -65,17 +63,9 @@ class AddToCategoryViewController: BaseTableViewController {
 
     @objc func done() {
         close()
-        Task {
-            await CoreDataManager.shared.container.performBackgroundTask { [selectedCategories] context in
-                for info in self.manga {
-                    CoreDataManager.shared.addCategoriesToManga(
-                        mangaId: info.id,
-                        categories: selectedCategories,
-                        context: context
-                    )
-                    try? context.save()
-                }
-            }
+        Task { [selectedCategories] in
+            // one save per manga, as before
+            await DataRepositories.shared.categories.assign(manga.map(\.id), add: selectedCategories)
             NotificationCenter.default.post(name: .updateMangaCategories, object: manga)
         }
     }

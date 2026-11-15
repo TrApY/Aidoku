@@ -34,23 +34,11 @@ class CategorySelectViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "UITableViewCell")
 
         Task {
-            (categories, selectedCategories) = await CoreDataManager.shared.container.performBackgroundTask { context in
-                let categories = CoreDataManager.shared.getCategoryTitles(context: context)
-                let inLibrary = CoreDataManager.shared.hasLibraryManga(
-                    mangaId: self.manga.identifier,
-                    context: context
-                )
-                let selectedCategories: [String] = if inLibrary {
-                    CoreDataManager.shared.getCategories(
-                        mangaId: self.manga.identifier,
-                        context: context
-                    )
-                    .compactMap { $0.title }
-                } else {
-                    []
-                }
-                return (categories, selectedCategories)
-            }
+            let repo = DataRepositories.shared.categories
+            let loadedCategories = await repo.titles(includeFilterGroups: false)
+            // [] if the manga is not in the library
+            let loadedSelected = await repo.categories(of: manga.identifier)
+            (categories, selectedCategories) = (loadedCategories, loadedSelected)
             tableView.reloadData()
         }
     }

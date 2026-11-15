@@ -136,12 +136,8 @@ extension SettingsView {
 
 extension SettingsView {
     func updateCategories() async {
-        let (categoriesOnly, categoriesAndGroups) = await CoreDataManager.shared.container.performBackgroundTask { context in
-            (
-                CoreDataManager.shared.getCategoryTitles(context: context),
-                CoreDataManager.shared.getCategoryTitles(excludeFilterGroups: false, context: context)
-            )
-        }
+        let categoriesOnly = await DataRepositories.shared.categories.titles(includeFilterGroups: false)
+        let categoriesAndGroups = await DataRepositories.shared.categories.titles(includeFilterGroups: true)
 
         self.categoriesOnly = categoriesOnly
         self.categoriesAndGroups = categoriesAndGroups

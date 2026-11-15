@@ -334,9 +334,7 @@ extension MangaManager {
     }
 
     static func shouldAskForCategories() async -> Bool {
-        let categories = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getCategoryTitles(sorted: false, context: context)
-        }
+        let categories = await DataRepositories.shared.categories.titles(includeFilterGroups: false)
         guard !categories.isEmpty else { return false }
         if
             let defaultCategory = AppSettings.library.defaultCategory.get(),
@@ -351,10 +349,7 @@ extension MangaManager {
 // MARK: - Category Managing
 extension MangaManager {
     func setCategories(mangaId: MangaIdentifier, categories: [String]) async {
-        await CoreDataManager.shared.setMangaCategories(
-            mangaId: mangaId,
-            categories: categories
-        )
+        await DataRepositories.shared.categories.set(categories, for: mangaId)
         NotificationCenter.default.post(name: .updateMangaCategories, object: MangaInfo(id: mangaId))
     }
 }

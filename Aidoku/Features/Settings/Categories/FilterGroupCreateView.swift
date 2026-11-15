@@ -190,41 +190,21 @@ struct FilterGroupCreateView: View {
 
 extension FilterGroupCreateView {
     func loadData() async {
+        let repo = DataRepositories.shared.categories
+        let loadedCategories = await repo.titles(includeFilterGroups: false)
+        let loadedTitles = await repo.titles(includeFilterGroups: true)
+        // the sources of the manga in the library
+        let loadedSourceKeys = await LibrarySourceKeys.load().sorted()
+        var loadedFilters: [LibraryFilter] = []
+        if let editingGroupTitle, let group = await repo.filterGroup(title: editingGroupTitle) {
+            loadedFilters = group.filters
+        }
         (
             categories,
             allCategoryAndGroupTitles,
             sourceKeys,
             filters
-        ) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            let categories = CoreDataManager.shared.getCategoryTitles(context: context)
-            let allCategoryAndGroupTitles = CoreDataManager.shared.getCategoryTitles(excludeFilterGroups: false, context: context)
-
-            let request = LibraryMangaObject.fetchRequest()
-            request.predicate = NSPredicate(format: "manga != nil")
-            let libraryObjects = (try? context.fetch(request)) ?? []
-
-            var sourceKeys: Set<String> = []
-            for object in libraryObjects {
-                guard let manga = object.manga else { continue }
-                sourceKeys.insert(manga.sourceId)
-            }
-
-            var filters: [LibraryFilter] = []
-            if let editingGroupTitle {
-                let request = CategoryObject.fetchRequest()
-                request.predicate = NSPredicate(format: "title == %@", editingGroupTitle)
-                request.fetchLimit = 1
-                if
-                    let category = (try? context.fetch(request))?.first,
-                    let data = category.data as? Data,
-                    let filterData = try? JSONDecoder().decode([LibraryFilter].self, from: data)
-                {
-                    filters = filterData
-                }
-            }
-
-            return (categories, allCategoryAndGroupTitles, sourceKeys.sorted(), filters)
-        }
+        ) = (loadedCategories, loadedTitles, loadedSourceKeys, loadedFilters)
 
         // if we're editing a group, it's okay if it has the same title when checking validity
         if let editingGroupTitle, let index = allCategoryAndGroupTitles.firstIndex(of: editingGroupTitle) {
@@ -269,41 +249,20 @@ extension FilterGroupCreateView {
 extension FilterGroupCreateView {
     func commit() async {
         guard isValid else { return }
-        guard let data = try? JSONEncoder().encode(filters) else {
-            LogManager.logger.error("Failed to encode filters data")
-            return
-        }
         let title = title.trim()
+        let repo = DataRepositories.shared.categories
         if let editingGroupTitle {
-            do {
-                try await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-                    let request = CategoryObject.fetchRequest()
-                    request.predicate = NSPredicate(format: "title == %@", editingGroupTitle)
-                    request.fetchLimit = 1
-                    let result = try context.fetch(request)
-                    guard let category = result.first else {
-                        return
-                    }
-                    category.title = title.isEmpty ? editingGroupTitle : title
-                    category.data = data as NSObject
-                    try context.save()
-                }
-            } catch {
-                LogManager.logger.error("Failed to edit filter group: \(error)")
+            let newTitle = title.isEmpty ? editingGroupTitle : title
+            guard await repo.updateFilterGroup(title: editingGroupTitle, newTitle: newTitle, filters: filters) else {
+                LogManager.logger.error("Failed to edit filter group")
                 return
             }
         } else {
-            do {
-                try await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-                    let category = CoreDataManager.shared.createCategory(title: title, group: true, context: context)
-                    category.data = data as NSObject
-                    try context.save()
-                }
-                NotificationCenter.default.post(name: .updateCategories, object: nil)
-            } catch {
-                LogManager.logger.error("Failed to create filter group: \(error)")
+            guard await repo.createFilterGroup(title: title, filters: filters) else {
+                LogManager.logger.error("Failed to create filter group")
                 return
             }
+            NotificationCenter.default.post(name: .updateCategories, object: nil)
         }
         NotificationCenter.default.post(name: .updateCategories, object: nil)
     }

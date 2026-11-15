@@ -196,12 +196,9 @@ extension LibraryViewModel {
     }
 
     func refreshCategories(skipDataLoad: Bool = false) async {
-        (categories, filterGroups) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            (
-                CoreDataManager.shared.getCategoryTitles(context: context),
-                CoreDataManager.shared.getFilterGroups(context: context)
-            )
-        }
+        let loadedCategories = await DataRepositories.shared.categories.titles(includeFilterGroups: false)
+        let loadedGroups = await DataRepositories.shared.categories.filterGroups()
+        (categories, filterGroups) = (loadedCategories, loadedGroups)
         if !skipDataLoad {
             let isInFilterGroup = filterGroups.contains(where: { $0.title == currentCategory })
             let showUncategorized = AppSettings.library.showUncategorizedCategory.get()
@@ -778,19 +775,13 @@ extension LibraryViewModel {
 
     func addToCurrentCategory(manga: MangaInfo) async {
         guard let currentCategory, isInRealCategory else { return }
-        await CoreDataManager.shared.addCategoriesToManga(
-            mangaId: manga.id,
-            categories: [currentCategory]
-        )
+        await DataRepositories.shared.categories.assign([manga.id], add: [currentCategory])
     }
 
     func removeFromCurrentCategory(manga: MangaInfo) async {
         guard let currentCategory, isInRealCategory else { return }
         pinnedManga.removeAll { $0.id == manga.id }
         self.manga.removeAll { $0.id == manga.id }
-        await CoreDataManager.shared.removeCategoriesFromManga(
-            mangaId: manga.id,
-            categories: [currentCategory]
-        )
+        await DataRepositories.shared.categories.remove([currentCategory], from: manga.id)
     }
 }

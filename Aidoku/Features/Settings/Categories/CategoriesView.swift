@@ -67,9 +67,7 @@ struct CategoriesView: View {
         }
         .task {
             guard !loadedGroupTitles else { return }
-            groupTitles = await CoreDataManager.shared.container.performBackgroundTask { context in
-                Set(CoreDataManager.shared.getCategories(groupsOnly: true, context: context).compactMap { $0.title })
-            }
+            groupTitles = Set(await DataRepositories.shared.categories.filterGroupTitles())
             loadedGroupTitles = true
         }
     }
@@ -100,18 +98,16 @@ struct CategoriesView: View {
             adjustedDestination -= sourceIndices.count
         }
 
-        let context = CoreDataManager.shared.context
+        let titles = sourceIndices.reversed().map { categories[$0] }
 
-        for offset in sourceIndices.reversed() {
-            let category = categories[offset]
-            CoreDataManager.shared.moveCategory(title: category, toPosition: adjustedDestination, context: context)
+        // the list moves first (no flicker); the stored order follows, and the reload after the notification
+        // shows what was stored
+        categories.move(fromOffsets: source, toOffset: destination)
+
+        Task {
+            await DataRepositories.shared.categories.move(titles, to: adjustedDestination)
+            NotificationCenter.default.post(name: .updateCategories, object: nil)
         }
-
-        categories = CoreDataManager.shared.getCategoryTitles(context: context)
-
-        CoreDataManager.shared.save()
-
-        NotificationCenter.default.post(name: .updateCategories, object: nil)
     }
 
     func showAddPrompt() {
@@ -167,14 +163,7 @@ extension CategoriesView {
     func addCategory(title: String) {
         if !title.isEmpty, title.lowercased() != "none", !categories.contains(title), !groupTitles.contains(title) {
             Task {
-                await CoreDataManager.shared.container.performBackgroundTask { context in
-                    CoreDataManager.shared.createCategory(title: title, context: context)
-                    do {
-                        try context.save()
-                    } catch {
-                        LogManager.logger.error("Failed to save data when adding category: \(error)")
-                    }
-                }
+                await DataRepositories.shared.categories.create(title: title)
                 categories.append(title)
                 NotificationCenter.default.post(name: .updateCategories, object: nil)
             }
@@ -182,21 +171,15 @@ extension CategoriesView {
     }
 
     func removeCategory(title: String) async -> Bool {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.removeCategory(title: title, context: context)
-            do {
-                try context.save()
-                var locked = AppSettings.library.lockedCategories.get()
-                if let oldIndex = locked.firstIndex(of: title) {
-                    locked.remove(at: oldIndex)
-                    AppSettings.library.lockedCategories.set(locked)
-                }
-                return true
-            } catch {
-                LogManager.logger.error("CategoriesView.removeCategory(title: \(title)): \(error)")
-                return false
-            }
+        guard await DataRepositories.shared.categories.remove(title: title) else {
+            return false
         }
+        var locked = AppSettings.library.lockedCategories.get()
+        if let oldIndex = locked.firstIndex(of: title) {
+            locked.remove(at: oldIndex)
+            AppSettings.library.lockedCategories.set(locked)
+        }
+        return true
     }
 
     func renameCategory(title: String, newTitle: String) {
@@ -204,23 +187,13 @@ extension CategoriesView {
             showRenameFailedAlert = true
         } else {
             Task {
-                let newCategories: [String]? = await CoreDataManager.shared.container.performBackgroundTask { context in
-                    let success = CoreDataManager.shared.renameCategory(title: title, newTitle: newTitle, context: context)
-                    guard success else { return nil }
-                    do {
-                        try context.save()
-                        var locked = AppSettings.library.lockedCategories.get()
-                        if let oldIndex = locked.firstIndex(of: title) {
-                            locked[oldIndex] = newTitle
-                            AppSettings.library.lockedCategories.set(locked)
-                        }
-                        return CoreDataManager.shared.getCategoryTitles(context: context)
-                    } catch {
-                        LogManager.logger.error("CategoriesView.renameCategory(title: \(title)): \(error)")
-                        return nil
-                    }
-                }
+                let newCategories = await DataRepositories.shared.categories.rename(title, to: newTitle)
                 if let newCategories {
+                    var locked = AppSettings.library.lockedCategories.get()
+                    if let oldIndex = locked.firstIndex(of: title) {
+                        locked[oldIndex] = newTitle
+                        AppSettings.library.lockedCategories.set(locked)
+                    }
                     categories = newCategories
                     NotificationCenter.default.post(name: .updateCategories, object: nil)
                 } else {

@@ -361,9 +361,7 @@ extension MangaView.ViewModel {
 
 extension MangaView.ViewModel {
     func checkForCategories() async {
-        let hasCategories = await CoreDataManager.shared.container.performBackgroundTask { context in
-            !CoreDataManager.shared.getCategoryTitles(sorted: false, context: context).isEmpty
-        }
+        let hasCategories = await !DataRepositories.shared.categories.titles(includeFilterGroups: false).isEmpty
         if self.hasCategories != hasCategories {
             self.hasCategories = hasCategories
         }
