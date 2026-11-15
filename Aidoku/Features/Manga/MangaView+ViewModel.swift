@@ -772,7 +772,7 @@ extension MangaView.ViewModel {
 
     /// The chapters before `chapter` for «Marcar anteriores» (SUWA-12 G1).
     func previousChapters(before chapter: AidokuRunner.Chapter) -> [AidokuRunner.Chapter] {
-        chapters.firstIndex(of: chapter).map { Array(chapters[($0 + 1)...]) } ?? [] // pendiente[G1#3]
+        ChapterOrder.previous(of: chapter, inSourceOrder: manga.chapters ?? [])
     }
 
     /// The order chosen is this manga's and the default for the rest (SUWA-12 G2).
