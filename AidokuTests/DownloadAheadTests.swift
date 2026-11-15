@@ -123,6 +123,55 @@ import Testing
 
     // MARK: Setting
 
+    @Test func onlyTheWindowsStatusIsAsked() {
+        // deterministic pseudo-random cases: same result as asking every chapter, at most `target` asked
+        var seed: UInt64 = 42
+        func next(_ n: Int) -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int((seed >> 33) % UInt64(n))
+        }
+        let statuses: [DownloadStatus] = [.none, .finished, .queued, .downloading, .paused, .failed, .cancelled]
+        for _ in 0..<500 {
+            let count = next(30)
+            let chapters: [AidokuRunner.Chapter] = (0..<count).map {
+                .init(
+                    key: "c\($0)",
+                    chapterNumber: Float($0),
+                    scanlators: next(4) == 0 ? ["B"] : ["A"],
+                    language: next(5) == 0 ? "en" : "es",
+                    locked: next(8) == 0
+                )
+            }
+            var history: [String: (page: Int, date: Int)] = [:]
+            for chapter in chapters where next(3) == 0 {
+                history[chapter.key] = (page: next(2) == 0 ? -1 : 4, date: 0)
+            }
+            var status: [String: DownloadStatus] = [:]
+            for chapter in chapters { status[chapter.key] = statuses[next(statuses.count)] }
+            let retried = Set(chapters.filter { _ in next(6) == 0 }.map(\.key))
+            let target = [0, 1, 2, 3, 5, 10][next(6)]
+            let language: String? = next(3) == 0 ? "es" : nil
+            let scanlators: [String] = next(3) == 0 ? ["A"] : []
+
+            let (downloaded, queued) = DownloadAheadPlanner.split(
+                statuses: chapters.map { ($0.key, status[$0.key] ?? .none) },
+                retried: retried
+            )
+            let expected = DownloadAheadPlanner.chaptersToQueue(
+                chapters: chapters, readingHistory: history, downloaded: downloaded, queued: queued,
+                target: target, language: language, scanlators: scanlators
+            ).map(\.key)
+            var asked = 0
+            let result = DownloadAheadPlanner.chaptersToQueue(
+                chapters: chapters, readingHistory: history, target: target, retried: retried,
+                language: language, scanlators: scanlators,
+                status: { asked += 1; return status[$0] ?? .none }
+            ).map(\.key)
+            #expect(result == expected)
+            #expect(asked <= target)
+        }
+    }
+
     @Test func settingIsStoredPerManga() {
         let manga = MangaIdentifier(sourceKey: "downloadaheadtest", mangaKey: "42")
         let other = MangaIdentifier(sourceKey: "downloadaheadtest", mangaKey: "43")

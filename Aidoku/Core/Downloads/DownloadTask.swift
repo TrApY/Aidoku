@@ -46,6 +46,9 @@ actor DownloadTask: Identifiable {
         case pageProcessorFailed
     }
 
+    /// Session for page and cover downloads (pending: the shared one).
+    static let downloadSession: URLSession = .shared
+
     typealias SourceLookup = @Sendable (String) async -> AidokuRunner.Source?
     static let defaultSourceLookup: SourceLookup = { await SourceManager.shared.source(for: $0) }
 

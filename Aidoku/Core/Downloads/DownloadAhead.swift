@@ -120,6 +120,30 @@ enum DownloadAheadPlanner {
         return window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
     }
 
+    /// Same, asking the download status only of the chapters in the window (at most `target`), not of
+    /// every chapter of the manga. Same result as `split` + `chaptersToQueue` with every status
+    /// (pending: asks all of them).
+    static func chaptersToQueue(
+        chapters: [AidokuRunner.Chapter],
+        readingHistory: [String: (page: Int, date: Int)],
+        target: Int,
+        retried: Set<String>,
+        language: String? = nil,
+        scanlators: [String] = [],
+        status: (String) -> DownloadStatus
+    ) -> [AidokuRunner.Chapter] {
+        let (downloaded, queued) = split(statuses: chapters.map { ($0.key, status($0.key)) }, retried: retried)
+        return chaptersToQueue(
+            chapters: chapters,
+            readingHistory: readingHistory,
+            downloaded: downloaded,
+            queued: queued,
+            target: target,
+            language: language,
+            scanlators: scanlators
+        )
+    }
+
     /// Same language and scanlator filter as the manga page's chapter list.
     private static func matches(_ chapter: AidokuRunner.Chapter, language: String?, scanlators: [String]) -> Bool {
         if let language, chapter.language != language {

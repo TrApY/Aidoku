@@ -316,6 +316,16 @@ actor DownloadQueue {
         userPaused
     }
 
+    /// Waits until the queue is empty (true) or `stopWaitingForEmpty` is called (false), without
+    /// spinning (pending: doesn't wait).
+    func waitUntilEmpty() async -> Bool {
+        queue.isEmpty
+    }
+
+    /// Ends the waits (the background task expired).
+    func stopWaitingForEmpty() {
+    }
+
     func hasQueuedDownloads() -> Bool {
         !queue.isEmpty
     }

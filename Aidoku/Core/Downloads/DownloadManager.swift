@@ -27,6 +27,14 @@ actor DownloadManager {
 
     static let directory = FileManager.default.documentDirectory.appendingPathComponent("Downloads", isDirectory: true)
 
+    /// Creates the downloads directory if needed and keeps it out of the iCloud/iTunes backup
+    /// (pending: not excluded).
+    static func prepareDirectory(_ url: URL = directory) {
+        if !url.exists {
+            url.createDirectory()
+        }
+    }
+
     @MainActor
     private let cache: DownloadCache = .init()
     private let queue: DownloadQueue
