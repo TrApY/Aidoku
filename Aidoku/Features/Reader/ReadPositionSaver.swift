@@ -246,9 +246,15 @@ final class ReadPositionSaver<Position: ReadPositionKeyed> {
         generation == currentLocal || generation == currentTracker
     }
 
-    /// The page key without the scroll position («c#5@0.42» → «c#5»).
+    /// The page key without the scroll position («c#5@0.42» → «c#5»). Only a «#<page>@<number>» end is
+    /// a position: a chapter key may contain «@» itself.
     static func trackerKey(of pageKey: String) -> String {
-        guard let at = pageKey.lastIndex(of: "@") else { return pageKey }
+        guard
+            let range = pageKey.range(of: #"#[0-9]+@-?[0-9]+(\.[0-9]+)?$"#, options: .regularExpression),
+            let at = pageKey[range].firstIndex(of: "@")
+        else {
+            return pageKey
+        }
         return String(pageKey[..<at])
     }
 }

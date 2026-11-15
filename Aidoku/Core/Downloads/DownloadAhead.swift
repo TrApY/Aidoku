@@ -24,15 +24,14 @@ enum DownloadAheadSetting {
     }
 
     /// The manga page offers the setting only for library manga of a source that can download
-    /// (pending: only the source is checked).
+    /// (as the library's download menu).
     static func isAvailable(inLibrary: Bool, hasSource: Bool, isLocal: Bool) -> Bool {
-        hasSource
+        inLibrary && hasSource && !isLocal
     }
 
-    /// What the chapter list header shows («Descarga adelantada: N»); nil = nothing
-    /// (pending: ignores availability).
+    /// What the chapter list header shows («Descarga adelantada: N»); nil = nothing.
     static func indicator(setting: Int, available: Bool) -> Int? {
-        setting > 0 ? setting : nil
+        available && setting > 0 ? setting : nil
     }
 
     static func key(for manga: MangaIdentifier) -> String {

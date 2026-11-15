@@ -598,8 +598,9 @@ extension MangaView.ViewModel {
 
                 if foundNewChapters {
                     // «descarga adelantada»: new chapters may fall in the window (on its own; Wi-Fi rule applies)
+                    let trigger = downloadAheadTrigger
                     Task {
-                        await DownloadManager.shared.ensureAheadDownloaded(mangaId: mangaId)
+                        await trigger(mangaId)
                     }
                 }
             }

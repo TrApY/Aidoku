@@ -229,7 +229,12 @@ struct MangaDetailsHeaderView: View {
                     langFilter: $langFilter,
                     scanlatorFilter: $scanlatorFilter,
                     displayMode: $chapterTitleDisplayMode,
-                    mangaId: manga.identifier
+                    mangaId: manga.identifier,
+                    downloadAheadAvailable: DownloadAheadSetting.isAvailable(
+                        inLibrary: bookmarked,
+                        hasSource: source != nil,
+                        isLocal: manga.isLocal()
+                    )
                 )
                 .padding(.horizontal, 20)
                 .padding(.bottom, 10)

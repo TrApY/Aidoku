@@ -907,7 +907,11 @@ private struct RightNavbarButton: View, Equatable {
         self.url = viewModel.manga.url
         self.hasDownloads = viewModel.downloadStatus.contains(where: { $0.value == .finished || $0.value == .failed })
         // per manga, for library manga of a source that can download (as the library's download menu)
-        self.canDownloadAhead = viewModel.bookmarked && viewModel.source != nil && !viewModel.manga.isLocal()
+        self.canDownloadAhead = DownloadAheadSetting.isAvailable(
+            inLibrary: viewModel.bookmarked,
+            hasSource: viewModel.source != nil,
+            isLocal: viewModel.manga.isLocal()
+        )
         self._downloadAhead = State(initialValue: DownloadAheadSetting.get(for: viewModel.manga.identifier))
         self.refresh = refreshController.refresh
 

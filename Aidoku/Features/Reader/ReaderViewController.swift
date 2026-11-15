@@ -727,7 +727,10 @@ extension ReaderViewController {
             }
         }
         // the page it opens at is not a change: nothing is saved until the user turns a page
-        readPositionSaver.chapterOpened(pageKey: openingPageKey())
+        readPositionSaver.chapterOpened(
+            pageKey: openingPageKey(),
+            trackerKey: ReadPosition.pageKey(chapter: chapter, page: max(1, currentPage), position: nil)
+        )
         reader?.setChapter(chapter, startPage: currentPage)
     }
 

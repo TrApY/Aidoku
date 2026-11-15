@@ -32,7 +32,10 @@ actor DownloadQueue {
             }
         }
     }
-    private var emptyWaiters: [CheckedContinuation<Bool, Never>] = []
+    /// Background task waits for the queue to empty, each with its task.
+    private var emptyWaiters: [(task: AnyObject, continuation: CheckedContinuation<Bool, Never>)] = []
+    /// Background tasks that expired before waiting (kept strongly, so a new task can't reuse the address).
+    private var expiredBackgroundTasks: [AnyObject] = []
     private var tasks: [String: DownloadTask] = [:] // tasks for each source
     private var progressBlocks: [ChapterIdentifier: (Int, Int) -> Void] = [:]
 
@@ -327,20 +330,32 @@ actor DownloadQueue {
     }
 
     /// Waits, for the background task `task`, until the queue is empty (true) or the task expires
-    /// (false), without spinning (pending: the expiry is not remembered).
+    /// (false), without spinning. An expiry that came before the wait ends it at once.
     func waitUntilEmpty(for task: AnyObject) async -> Bool {
+        if let index = expiredBackgroundTasks.firstIndex(where: { $0 === task }) {
+            expiredBackgroundTasks.remove(at: index)
+            return false
+        }
         if hasNoDownloads { return true }
-        return await withCheckedContinuation { emptyWaiters.append($0) }
+        return await withCheckedContinuation { emptyWaiters.append((task, $0)) }
     }
 
-    /// The background task `task` expired: its wait ends (pending: ends every wait).
+    /// The background task `task` expired: its wait ends, or the wait it hasn't started yet won't start.
     func backgroundTaskExpired(_ task: AnyObject) {
-        resumeEmptyWaiters(false)
+        let waiting = emptyWaiters.filter { $0.task === task }
+        guard !waiting.isEmpty else {
+            if !expiredBackgroundTasks.contains(where: { $0 === task }) {
+                expiredBackgroundTasks.append(task)
+            }
+            return
+        }
+        emptyWaiters.removeAll { $0.task === task }
+        waiting.forEach { $0.continuation.resume(returning: false) }
     }
 
-    /// Lets go of the background task if it is still `task`; false if another one took over
-    /// (pending: always clears).
+    /// Lets go of the background task if it is still `task`; false if another one took over.
     func finishBackgroundTask(_ task: AnyObject) -> Bool {
+        guard isCurrentBackgroundTask(task) else { return false }
         setBackgroundTask(nil)
         return true
     }
@@ -359,7 +374,7 @@ actor DownloadQueue {
     private func resumeEmptyWaiters(_ emptied: Bool) {
         let waiters = emptyWaiters
         emptyWaiters = []
-        waiters.forEach { $0.resume(returning: emptied) }
+        waiters.forEach { $0.continuation.resume(returning: emptied) }
     }
 
     func hasQueuedDownloads() -> Bool {
@@ -395,7 +410,7 @@ extension DownloadQueue {
                 Task {
                     await self.backgroundTaskExpired(task)
                     await DownloadManager.shared.pauseDownloads(byUser: false) // system pause: automatic downloads may start it again
-                    await self.setBackgroundTask(nil)
+                    _ = await self.finishBackgroundTask(task) // not a newer one
                 }
                 task.setTaskCompleted(success: false)
             }
@@ -406,8 +421,8 @@ extension DownloadQueue {
 
                 // wait until downloads complete (woken when the queue empties, not polled), or until expiry
                 guard await self.waitUntilEmpty(for: task) else { return } // expired: already completed
-
-                await self.setBackgroundTask(nil)
+                // still this task (not one that came later): let it go and complete it
+                guard await self.finishBackgroundTask(task) else { return }
 
                 task.setTaskCompleted(success: true)
             }

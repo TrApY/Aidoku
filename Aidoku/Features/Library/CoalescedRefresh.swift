@@ -22,9 +22,10 @@ final class CoalescedRefresh<Key: Hashable> {
 
     static var delay: TimeInterval { 1 }
 
-    /// A screen's visibility from its view controller state (pending: always visible).
+    /// A screen's visibility from its view controller state.
     static func visibility(isViewLoaded: Bool, isInWindow: Bool, isPresentingSomething: Bool) -> Visibility {
-        .visible
+        guard isViewLoaded, isInWindow else { return .hidden }
+        return isPresentingSomething ? .covered : .visible
     }
 
     private let scheduler: ReadPositionScheduler

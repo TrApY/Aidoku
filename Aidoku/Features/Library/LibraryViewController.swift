@@ -57,8 +57,13 @@ class LibraryViewController: OldMangaCollectionViewController {
     /// the library can be seen (otherwise when it appears again).
     private lazy var historyRefresh = CoalescedRefresh<MangaIdentifier>(
         visibility: { [weak self] in
-            guard let self, self.isViewLoaded, self.view.window != nil else { return .hidden }
-            return self.presentedViewController != nil ? .covered : .visible
+            guard let self else { return .hidden }
+            let isViewLoaded = self.isViewLoaded
+            return CoalescedRefresh<MangaIdentifier>.visibility(
+                isViewLoaded: isViewLoaded,
+                isInWindow: isViewLoaded && self.view.window != nil,
+                isPresentingSomething: self.presentedViewController != nil
+            )
         },
         refresh: { [weak self] mangaIds in
             Task { @MainActor in

@@ -26,6 +26,8 @@ struct ChapterListHeaderView: View {
     private var mangaId: MangaIdentifier
     /// «Descarga adelantada» of this manga (follows the setting as it changes).
     @AppStorage private var downloadAhead: Int
+    /// The setting is offered for this manga (library manga of a source that can download).
+    private let downloadAheadAvailable: Bool
 
     init(
         allChapters: [AidokuRunner.Chapter]? = nil,
@@ -36,8 +38,10 @@ struct ChapterListHeaderView: View {
         langFilter: Binding<String?>,
         scanlatorFilter: Binding<[String]>,
         displayMode: Binding<ChapterTitleDisplayMode>,
-        mangaId: MangaIdentifier
+        mangaId: MangaIdentifier,
+        downloadAheadAvailable: Bool = false
     ) {
+        self.downloadAheadAvailable = downloadAheadAvailable
         self.chapterCount = filteredChapters?.count
         self._sortOption = sortOption
         self._sortAscending = sortAscending
@@ -87,7 +91,7 @@ struct ChapterListHeaderView: View {
                     .font(.headline)
                     .transition(.scale) // for some reason this makes it animate correctly
                     .id("chapters")
-                if downloadAhead > 0 {
+                if let downloadAhead = DownloadAheadSetting.indicator(setting: downloadAhead, available: downloadAheadAvailable) {
                     Label(
                         String(format: NSLocalizedString("DOWNLOAD_AHEAD_ACTIVE"), downloadAhead),
                         systemImage: "arrow.down.circle"
