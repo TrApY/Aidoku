@@ -86,6 +86,12 @@ extension SourceManager {
             CoreDataManager.shared.getSources(context: context).map { $0.toData() }
         }
         var sourcesByKey: [String: AidokuRunner.Source] = [:]
+        // a disabled server source isn't loaded, but its manga and tracks still need its connection
+        for dbSource in objects where disabledSourceKeys.contains(dbSource.id) {
+            if let data = dbSource.customSource, case let .suwayomiServerSource(config)? = try? CustomSourceConfig(from: data) {
+                SuwayomiConnections.shared.register(child: config)
+            }
+        }
         for dbSource in objects where !disabledSourceKeys.contains(dbSource.id) {
             if let source = await dbSource.toNewSource() {
                 if sourcesByKey[source.key] != nil {
@@ -698,6 +704,16 @@ extension SourceManager {
         }
         loadSourceLanguages()
         return true
+    }
+
+    /// The configs of every custom source saved (also the disabled ones).
+    func customSourceConfigs() async -> [CustomSourceConfig] {
+        let objects: [SourceObjectData] = await CoreDataManager.shared.container.performBackgroundTask { context in
+            CoreDataManager.shared.getSources(context: context).map { $0.toData() }
+        }
+        return objects.compactMap { object in
+            object.customSource.flatMap { try? CustomSourceConfig(from: $0) }
+        }
     }
 
     /// Tells the views the source list changed (after several `addOrUpdateCustomSource`).
