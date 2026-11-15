@@ -250,6 +250,44 @@ func expectMetadataListed(_ dump: StoreDump) {
         #expect(after.entities["Chapter"] != before.entities["Chapter"])
     }
 
+    /// C2: Z_METADATA is compared key by key. Only NSPersistenceFrameworkVersion may change (the framework that
+    /// last saved the store); NSStoreUUID or a new key may not.
+    @Test func theStoreMetadataIsComparedKeyByKey() throws {
+        let directory = try Self.extremeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = try Self.metadataDump(directory)
+        let otherFramework = try Self.metadataDump(directory) { $0["NSPersistenceFrameworkVersion"] = "1" }
+        let otherUUID = try Self.metadataDump(directory) { $0["NSStoreUUID"] = UUID().uuidString }
+        let newKey = try Self.metadataDump(directory) { $0["SUWA13Nueva"] = "x" }
+        let otherModel = try Self.metadataDump(directory) { $0["NSStoreModelVersionIdentifiers"] = ["otro"] }
+        #expect(Self.compare(original, otherFramework) == [])
+        #expect(Self.compare(original, otherUUID).count == 1)
+        #expect(Self.compare(original, newKey).count == 1)
+        #expect(Self.compare(original, otherModel).count == 1)
+    }
+
+    /// The comparison of copies that test (b) uses.
+    static func compare(_ before: StoreDump, _ after: StoreDump) -> [String] {
+        before.differences(to: after, metadataTables: StoreDump.metadataThatStays(in: before))
+    }
+
+    /// The metadata tables of a copy of `directory` whose Aidoku.sqlite Z_METADATA plist went through `change`.
+    static func metadataDump(_ directory: URL, change: ((inout [String: Any]) -> Void)? = nil) throws -> StoreDump {
+        let copy = try StoreDump.copyStores(from: directory)
+        defer { try? FileManager.default.removeItem(at: copy) }
+        if let change {
+            let store = copy.appendingPathComponent("Aidoku.sqlite").path
+            let data = try sqliteBlob(store, "SELECT Z_PLIST FROM Z_METADATA")
+            var plist = try #require(try PropertyListSerialization.propertyList(from: data, options: 0, format: nil) as? [String: Any])
+            change(&plist)
+            let changed = try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
+            try sqliteExec(store, "UPDATE Z_METADATA SET Z_PLIST = ?1", [.blob(changed)])
+        }
+        var dump = StoreDump()
+        dump.metadata = try StoreDump.tables(in: copy).metadata
+        return dump
+    }
+
     /// Deleting follows the model's rules:
     /// - a Manga: its LibraryManga goes (Cascade); its chapters, their updates and histories, its LocalFileInfo
     ///   and the categories stay, only without it (Nullify);
