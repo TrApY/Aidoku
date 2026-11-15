@@ -120,7 +120,7 @@ import Testing
         SuwayomiConnections.shared.register(connection: parent)
         SuwayomiConnections.shared.register(child: child())
         UserDefaults.standard.set("https://suwayomi.example:4567", forKey: "\(parent).server")
-        UserDefaults.standard.set("usuario-prueba", forKey: "\(parent).login.username")
+        UserDefaults.standard.set("usuario", forKey: "\(parent).login.username")
         UserDefaults.standard.set("clave-de-prueba", forKey: "\(parent).login.password")
         let server = SuwayomiFakeServer()
         server.respond("UpdateChapterProgress", .success(Data(#"{"data":{"updateChapter":{"chapter":{"id":11}}}}"#.utf8)))
@@ -133,7 +133,7 @@ import Testing
             try? await tracker.setProgress(trackId: trackId, chapterId: chapter, progress: .init(completed: false, page: 3))
             _ = try? await tracker.getState(trackId: trackId)
         }
-        let expected = "Basic " + Data("usuario-prueba:clave-de-prueba".utf8).base64EncodedString()
+        let expected = "Basic " + Data("usuario:clave-de-prueba".utf8).base64EncodedString()
         let requests = log.all
         #expect(requests.count == 4)
         #expect(requests.allSatisfy { $0.url?.absoluteString == "https://suwayomi.example:4567/api/graphql" })
@@ -169,7 +169,7 @@ import Testing
     }
 
     @Test func emperorAndNexusStayWithTheDefaultContentRatings() {
-        // JoTa's devices keep the default: «may contain NSFW» sources are shown
+        // With the default setting: «may contain NSFW» sources are shown
         let defaults = AppSettings.browse.contentRatings.defaultValue
         #expect(defaults.contains(child(nsfw: true).contentRating))
     }
