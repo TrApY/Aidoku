@@ -29,7 +29,6 @@ extension Month: Identifiable {
     }
 }
 
-@available(iOS 16.0, *)
 struct YearlyMonthChartView: View {
     let data: MonthData
 
@@ -67,11 +66,7 @@ struct YearlyMonthChartView: View {
                 {
                     let value = data.value(for: month)
                     AxisValueLabel(anchor: .top) {
-                        let xOffset: CGFloat = if #available(iOS 27.0, *) {
-                            -8
-                        } else {
-                            0
-                        }
+                        let xOffset: CGFloat = -8
                         Text(month.axisLabel)
                             .font(.caption2.weight(.semibold))
                             .offset(x: xOffset, y: 2)
@@ -98,7 +93,6 @@ struct YearlyMonthChartView: View {
     }
 }
 
-@available(iOS 16.0, *)
 #Preview {
     YearlyMonthChartView(data: .init(
         january: 0,
