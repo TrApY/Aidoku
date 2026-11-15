@@ -70,7 +70,30 @@ struct ServerExtensionSections: Equatable {
         query: String = "",
         localCode: String? = Locale.current.languageCode
     ) -> ServerExtensionSections {
-        ServerExtensionSections(installed: extensions) // pendiente
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching = query.isEmpty ? extensions : extensions.filter {
+            $0.name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+        func byName(_ lhs: ServerExtension, _ rhs: ServerExtension) -> Bool {
+            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        var result = ServerExtensionSections()
+        result.updates = matching.filter { $0.isInstalled && $0.hasUpdate }.sorted(by: byName)
+        result.installed = matching.filter { $0.isInstalled && !$0.hasUpdate }.sorted(by: byName)
+        let available = matching.filter {
+            !$0.isInstalled && !$0.isObsolete && BrowseLanguages.isVisible([$0.lang], active: active)
+        }
+        let grouped = Dictionary(grouping: available) { BrowseLanguages.code($0.lang) }
+        let local = localCode.map(BrowseLanguages.code)
+        let codes = grouped.keys.sorted { lhs, rhs in
+            if lhs == local { return true }
+            if rhs == local { return false }
+            if lhs == SourceLanguage.multi { return false }
+            if rhs == SourceLanguage.multi { return true }
+            return SourceLanguage.compare(lhs, rhs) == .orderedAscending
+        }
+        result.available = codes.map { .init(code: $0, extensions: (grouped[$0] ?? []).sorted(by: byName)) }
+        return result
     }
 }
 
@@ -100,7 +123,19 @@ actor ServerExtensionLimiter {
     }
 
     func run<T: Sendable>(_ work: @Sendable () async throws -> T) async rethrows -> T {
-        return try await work() // pendiente
+        if running >= limit {
+            await withCheckedContinuation { waiters.append($0) }
+        } else {
+            running += 1
+        }
+        defer {
+            if waiters.isEmpty {
+                running -= 1
+            } else {
+                waiters.removeFirst().resume() // the slot goes to the next one
+            }
+        }
+        return try await work()
     }
 }
 
@@ -165,10 +200,39 @@ final class ServerExtensionsModel: ObservableObject {
     }
 
     func perform(_ action: ServerExtensionAction, on ext: ServerExtension) async {
-        return // pendiente
+        guard let api, busy[ext.pkgName] == nil else { return }
+        busy[ext.pkgName] = action
+        defer { busy[ext.pkgName] = nil }
+        do {
+            try await limiter.run {
+                try await api.apply(action, to: ext.pkgName)
+            }
+            lastError = nil
+        } catch {
+            LogManager.logger.warn("Suwayomi extension \(ext.pkgName) \(action.rawValue) failed: \(error)")
+            lastError = error.localizedDescription
+        }
+        await resync()
+        await load()
     }
 
     func updateAll() async {
-        return // pendiente
+        guard let api else { return }
+        let pending = extensions.filter { $0.isInstalled && $0.hasUpdate }.map(\.pkgName)
+        guard !pending.isEmpty else { return }
+        for pkgName in pending {
+            busy[pkgName] = .update
+        }
+        do {
+            try await api.apply(.update, to: pending)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+        for pkgName in pending {
+            busy[pkgName] = nil
+        }
+        await resync()
+        await load()
     }
 }

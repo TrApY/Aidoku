@@ -125,6 +125,6 @@ extension MigrateSourcesView {
 extension MigrateSourcesView {
     /// The library by source key: each Suwayomi server source on its own.
     static func group(_ manga: [AidokuRunner.Manga]) -> [String: [AidokuRunner.Manga]] {
-        ["": manga] // pendiente
+        Dictionary(grouping: manga, by: \.sourceKey)
     }
 }

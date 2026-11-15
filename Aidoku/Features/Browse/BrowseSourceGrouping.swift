@@ -23,13 +23,21 @@ enum BrowseLanguages {
 
     /// A language code as the setting keeps it («all» of the server extensions is «multi»).
     static func code(_ language: String) -> String {
-        language // pendiente
+        let lowercased = language.lowercased()
+        if lowercased == "all" || lowercased == "multi" || lowercased.isEmpty {
+            return SourceLanguage.multi
+        }
+        return SourceLanguage.normalized(language)
     }
 
     /// Whether something in `languages` is shown with the active ones: several languages or «multi»
     /// always; otherwise its language must be active.
     static func isVisible(_ languages: [String], active: Set<String>) -> Bool {
-        true // pendiente
+        let primary = code(SourceLanguage.primaryCode(for: languages))
+        if primary == SourceLanguage.multi {
+            return true
+        }
+        return active.contains(primary)
     }
 
     /// The languages offered to choose from: those of the installed sources, of the external source
@@ -41,11 +49,33 @@ enum BrowseLanguages {
         server: [String],
         localCode: String? = Locale.current.languageCode
     ) -> [String] {
-        [] // pendiente
+        var codes = Set<String>()
+        for languages in installed {
+            for language in languages {
+                codes.insert(code(language))
+            }
+        }
+        for language in external.union(server) {
+            codes.insert(code(language))
+        }
+        codes.remove(SourceLanguage.multi)
+        var sorted = codes.sorted { SourceLanguage.compare($0, $1) == .orderedAscending }
+        if let localCode = localCode.map(code), let index = sorted.firstIndex(of: localCode) {
+            sorted.remove(at: index)
+            sorted.insert(localCode, at: 0)
+        }
+        return [SourceLanguage.multi] + sorted
     }
 
     static func toggled(_ language: String, in languages: Set<String>) -> Set<String> {
-        languages // pendiente
+        let language = code(language)
+        var languages = languages
+        if languages.contains(language) {
+            languages.remove(language)
+        } else {
+            languages.insert(language)
+        }
+        return languages
     }
 }
 
@@ -60,7 +90,11 @@ enum SourceRecents {
     }
 
     static func record(_ sourceKey: String, at date: Date = Date(), in defaults: UserDefaults = .standard) {
-        return // pendiente
+        var recents = load(from: defaults)
+        recents[sourceKey] = date
+        // only the latest ones are kept
+        let latest = recents.sorted { $0.value > $1.value }.prefix(kept)
+        defaults.set(Dictionary(uniqueKeysWithValues: latest.map { ($0.key, $0.value.timeIntervalSince1970) }), forKey: defaultsKey)
     }
 }
 
@@ -85,6 +119,36 @@ struct BrowseSourceGroups: Equatable {
         localCode: String? = Locale.current.languageCode,
         showRecent: Bool = true
     ) -> BrowseSourceGroups {
-        BrowseSourceGroups(languages: [.init(code: SourceLanguage.multi, sources: installed)]) // pendiente
+        let visible = installed.filter { BrowseLanguages.isVisible($0.languages, active: active) }
+        var result = BrowseSourceGroups()
+        if showRecent {
+            result.recent = recents
+                .filter { key, _ in !pinnedKeys.contains(key) }
+                .sorted { $0.value > $1.value }
+                .compactMap { key, _ in visible.first { $0.sourceId == key } }
+                .prefix(recentLimit)
+                .map { $0 }
+        }
+        let grouped = Dictionary(grouping: visible) { info in
+            BrowseLanguages.code(SourceLanguage.primaryCode(for: info.languages))
+        }
+        let local = localCode.map(BrowseLanguages.code)
+        let codes = grouped.keys.sorted { lhs, rhs in
+            // the device's language first, «multi» last, the rest by localized name
+            if lhs == local { return true }
+            if rhs == local { return false }
+            if lhs == SourceLanguage.multi { return false }
+            if rhs == SourceLanguage.multi { return true }
+            return SourceLanguage.compare(lhs, rhs) == .orderedAscending
+        }
+        result.languages = codes.map { code in
+            .init(
+                code: code,
+                sources: (grouped[code] ?? []).sorted {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+            )
+        }
+        return result
     }
 }
