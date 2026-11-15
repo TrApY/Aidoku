@@ -34,7 +34,15 @@ struct SuwayomiMigrationPlan: Equatable, Sendable {
         newIsServer: Bool,
         oldLeavesLibrary: Bool
     ) -> SuwayomiMigrationPlan {
-        .none // pending
+        guard old != new else { return .none }
+        var plan = SuwayomiMigrationPlan()
+        if newIsServer {
+            plan.newTrackId = trackId(for: new)
+            plan.registerNew = true
+        }
+        // only the new one stays on the server; copying keeps the old one in both libraries
+        plan.removeOld = oldIsServer && oldLeavesLibrary
+        return plan
     }
 }
 
@@ -74,6 +82,21 @@ extension SuwayomiTracker {
         old: MangaIdentifier,
         highestChapterRead: Float?
     ) async {
-        // pending
+        if plan.registerNew, let newTrackId = plan.newTrackId {
+            do {
+                // in the server library, with the chapters up to what was read marked
+                _ = try await register(trackId: newTrackId, highestChapterRead: highestChapterRead, earliestReadDate: nil)
+            } catch {
+                LogManager.logger.error("Suwayomi migration: unable to register \(newTrackId) on the server: \(error)")
+            }
+        }
+        if plan.removeOld {
+            do {
+                try await api.removeFromLibrary(sourceKey: old.sourceKey, seriesId: old.mangaKey)
+                markedInLibrary.remove(SuwayomiMigrationPlan.trackId(for: old))
+            } catch {
+                LogManager.logger.error("Suwayomi migration: unable to remove \(old.mangaKey) from the server library: \(error)")
+            }
+        }
     }
 }

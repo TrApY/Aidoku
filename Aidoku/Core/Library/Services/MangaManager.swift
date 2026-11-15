@@ -902,6 +902,20 @@ extension MangaManager {
             }
         }
 
+        // Suwayomi server (JoTa): the new server manga is tracked by its own id and only it stays in the
+        // server library when the old one leaves the Aidoku library
+        let suwayomiTracker = TrackerManager.getTracker(id: "suwayomi") as? SuwayomiTracker
+        let suwayomiPlan = suwayomiTracker.map {
+            SuwayomiMigrationPlan.make(
+                old: oldManga.identifier,
+                new: newManga.identifier,
+                oldIsServer: $0.canRegister(mangaId: oldManga.identifier),
+                newIsServer: $0.canRegister(mangaId: newManga.identifier),
+                oldLeavesLibrary: !copy || forceRemoveFromLibrary
+            )
+        } ?? .none
+        let suwayomiTrackerId = suwayomiTracker?.id
+
         // migrate/copy data
         let result: (AidokuRunner.Manga, AidokuRunner.Manga)? = await CoreDataManager.shared.container.performBackgroundTask { context in
             do {
@@ -1020,6 +1034,36 @@ extension MangaManager {
                 )
 
                 for item in trackItems {
+                    if let suwayomiTrackerId, item.trackerId == suwayomiTrackerId {
+                        // the server tracks each manga by its own id: move it to the new manga's id
+                        let newHasTrack = CoreDataManager.shared.hasTrack(
+                            trackerId: suwayomiTrackerId,
+                            mangaId: newManga.identifier,
+                            context: context
+                        )
+                        if let newTrackId = suwayomiPlan.newTrackId {
+                            if !copy {
+                                if newHasTrack {
+                                    context.delete(item)
+                                } else {
+                                    item.id = newTrackId
+                                    item.sourceId = newManga.sourceKey
+                                    item.mangaId = newManga.key
+                                }
+                            } else if !newHasTrack {
+                                CoreDataManager.shared.createTrack(
+                                    id: newTrackId,
+                                    trackerId: suwayomiTrackerId,
+                                    mangaId: newManga.identifier,
+                                    title: item.title,
+                                    context: context
+                                )
+                            }
+                        } else if !copy && newManga.identifier != oldManga.identifier {
+                            context.delete(item) // the new one isn't a server manga: nothing to point at
+                        }
+                        continue
+                    }
                     guard
                         let trackId = item.id,
                         let trackerId = item.trackerId,
@@ -1062,6 +1106,15 @@ extension MangaManager {
 
         if result != nil {
             DownloadAheadSetting.migrate(from: oldManga.identifier, to: newManga.identifier, copy: copy)
+        }
+
+        if result != nil, let suwayomiTracker, suwayomiPlan != .none {
+            // best effort on the server: failures are logged and don't undo the migration on the device
+            let newId = newManga.identifier
+            let highestRead = await CoreDataManager.shared.container.performBackgroundTask { context in
+                CoreDataManager.shared.getHighestReadNumber(mangaId: newId, context: context)
+            }
+            await suwayomiTracker.applyMigration(suwayomiPlan, old: oldManga.identifier, highestChapterRead: highestRead)
         }
 
         if copy && result != nil {

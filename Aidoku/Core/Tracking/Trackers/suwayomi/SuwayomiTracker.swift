@@ -181,6 +181,10 @@ final class SuwayomiMarkedSet: @unchecked Sendable {
         lock.withLock { _ = values.insert(value) }
     }
 
+    func remove(_ value: String) {
+        lock.withLock { _ = values.remove(value) }
+    }
+
     func removeAll(withPrefix prefix: String) {
         lock.withLock { values = values.filter { !$0.hasPrefix(prefix) } }
     }
