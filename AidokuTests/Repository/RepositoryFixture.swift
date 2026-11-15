@@ -16,8 +16,9 @@ import Testing
 /// A store with its repositories, and how to remove it.
 struct FixtureStore: Sendable {
     let repos: DataRepositories
-    /// Puts these manga in the library (no chapters), until the library has its repository (L3).
+    /// Puts these manga in the library (no chapters) and takes them out, until the library has its writes (L7).
     let addToLibrary: @Sendable ([MangaIdentifier]) async -> Void
+    let removeFromLibrary: @Sendable ([MangaIdentifier]) async -> Void
     let tearDown: @Sendable () async -> Void
 }
 
@@ -47,6 +48,12 @@ struct CoreDataFixture: RepositoryFixture {
                         let manga = AidokuRunner.Manga(sourceKey: id.sourceKey, key: id.mangaKey, title: id.mangaKey)
                         CoreDataManager.shared.addToLibrary(manga: manga, chapters: [], context: context)
                     }
+                    try? context.save()
+                }
+            },
+            removeFromLibrary: { ids in
+                await container.performBackgroundTask { context in
+                    CoreDataManager.shared.removeFromLibrary(ids: ids, context: context)
                     try? context.save()
                 }
             },

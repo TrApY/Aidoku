@@ -12,12 +12,19 @@
 struct DataRepositories: Sendable {
     var tracks: any TrackRepository
     var categories: any CategoryRepository
+    var library: any LibraryRepository
     /// The few synchronous main-thread reads the reader and the tracker still need (D8; gone in F9/F11).
     var mainActorReads: any MainActorReads
 
-    init(tracks: any TrackRepository, categories: any CategoryRepository, mainActorReads: any MainActorReads) {
+    init(
+        tracks: any TrackRepository,
+        categories: any CategoryRepository,
+        library: any LibraryRepository,
+        mainActorReads: any MainActorReads
+    ) {
         self.tracks = tracks
         self.categories = categories
+        self.library = library
         self.mainActorReads = mainActorReads
     }
 }

@@ -16,6 +16,7 @@ extension DataRepositories {
         self.init(
             tracks: CoreDataTrackRepository(container: container),
             categories: CoreDataCategoryRepository(container: container),
+            library: CoreDataLibraryRepository(container: container),
             mainActorReads: CoreDataMainActorReads(container: container)
         )
     }
