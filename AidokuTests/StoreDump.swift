@@ -37,6 +37,10 @@ struct StoreDump: Equatable {
     struct Table: Equatable {
         var count = 0
         var sha256 = ""
+        /// what is compared: the hash of the rows, but for Z_METADATA without the keys that may change
+        var comparable = ""
+        /// Z_METADATA only: "<Z_VERSION>/<plist key>" → hash of its value (to say which key differs)
+        var keys: [String: String] = [:]
     }
 
     /// entity name → dump
@@ -279,17 +283,60 @@ struct StoreDump: Equatable {
 
     // MARK: - Metadata that changes when the app opens a store
 
-    /// Metadata tables that change on their own when the app's stack opens a copy without CloudKit and saves
-    /// nothing; the rest (CloudKit mirroring ANSCK*, persistent history, primary keys, model cache) stays byte for
-    /// byte. Z_METADATA keeps the store's metadata plist, with NSPersistenceFrameworkVersion: Core Data rewrites it
-    /// when it saves and closes a store last written by another version of the framework (measured in F3 P4: the
-    /// iPad copy, from iPadOS 27.2, says 1634; the iOS 27.0 simulator writes 1629; the iPhone copy, from iOS 27.0.1,
-    /// already said 1629 and does not change; the app opened and killed in the simulator, P5, left it at 1634).
-    /// Model hashes and checksum stay the same.
-    static let changesWhenOpened: Set<String> = ["Aidoku.sqlite/Z_METADATA", "Local.sqlite/Z_METADATA"]
+    /// The only key of the store's metadata plist (Z_METADATA) that may change when the app's stack opens a copy
+    /// without CloudKit and saves nothing: Core Data rewrites it when it saves and closes a store last written by
+    /// another version of the framework (measured in F3 P4: the iPad copy, from iPadOS 27.2, says 1634; the iOS 27.0
+    /// simulator writes 1629; the iPhone copy, from iOS 27.0.1, already said 1629). Every other key (NSStoreUUID,
+    /// model hashes and identifiers, any new one), the other columns of Z_METADATA and every other metadata table
+    /// (CloudKit mirroring ANSCK*, persistent history, primary keys, model cache) must stay as they were.
+    static let metadataKeysThatChange: Set<String> = ["NSPersistenceFrameworkVersion"]
 
-    static func metadataThatStays(in dump: StoreDump) -> Set<String> {
-        Set(dump.metadata.keys).subtracting(changesWhenOpened)
+    /// Z_METADATA rows with the plist decoded and canonical, without `metadataKeysThatChange`; the plist must be a
+    /// dictionary (if not, the dump fails).
+    private static func metadataPlist(_ db: OpaquePointer) throws -> (comparable: String, keys: [String: String]) {
+        var statement: OpaquePointer?
+        let sql = "SELECT Z_VERSION, Z_UUID, Z_PLIST FROM Z_METADATA ORDER BY Z_VERSION"
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw DumpError.sqlite(sql) }
+        defer { sqlite3_finalize(statement) }
+        var lines: [String] = []
+        var keys: [String: String] = [:]
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let version = sqlite3_column_int64(statement, 0)
+            let uuid = sqlite3_column_text(statement, 1).map { String(cString: $0) } ?? "∅"
+            let count = Int(sqlite3_column_bytes(statement, 2))
+            guard
+                let bytes = sqlite3_column_blob(statement, 2),
+                let plist = try PropertyListSerialization.propertyList(from: Data(bytes: bytes, count: count), options: 0, format: nil) as? [String: Any]
+            else {
+                throw DumpError.sqlite("Z_METADATA: Z_PLIST is not a dictionary")
+            }
+            let kept = plist.filter { !metadataKeysThatChange.contains($0.key) }
+            for (key, value) in kept {
+                keys["\(version)/\(key)"] = hash(plistText(value))
+            }
+            lines.append("i\(version)\u{1E}" + plistText(uuid) + "\u{1E}" + plistText(kept))
+        }
+        return (sha(lines.joined(separator: "\n")), keys)
+    }
+
+    /// A plist value as text that cannot be ambiguous (strings carry their length; dictionaries are sorted).
+    static func plistText(_ value: Any) -> String {
+        switch value {
+            case let dictionary as [String: Any]:
+                return "{" + dictionary.keys.sorted().map { plistText($0) + "=" + plistText(dictionary[$0]!) }.joined(separator: ";") + "}"
+            case let array as [Any]:
+                return "[" + array.map(plistText).joined(separator: ",") + "]"
+            case let string as String:
+                return "s\(string.utf8.count):" + string
+            case let data as Data:
+                return "x" + hex(data)
+            case let date as Date:
+                return dateString(date)
+            case let number as NSNumber:
+                return CFGetTypeID(number) == CFBooleanGetTypeID() ? "b\(number.boolValue)" : "n" + number.stringValue
+            default:
+                return "?\(type(of: value))"
+        }
     }
 
     /// Rows of a table, counted with sqlite (read-only, on a temporary copy): the oracle for the dump's counts.
@@ -334,10 +381,13 @@ struct StoreDump: Equatable {
                 let columns = try query(db, "SELECT COUNT(*) FROM pragma_table_info('\(table)')")[0][0]
                 let order = (1...max(1, Int(columns.dropFirst()) ?? 1)).map(String.init).joined(separator: ",")
                 let rows = try query(db, "SELECT * FROM \"\(table)\" ORDER BY \(order)")
-                metadata["\(file)/\(table)"] = Table(
-                    count: rows.count,
-                    sha256: sha(rows.map { $0.joined(separator: "\u{1E}") }.joined(separator: "\n"))
-                )
+                var entry = Table(count: rows.count, sha256: sha(rows.map { $0.joined(separator: "\u{1E}") }.joined(separator: "\n")))
+                if table == "Z_METADATA" {
+                    (entry.comparable, entry.keys) = try metadataPlist(db)
+                } else {
+                    entry.comparable = entry.sha256
+                }
+                metadata["\(file)/\(table)"] = entry
             }
         }
         return (names, metadata)
@@ -466,7 +516,8 @@ struct StoreDump: Equatable {
     // MARK: - Comparing and writing
 
     /// What differs, without readable text: per entity the counts and the first different row in its CSV form;
-    /// per metadata table (only those in `tables`, or all if nil) count and hash.
+    /// per metadata table (only those in `tables`, or all if nil) count and hash (for Z_METADATA, key by key
+    /// without `metadataKeysThatChange`, naming the keys that differ).
     func differences(to other: StoreDump, metadataTables: Set<String>? = nil) -> [String] {
         var out: [String] = []
         for name in Set(entities.keys).union(other.entities.keys).sorted() {
@@ -486,9 +537,15 @@ struct StoreDump: Equatable {
         for table in Set(metadata.keys).union(other.metadata.keys).sorted() where metadataTables?.contains(table) ?? true {
             let mine = metadata[table]
             let theirs = other.metadata[table]
-            if mine != theirs {
-                let describe = { (table: Table?) in table.map { "\($0.count) filas \($0.sha256.prefix(12))" } ?? "no está" }
-                out.append("tabla \(table): \(describe(mine)) → \(describe(theirs))")
+            if mine?.count != theirs?.count || mine?.comparable != theirs?.comparable {
+                let describe = { (table: Table?) in table.map { "\($0.count) filas \($0.comparable.prefix(12))" } ?? "no está" }
+                var line = "tabla \(table): \(describe(mine)) → \(describe(theirs))"
+                let keys = Set(mine?.keys.keys ?? [:].keys).union(theirs?.keys.keys ?? [:].keys)
+                let changed = keys.filter { mine?.keys[$0] != theirs?.keys[$0] }.sorted()
+                if !changed.isEmpty {
+                    line += "; claves distintas: " + changed.joined(separator: ", ")
+                }
+                out.append(line)
             }
         }
         return out
@@ -500,7 +557,9 @@ struct StoreDump: Equatable {
             let entity = entities[name]!
             return "\(name) filas=\(entity.count) claves-repetidas=\(entity.duplicateKeys) sha256=\(entity.sha256)"
         } + metadata.keys.sorted().map { table in
-            "tabla \(table) filas=\(metadata[table]!.count) sha256=\(metadata[table]!.sha256)"
+            let entry = metadata[table]!
+            return "tabla \(table) filas=\(entry.count) sha256=\(entry.sha256)"
+                + (entry.comparable == entry.sha256 ? "" : " comparable=\(entry.comparable)")
         }
     }
 

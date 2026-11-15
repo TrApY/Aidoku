@@ -62,7 +62,8 @@ func expectMetadataListed(_ dump: StoreDump) {
     }
 
     /// (b) Opening the copy with the app's stack (its model, lightweight migration on, no CloudKit) and saving
-    /// without changes changes nothing: same entities, and the metadata tables that must stay put stay put.
+    /// without changes changes nothing: same entities and metadata tables (Z_METADATA key by key, see
+    /// StoreDump.metadataKeysThatChange).
     @Test(.enabled(if: copyFolder != nil), arguments: ["iphone", "ipad"])
     func openingWithTheAppStackAndSavingChangesNothing(device: String) throws {
         let folder = try stores(device)
@@ -82,7 +83,7 @@ func expectMetadataListed(_ dump: StoreDump) {
         try expectComplete(after, stores: directory)
         let changed = original.differences(to: after).filter { $0.hasPrefix("tabla ") }
         try writeChanges(changed, label: "\(device)-cambios-al-abrir")
-        #expect(original.differences(to: after, metadataTables: StoreDump.metadataThatStays(in: original)) == [])
+        #expect(original.differences(to: after) == [])
         #expect(after.entities == original.entities)
         try after.write(label: "\(device)-abierta-con-la-app")
     }
@@ -268,7 +269,7 @@ func expectMetadataListed(_ dump: StoreDump) {
 
     /// The comparison of copies that test (b) uses.
     static func compare(_ before: StoreDump, _ after: StoreDump) -> [String] {
-        before.differences(to: after, metadataTables: StoreDump.metadataThatStays(in: before))
+        before.differences(to: after)
     }
 
     /// The metadata tables of a copy of `directory` whose Aidoku.sqlite Z_METADATA plist went through `change`.
