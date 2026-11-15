@@ -107,21 +107,18 @@ struct MangaCoverPageView: View {
                 }
             }
             .task {
-                (hasEditedCover, inLibrary) = await CoreDataManager.shared.container.performBackgroundTask { [manga, inLibrary] context in
-                    let hasEditedCover = CoreDataManager.shared.hasEditedKey(
+                let editedCover = await CoreDataManager.shared.container.performBackgroundTask { [manga] context in
+                    CoreDataManager.shared.hasEditedKey(
                         mangaId: manga.identifier,
                         key: .cover,
                         context: context
                     )
-                    var inLibrary = inLibrary
-                    if inLibrary == nil {
-                        inLibrary = CoreDataManager.shared.hasLibraryManga(
-                            mangaId: manga.identifier,
-                            context: context
-                        )
-                    }
-                    return (hasEditedCover, inLibrary)
                 }
+                var knownInLibrary = inLibrary
+                if knownInLibrary == nil {
+                    knownInLibrary = await DataRepositories.shared.library.contains(manga.identifier)
+                }
+                (hasEditedCover, inLibrary) = (editedCover, knownInLibrary)
                 await loadCovers()
             }
         }

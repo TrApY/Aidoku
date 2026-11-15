@@ -50,12 +50,7 @@ class CategorySelectViewController: UITableViewController {
     @objc func addCategory() {
         close()
         Task {
-            let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.hasLibraryManga(
-                    mangaId: self.manga.identifier,
-                    context: context
-                )
-            }
+            let inLibrary = await DataRepositories.shared.library.contains(manga.identifier)
             if !inLibrary {
                 await MangaManager.shared.addToLibrary(
                     manga: manga,

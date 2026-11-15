@@ -420,15 +420,7 @@ extension DownloadManager {
                     (
                         title: firstComicInfo.series,
                         coverUrl: mangaDirectory.appendingPathComponent("cover.png").absoluteString,
-                        isInLibrary: await withCheckedContinuation { continuation in
-                            CoreDataManager.shared.container.performBackgroundTask { context in
-                                let isInLibrary = CoreDataManager.shared.hasLibraryManga(
-                                    mangaId: .init(sourceKey: sourceId, mangaKey: extraData?.mangaKey ?? mangaId),
-                                    context: context
-                                )
-                                continuation.resume(returning: isInLibrary)
-                            }
-                        },
+                        isInLibrary: await DataRepositories.shared.library.contains(.init(sourceKey: sourceId, mangaKey: extraData?.mangaKey ?? mangaId)),
                         actualMangaId: extraData?.mangaKey ?? mangaId
                     )
                 } else {

@@ -200,15 +200,7 @@ extension DownloadedMangaView.ViewModel {
 
     /// Fetch updated library status without affecting the view
     private func fetchUpdatedMangaLibraryStatus() async -> Bool {
-        await withCheckedContinuation { continuation in
-            CoreDataManager.shared.container.performBackgroundTask { [manga] context in
-                let hasLibraryManga = CoreDataManager.shared.hasLibraryManga(
-                    mangaId: manga.mangaIdentifier,
-                    context: context
-                )
-                continuation.resume(returning: hasLibraryManga)
-            }
-        }
+        await DataRepositories.shared.library.contains(manga.mangaIdentifier)
     }
 
     /// Update manga library status without recreating the object

@@ -528,9 +528,7 @@ extension TrackerManager {
 
 extension TrackerManager {
     private func getChapters(manga: AidokuRunner.Manga) async -> [AidokuRunner.Chapter] {
-        let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.hasLibraryManga(mangaId: manga.identifier, context: context)
-        }
+        let inLibrary = await DataRepositories.shared.library.contains(manga.identifier)
         if inLibrary {
             // load data from db
             return await CoreDataManager.shared.container.performBackgroundTask { context in

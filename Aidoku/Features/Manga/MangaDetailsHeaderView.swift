@@ -437,12 +437,7 @@ struct MangaDetailsHeaderView: View {
 
     func toggleBookmarked() async {
         let mangaId = manga.identifier
-        let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.hasLibraryManga(
-                mangaId: mangaId,
-                context: context
-            )
-        }
+        let inLibrary = await DataRepositories.shared.library.contains(mangaId)
         if inLibrary {
             // remove from library
             await MangaManager.shared.removeFromLibrary(mangaId: mangaId)

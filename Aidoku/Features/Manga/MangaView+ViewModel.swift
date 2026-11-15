@@ -419,9 +419,7 @@ extension MangaView.ViewModel {
     // fetches manga data, from coredata if in library or from source if not
     func fetchData() async {
         let mangaId = manga.identifier
-        let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.hasLibraryManga(mangaId: mangaId, context: context)
-        }
+        let inLibrary = await DataRepositories.shared.library.contains(mangaId)
         if inLibrary {
             // load data from db
             let chapters = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
@@ -537,9 +535,7 @@ extension MangaView.ViewModel {
 
         let mangaId = manga.identifier
 
-        let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.hasLibraryManga(mangaId: mangaId, context: context)
-        }
+        let inLibrary = await DataRepositories.shared.library.contains(mangaId)
 
         do {
             let oldManga = self.manga
@@ -661,12 +657,7 @@ extension MangaView.ViewModel {
 
     private func loadBookmarked() async {
         let mangaId = manga.identifier
-        let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.hasLibraryManga(
-                mangaId: mangaId,
-                context: context
-            )
-        }
+        let inLibrary = await DataRepositories.shared.library.contains(mangaId)
         if bookmarked != inLibrary {
             bookmarked = inLibrary
         }
