@@ -456,6 +456,10 @@ extension SuwayomiSourceConversion {
         rewriteJSON(key: "Data.chaptersToBeDeleted", env: env) { value in
             rewriteSourceKeys(value, moved: map)
         }
+        // pending page updates: the chapter's source changes, the track id (`<parent>|<id>`) stays
+        rewriteJSON(key: "Tracker.pageTrackingState", env: env) { value in
+            rewriteSourceKeys(value, moved: map)
+        }
     }
 
     /// A library filter «source = parent» becomes one per server source with library manga (included ones

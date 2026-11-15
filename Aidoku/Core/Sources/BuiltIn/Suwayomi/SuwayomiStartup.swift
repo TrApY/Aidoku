@@ -45,6 +45,7 @@ actor SuwayomiStartup {
         running = nil
         lastReport = report
         if report.converted > 0 {
+            await TrackerManager.shared.reloadPageTrackingState()
             NotificationCenter.default.post(name: .updateLibrary, object: nil)
             NotificationCenter.default.post(name: .updateHistory, object: nil)
         }

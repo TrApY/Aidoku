@@ -775,6 +775,14 @@ extension TrackerManager {
         }
     }
 
+    /// The pending page updates were rewritten in the settings (SUWA-12 conversion): read them again so a
+    /// later save doesn't bring the old source keys back.
+    func reloadPageTrackingState() {
+        guard let stateKey else { return }
+        trackingState = UserDefaults.standard.data(forKey: stateKey)
+            .flatMap { try? JSONDecoder().decode(TrackingState.self, from: $0) } ?? .init()
+    }
+
     /// Waits for the page updates being sent (the reader's immediate save, inside a background task).
     func waitForPendingPageUpdates() async {
         await pageUpdateTask?.value
