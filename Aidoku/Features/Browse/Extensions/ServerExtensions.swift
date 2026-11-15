@@ -190,12 +190,13 @@ final class ServerExtensionsModel: ObservableObject {
         }
         do {
             let loaded = refresh ? try await api.fetch() : try await api.list()
-             // pendiente[B3#1]
+            // a newer load started meanwhile (an install ended, another refresh): this answer may be old
+            guard mine == generation else { return }
             extensions = loaded
             ServerExtensionLanguages.known = Array(Set(extensions.map(\.lang)))
             state = .loaded
         } catch {
-             // pendiente[B3#2]
+            guard mine == generation else { return }
             LogManager.logger.warn("Suwayomi extensions not loaded: \(error)")
             if extensions.isEmpty {
                 state = .failed
@@ -238,13 +239,16 @@ final class ServerExtensionsModel: ObservableObject {
 
     func updateAll() async {
         guard let api else { return }
-        let pending = extensions.filter { $0.isInstalled && $0.hasUpdate }.map(\.pkgName) // pendiente[B3#4]
+        guard !isUpdatingAll else { return } // a second tap while it runs
+        isUpdatingAll = true
+        defer { isUpdatingAll = false }
+        let pending = extensions.filter { $0.isInstalled && $0.hasUpdate && busy[$0.pkgName] == nil }.map(\.pkgName)
         guard !pending.isEmpty else { return }
         for pkgName in pending {
             busy[pkgName] = .update
         }
         do {
-            try await api.apply(.update, to: pending) // pendiente[B3#5]
+            try await limiter.run { try await api.apply(.update, to: pending) } // one of the 2 at once
             lastError = nil
         } catch {
             lastError = error.localizedDescription
