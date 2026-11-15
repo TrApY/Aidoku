@@ -102,4 +102,19 @@ struct MigrationHistoryTests {
         #expect(plan.completed.map(\.chapterKey) == ["n2.0", "n1.0"])
         #expect(plan.inProgress.isEmpty)
     }
+
+    @Test func anUnfinishedChapterWithOnlyAVolumeGoesToThatVolume() {
+        let old: [MigrationHistory.Entry] = [
+            .init(volume: 1, completed: true, dateRead: day(1)),
+            .init(volume: 2, completed: false, progress: 7, total: 40, dateRead: day(2))
+        ]
+        let new: [AidokuRunner.Chapter] = [3, 2, 1].map { .init(key: "v\($0)", volumeNumber: Float($0)) }
+        let plan = MigrationHistory.plan(old: old, newChapters: new, now: now)
+        #expect(plan.completed.map(\.chapterKey) == ["v1"])
+        #expect(plan.inProgress == [.init(chapterKey: "v2", progress: 7, total: 40, date: day(2), scrollPosition: nil)])
+        // the new source numbers its chapters: a volume alone doesn't say which one
+        let numbered: [AidokuRunner.Chapter] = [.init(key: "c9", chapterNumber: 9, volumeNumber: 2)]
+        #expect(MigrationHistory.plan(old: old, newChapters: numbered, now: now).inProgress.isEmpty)
+    }
+
 }

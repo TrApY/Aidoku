@@ -265,10 +265,12 @@ enum SuwayomiServerSources {
     }
 
     /// Sources to search in «Todo»: the selected ones, in the settings order and without NSFW if hidden.
+    /// Sources a search covers (pending: still only the selected ones).
     static func searchSources(
         selectedIds: [String],
         known: [SuwayomiServerSource],
-        allowNsfw: Bool
+        allowNsfw: Bool,
+        languages: Set<String>
     ) -> [SuwayomiServerSource] {
         selected(ids: selectedIds, from: available(known, allowNsfw: allowNsfw))
     }

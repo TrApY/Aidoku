@@ -93,8 +93,10 @@ actor SuwayomiSourceRunner: Runner {
         searchAllTimeout: TimeInterval = SuwayomiServerSources.searchAllTimeout,
         serverSourcesMaxAge: TimeInterval = 5 * 60,
         serverSourcesRetryDelay: TimeInterval = 60,
-        filterCacheMaxAge: TimeInterval = 10 * 60
+        filterCacheMaxAge: TimeInterval = 10 * 60,
+        searchLanguages: (@Sendable () -> Set<String>)? = nil
     ) {
+        self.searchLanguages = searchLanguages ?? { AppSettings.browse.languages.get() }
         self.sourceKey = sourceKey
         self.filterCacheMaxAge = filterCacheMaxAge
         self.searchAllTimeout = searchAllTimeout
@@ -108,6 +110,9 @@ actor SuwayomiSourceRunner: Runner {
         self.name = name
         self.server = server
     }
+
+    /// The languages enabled in Aidoku (the source list filter): a search covers the server sources in them.
+    private let searchLanguages: @Sendable () -> Set<String>
 
     private enum SortOption: CaseIterable {
         case unreadChapters
@@ -674,7 +679,7 @@ actor SuwayomiSourceRunner: Runner {
         guard !ids.isEmpty else { return [] }
         if let known = knownServerSources() {
             refreshServerSourcesInBackground()
-            return SuwayomiServerSources.searchSources(selectedIds: ids, known: known, allowNsfw: allowsNsfw())
+            return SuwayomiServerSources.searchSources(selectedIds: ids, known: known, allowNsfw: allowsNsfw(), languages: searchLanguages())
         }
         // never got the list: without it there's no order nor NSFW flag, so only the library;
         // after a failure, don't wait for it again on every search

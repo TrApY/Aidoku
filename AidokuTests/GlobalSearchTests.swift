@@ -97,6 +97,44 @@ struct GlobalSearchTests {
         let first = [GlobalSearchRow(source: plain, result: .init(entries: [manga("3", "Tres", source: "plain-gs")], hasNextPage: false))]
         #expect(GlobalSearch.bestMatch(for: otherSource, oldServerSourceId: nil, rows: first)?.key == "3")
     }
+
+    // MARK: Rows that say why they're empty (as Tachimanga)
+
+    @Test func emptyAndFailedSourcesKeepTheirRow() async {
+        let rows = GlobalSearch.rows(source: suwayomi, sections: SuwayomiServerSources.groupedSections(
+            library: [],
+            sources: [
+                (source: serverSource(olympus, "Olympus"), entries: [manga("2", "B")]),
+                (source: serverSource(emperor, "Emperor"), entries: []),
+                (source: serverSource("77", "Rota"), entries: nil)
+            ],
+            baseUrl: URL(string: "https://s.example/")!,
+            libraryTitle: "Biblioteca (Suwayomi)"
+        ))
+        // no library row without library results; the others keep theirs
+        #expect(rows.map(\.serverSourceId) == [olympus, emperor, "77"])
+        #expect(rows.map(\.status) == [.results, .noResults, .failed])
+        // any source of Aidoku too: one that fails gives a «No respondió» row, one without results «Sin resultados»
+        let failing = AidokuRunner.Source(key: "failing-gs", name: "Rota", version: 1, contentRating: .safe, runner: FailingRunner())
+        #expect(await GlobalSearch.rows(for: failing, query: "x").map(\.status) == [.failed])
+        #expect(await GlobalSearch.rows(for: plain, query: "x").map(\.status) == [.noResults])
+    }
+
+    @Test func excludingTheMigratedMangaDropsAnEmptyLibraryRow() {
+        let rows = GlobalSearch.rows(source: suwayomi, sections: [
+            section("library", [manga("1", "A")]),
+            section(olympus, [manga("1", "A")])
+        ])
+        let left = GlobalSearch.excluding(manga("1", "A").identifier, from: rows)
+        // the library only had the manga itself; its own source says «Sin resultados»
+        #expect(left.map(\.serverSourceId) == [olympus])
+        #expect(left.map(\.status) == [.noResults])
+    }
+
+    private func serverSource(_ id: String, _ name: String) -> SuwayomiServerSource {
+        .init(id: id, name: name, lang: "es", displayName: name, isNsfw: false, supportsLatest: true, iconUrl: nil)
+    }
+
 }
 
 /// A source that is never asked anything in these tests.
@@ -109,6 +147,23 @@ private final class NoRunner: AidokuRunner.Runner, @unchecked Sendable {
 
     func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
         manga
+    }
+
+    func getPageList(manga: AidokuRunner.Manga, chapter: AidokuRunner.Chapter) async throws -> [AidokuRunner.Page] {
+        []
+    }
+}
+
+/// A source that never answers.
+private final class FailingRunner: AidokuRunner.Runner, @unchecked Sendable {
+    let features = AidokuRunner.SourceFeatures()
+
+    func getSearchMangaList(query: String?, page: Int, filters: [AidokuRunner.FilterValue]) async throws -> AidokuRunner.MangaPageResult {
+        throw URLError(.timedOut)
+    }
+
+    func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
+        throw URLError(.timedOut)
     }
 
     func getPageList(manga: AidokuRunner.Manga, chapter: AidokuRunner.Chapter) async throws -> [AidokuRunner.Page] {

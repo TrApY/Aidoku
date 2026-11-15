@@ -90,6 +90,60 @@ struct MigrationEnvironment: @unchecked Sendable {
     var deleteDownloads: @Sendable (MangaIdentifier) async -> Void = { await DownloadManager.shared.deleteChapters(for: $0) }
     /// Bind the enhanced trackers (Suwayomi, Komga…) of the new entries afterwards.
     var bindEnhancedTrackers = true
+    /// Where the server work goes (nil: nobody waits for it).
+    var serverTasks: MigrationServerTasks?
 
     static var live: MigrationEnvironment { .init() }
+}
+
+/// Starts the server work of a migration (Suwayomi library, enhanced trackers) without making the
+/// migration wait; tests keep the tasks to wait for them or cancel them.
+final class MigrationServerTasks: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tasks: [Task<Void, Never>] = []
+
+    func add(_ task: Task<Void, Never>) {
+        lock.withLock { tasks.append(task) }
+    }
+
+    func waitAll() async {
+        for task in lock.withLock({ tasks }) {
+            await task.value
+        }
+    }
+
+    func cancelAll() {
+        lock.withLock { tasks }.forEach { $0.cancel() }
+    }
+}
+
+/// What a migration does with one track item of the old entry.
+enum MigrationTrackAction: Equatable, Sendable {
+    /// Leave it as it is (on the old entry).
+    case keep
+    /// Delete it (the old entry leaves the library and nothing can follow the new one).
+    case delete
+    /// Point it at the new entry; with `id`, also a new track id (Suwayomi: each server manga has its own).
+    case move(id: String?)
+    /// A new track item for the new entry with this id (the old entry keeps its own).
+    case copy(id: String)
+}
+
+extension MigrationOptions {
+    /// - suwayomiNewTrackId: the item is the Suwayomi tracker's; the new entry's track id if it's a server
+    ///   manga (nil: it isn't). A server tracker follows the entry whatever `tracking` says.
+    /// - newHasTrack: the new entry already has an item of that tracker.
+    /// - canTrackNew: the item's tracker exists and can track the new entry.
+    static func trackAction(
+        isSuwayomi: Bool,
+        trackId: String,
+        suwayomiNewTrackId: String?,
+        keepOriginal: Bool,
+        sameEntry: Bool,
+        newHasTrack: Bool,
+        tracking: Bool,
+        canTrackNew: Bool
+    ) -> MigrationTrackAction {
+        .keep // pending
+    }
 }

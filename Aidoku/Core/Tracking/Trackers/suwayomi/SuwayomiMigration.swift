@@ -75,6 +75,9 @@ extension SuwayomiApi {
 }
 
 extension SuwayomiTracker {
+    /// Max time of each server request of a migration (nobody waits for them).
+    static let migrationRequestTimeout: TimeInterval = 10
+
     /// Applies the plan on the server. Best effort: a failure is logged and never undoes the migration
     /// on the device (the new manga is put in the server library again by the tracker's next update).
     func applyMigration(

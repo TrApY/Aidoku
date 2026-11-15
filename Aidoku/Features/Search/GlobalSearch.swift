@@ -16,6 +16,8 @@ struct GroupedSearchSection: Sendable, Equatable {
     let title: String
     let iconUrl: URL?
     let entries: [AidokuRunner.Manga]
+    /// The source didn't answer (failed or too slow).
+    var failed = false
 
     var isLibrary: Bool { id == SuwayomiServerSources.searchInLibraryId }
     /// The server source the entries come from (nil for the library: any of them).
@@ -36,6 +38,21 @@ struct GlobalSearchRow: Identifiable, Equatable {
     let source: AidokuRunner.Source
     let result: AidokuRunner.MangaPageResult
     var section: GroupedSearchSection?
+    /// The source didn't answer (failed or too slow).
+    var failed = false
+
+    enum Status: Equatable {
+        case results
+        /// «Sin resultados»
+        case noResults
+        /// «No respondió»
+        case failed
+    }
+
+    var status: Status {
+        if failed || section?.failed == true { return .failed }
+        return result.entries.isEmpty ? .noResults : .results
+    }
 
     var id: String {
         if let section {

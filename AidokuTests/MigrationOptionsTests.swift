@@ -52,6 +52,38 @@ struct MigrationOptionsTests {
         #expect(MigrationOptions(keepOriginal: true).shouldDeleteDownloads(old: old, new: new, succeeded: true))
     }
 
+    @Test func whatHappensToEachTrackItem() {
+        func action(
+            suwayomi: Bool = false, newId: String? = nil, keep: Bool = false, same: Bool = false,
+            newHasTrack: Bool = false, tracking: Bool = true, canTrackNew: Bool = true
+        ) -> MigrationTrackAction {
+            MigrationOptions.trackAction(
+                isSuwayomi: suwayomi, trackId: suwayomi ? "s|753" : "a-1", suwayomiNewTrackId: newId,
+                keepOriginal: keep, sameEntry: same, newHasTrack: newHasTrack, tracking: tracking, canTrackNew: canTrackNew
+            )
+        }
+        // Suwayomi, server manga → server manga: the item follows the new manga with its own id
+        #expect(action(suwayomi: true, newId: "s|897") == .move(id: "s|897"))
+        #expect(action(suwayomi: true, newId: "s|897", newHasTrack: true) == .delete) // the new one has its own
+        #expect(action(suwayomi: true, newId: "s|897", keep: true) == .copy(id: "s|897"))
+        #expect(action(suwayomi: true, newId: "s|897", keep: true, newHasTrack: true) == .keep)
+        // whatever «Seguimiento» says (it's what keeps it in the server library)
+        #expect(action(suwayomi: true, newId: "s|897", tracking: false) == .move(id: "s|897"))
+        // the new one isn't a server manga: nothing to point at
+        #expect(action(suwayomi: true) == .delete)
+        #expect(action(suwayomi: true, keep: true) == .keep)
+        #expect(action(suwayomi: true, same: true) == .keep)
+        // other trackers (AniList, MAL…): moved or copied with the same id, only with «Seguimiento»
+        #expect(action() == .move(id: nil))
+        #expect(action(keep: true) == .copy(id: "a-1"))
+        #expect(action(tracking: false) == .delete)
+        #expect(action(keep: true, tracking: false) == .keep)
+        #expect(action(canTrackNew: false) == .delete)
+        #expect(action(newHasTrack: true) == .delete)
+        #expect(action(keep: true, newHasTrack: true) == .keep)
+        #expect(action(same: true, tracking: false) == .keep)
+    }
+
     @Test func theNoticeFollowsTheChoices() {
         #expect(MigrationOptions().noteKeys(count: 1) == ["MIGRATION_NOTE_REPLACE_DELETE"])
         #expect(MigrationOptions(deleteDownloads: false).noteKeys(count: 1) == ["MIGRATION_NOTE_REPLACE_KEEP_DOWNLOADS"])
@@ -263,9 +295,10 @@ extension SuwayomiTrackerLibraryTests {
     private var migrationNew: AidokuRunner.Manga { .init(sourceKey: key, key: "897", title: "Nuevo") }
     private var migrationChapters: [AidokuRunner.Chapter] { (1...3).reversed().map { .init(key: "c\($0)", chapterNumber: Float($0)) } }
 
-    private func runMigration(_ options: MigrationOptions) async {
+    @discardableResult
+    private func runMigration(_ options: MigrationOptions, serverDelay: TimeInterval = 0) async -> (ok: Bool, duration: TimeInterval) {
         UserDefaults.standard.set("https://suwayomi.example:4567", forKey: "\(key).server")
-        server.respond("GetInLibrary", .success(Data(#"{"data":{"manga":{"inLibrary":false}}}"#.utf8)))
+        server.respond("GetInLibrary", delay: serverDelay, .success(Data(#"{"data":{"manga":{"inLibrary":false}}}"#.utf8)))
         server.respond("AddToServerLibrary", .success(Data(#"{"data":{"updateManga":{"manga":{"id":897,"inLibrary":true}}}}"#.utf8)))
         server.respond("GetTrackState", .success(Data(#"{"data":{"manga":{"chapters":{"totalCount":3},"latestReadChapter":null,"highestNumberedChapter":{"chapterNumber":3}}}}"#.utf8)))
         server.respond("GetChaptersForTrackUpdate", .success(Data(#"{"data":{"chapters":{"nodes":[{"id":11,"chapterNumber":1}]}}}"#.utf8)))
@@ -278,14 +311,20 @@ extension SuwayomiTrackerLibraryTests {
             CoreDataManager.shared.createTrack(id: "\(old.sourceKey)|753", trackerId: "suwayomi", mangaId: migrationOld.identifier, title: nil, context: context)
             try? context.save()
         }
+        let tasks = MigrationServerTasks()
         let environment = MigrationEnvironment(
             trackerLookup: { _ in nil },
             suwayomiTracker: SuwayomiTracker(api: SuwayomiApi(transport: server.transport)),
             deleteDownloads: { _ in },
-            bindEnhancedTrackers: false
+            bindEnhancedTrackers: false,
+            serverTasks: tasks
         )
         let newChapters: [AidokuRunner.Chapter] = (1...3).reversed().map { .init(key: "d\($0)", chapterNumber: Float($0)) }
-        _ = await MangaManager.migrate(options: options, from: old, to: migrationNew, withChapters: newChapters, environment: environment)
+        let start = Date()
+        let ok = await MangaManager.migrate(options: options, from: old, to: migrationNew, withChapters: newChapters, environment: environment) != nil
+        let duration = Date().timeIntervalSince(start)
+        await tasks.waitAll()
+        return (ok, duration)
     }
 
     private func cleanUpMigration() async {
@@ -316,6 +355,19 @@ extension SuwayomiTrackerLibraryTests {
             CoreDataManager.shared.getTracks(mangaId: migrationNew.identifier, context: context).compactMap(\.id)
         }
         #expect(tracks == ["\(key)|897"])
+        await cleanUpMigration()
+    }
+
+    @Test func theMigrationDoesntWaitForTheServer() async {
+        // the server takes 3 s to answer: the migration ends before, the server work goes on afterwards
+        let (ok, duration) = await runMigration(MigrationOptions(), serverDelay: 3)
+        #expect(ok)
+        #expect(duration < 2)
+        #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
+        // every server request of a migration has a short timeout
+        let timeouts = ["GetInLibrary", "AddToServerLibrary", "RemoveFromServerLibrary"].flatMap { server.timeouts($0) }
+        #expect(!timeouts.isEmpty)
+        #expect(timeouts.allSatisfy { $0 <= SuwayomiTracker.migrationRequestTimeout })
         await cleanUpMigration()
     }
 

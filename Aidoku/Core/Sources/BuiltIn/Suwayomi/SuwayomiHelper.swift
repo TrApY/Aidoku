@@ -12,6 +12,9 @@ struct SuwayomiHelper: Sendable {
     /// Sends a GraphQL request; replaceable in tests.
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
+    /// A shorter timeout for every request made inside (work nobody waits for, as a migration's).
+    @TaskLocal static var requestTimeout: TimeInterval?
+
     let sourceKey: String
     var transport: Transport = { try await URLSession.shared.data(for: $0) }
 
@@ -59,7 +62,7 @@ struct SuwayomiHelper: Sendable {
         request.httpBody = try JSONEncoder().encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let timeout {
+        if let timeout = [timeout, Self.requestTimeout].compactMap({ $0 }).min() {
             request.timeoutInterval = timeout
         }
         authorize(request: &request)

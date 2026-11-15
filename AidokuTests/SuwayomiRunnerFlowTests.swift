@@ -103,7 +103,8 @@ private let nexus = "4086183896761281232" // flagged NSFW
         selected: [String]? = nil,
         searchAllTimeout: TimeInterval = 20,
         serverSourcesMaxAge: TimeInterval = 5 * 60,
-        filterCacheMaxAge: TimeInterval = 10 * 60
+        filterCacheMaxAge: TimeInterval = 10 * 60,
+        languages: Set<String> = ["es"]
     ) -> SuwayomiSourceRunner {
         let defaults = UserDefaults.standard
         defaults.set("https://suwayomi.example:4567", forKey: "\(key).server")
@@ -119,9 +120,16 @@ private let nexus = "4086183896761281232" // flagged NSFW
             transport: server.transport,
             searchAllTimeout: searchAllTimeout,
             serverSourcesMaxAge: serverSourcesMaxAge,
-            filterCacheMaxAge: filterCacheMaxAge
+            filterCacheMaxAge: filterCacheMaxAge,
+            searchLanguages: { languages }
         )
     }
+
+    /// Spanish sources of the «sources-es» answer a search covers (all Aidoku content ratings shown).
+    private let spanishSearchSources: Set<String> = [
+        olympus, nexus, emperor, "4982291187322723927", taurus, "6167683270485370369",
+        "6400665728063187402", "4938773340256184018", "8879875375160764811", "9008444898589746680"
+    ]
 
     private func cleanUp() {
         UserDefaults.standard.removeObject(forKey: "\(key).server")
@@ -219,23 +227,25 @@ private let nexus = "4086183896761281232" // flagged NSFW
         server.respond("FetchSourceManga", source: taurus, .success(try fixture("fetch-source-manga-taurus-search")))
     }
 
-    @Test func everythingSearchesLibraryAndSelectedSources() async throws {
+    @Test func everythingSearchesEveryServerSourceOfTheLanguages() async throws {
         defer { cleanUp() }
         try respondSpanishSources()
-        // chosen in another order than the setting's: results follow the setting (Olympus, Emperor, Taurus)
+        // marked in another order than the setting's: results follow the setting (Olympus, Emperor, Taurus)
         let runner = makeRunner(selected: [taurus, emperor, olympus])
         for filters in [[], [AidokuRunner.FilterValue.select(id: "searchIn", value: "")]] {
             let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: filters)
             let keys = page.entries.map(\.key)
-            try #require(keys.count == 1 + 10 + 25) // Emperor only returns 156, already in the library
+            try #require(keys.count == 1 + 10 + 25) // Emperor only returns 156, already in the library; the others fail
             #expect(keys.first == "156")
             #expect(Array(keys[1...10]) == (234...243).map(String.init))
             #expect(keys[11] == "343")
             #expect(Set(keys).count == keys.count)
             #expect(!page.hasNextPage)
         }
+        // every Spanish source of the server, marked or not, never the local source nor other languages
         let searched = server.variables("FetchSourceManga")
-        #expect(searched.count == 6)
+        #expect(searched.count == 2 * spanishSearchSources.count)
+        #expect(Set(searched.compactMap { $0["source"] as? String }) == spanishSearchSources)
         #expect(searched.allSatisfy { $0["type"] as? String == "SEARCH" && $0["query"] as? String == "solo" && $0["page"] as? Int == 1 })
         #expect(server.count("SearchManga") == 2)
     }
@@ -361,13 +371,13 @@ private let nexus = "4086183896761281232" // flagged NSFW
         defer { AppSettings.browse.contentRatings.set(ratings) }
 
         AppSettings.browse.contentRatings.set([.safe, .containsNsfw])
-        let shown = try await makeRunner(selected: [olympus, nexus]).getSearchMangaList(query: "solo", page: 1, filters: [])
-        #expect(shown.entries.count == 1 + 10 + 20)
+        let shown = try await makeRunner(selected: [olympus]).getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(shown.entries.count == 56) // 1 + 10 + 20 + 25
         #expect(shown.entries.contains { $0.key == "244" })
 
         AppSettings.browse.contentRatings.set([.safe])
         let hidden = try await makeRunner(selected: [olympus, nexus]).getSearchMangaList(query: "solo", page: 1, filters: [])
-        #expect(hidden.entries.count == 1 + 10)
+        #expect(hidden.entries.count == 1 + 10 + 25)
         #expect(!hidden.entries.contains { $0.key == "244" })
         #expect(server.variables("FetchSourceManga").filter { $0["source"] as? String == nexus }.count == 1)
     }
@@ -384,14 +394,44 @@ private let nexus = "4086183896761281232" // flagged NSFW
         #expect(page.entries.map(\.key) == ["156"])
     }
 
-    @Test func everythingWithoutSelectedSourcesIsTheLibrary() async throws {
+    @Test func everythingWithoutMarksSearchesEveryServerSource() async throws {
         defer { cleanUp() }
         try respondSpanishSources()
         let runner = makeRunner()
         let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [])
-        #expect(page.entries.map(\.key) == ["156"])
-        #expect(server.count("FetchSourceManga") == 0)
-        #expect(server.count("GetServerSources") == 0)
+        let keys = page.entries.map(\.key)
+        try #require(keys.count == 1 + 10 + 25)
+        #expect(keys.first == "156")
+        #expect(keys[1] == "234") // by name: Emperor (only 156), …, Olympus, Taurus
+        #expect(keys[11] == "343")
+        #expect(Set(server.variables("FetchSourceManga").compactMap { $0["source"] as? String }) == spanishSearchSources)
+    }
+
+    @Test func searchSourcesFollowTheLanguagesEnabledInAidoku() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        _ = try await makeRunner(languages: ["en"]).getSearchMangaList(query: "solo", page: 1, filters: [])
+        #expect(server.variables("FetchSourceManga").compactMap { $0["source"] as? String } == ["2499283573021220255"]) // MangaDex (EN)
+    }
+
+    @Test func searchCanGoToAnUnmarkedServerSource() async throws {
+        defer { cleanUp() }
+        try respondSpanishSources()
+        respondFilterData()
+        let runner = makeRunner(selected: [olympus])
+        let filters = try await runner.getSearchFilters()
+        let searchIn = try #require(filters.first { $0.id == "searchIn" })
+        guard case let .select(select) = searchIn.value else {
+            Issue.record("expected a select")
+            return
+        }
+        // «Buscar en» offers every source a search covers: the marked first, then by name
+        let ids = select.ids ?? []
+        #expect(Array(ids.prefix(3)) == ["", "library", olympus])
+        #expect(Set(ids.dropFirst(2)) == spanishSearchSources)
+        let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [.select(id: "searchIn", value: taurus)])
+        #expect(page.entries.count == 25)
+        #expect(server.variables("FetchSourceManga").map { $0["source"] as? String } == [taurus])
     }
 
     @Test func staleSearchSourceSearchesEverything() async throws {
@@ -399,8 +439,8 @@ private let nexus = "4086183896761281232" // flagged NSFW
         try respondSpanishSources()
         let runner = makeRunner(selected: [olympus])
         let page = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [.select(id: "searchIn", value: "999")])
-        #expect(page.entries.count == 11)
-        #expect(server.variables("FetchSourceManga").map { $0["source"] as? String } == [olympus])
+        #expect(page.entries.count == 1 + 10 + 25)
+        #expect(Set(server.variables("FetchSourceManga").compactMap { $0["source"] as? String }) == spanishSearchSources)
     }
 
     @Test func everythingWithoutTextIsTheLibraryAndListingStaysLibrary() async throws {
@@ -663,8 +703,12 @@ private let nexus = "4086183896761281232" // flagged NSFW
         try respondSpanishSources()
         let runner = makeRunner(selected: [taurus, emperor, olympus])
         let sections = try await runner.groupedSearch(query: "solo")
-        try #require(sections.count == 4)
-        #expect(sections.map(\.id) == ["library", olympus, emperor, taurus])
+        try #require(sections.count == 1 + spanishSearchSources.count)
+        // the marked ones in the setting order, then the rest by name
+        #expect(Array(sections.map(\.id).prefix(4)) == ["library", olympus, emperor, taurus])
+        let rest = sections.dropFirst(4).map(\.title)
+        #expect(rest == rest.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
+        #expect(Set(sections.dropFirst().map(\.id)) == spanishSearchSources)
         #expect(sections[0].entries.map(\.key) == ["156"])
         #expect(sections[0].title.contains("Test")) // «Biblioteca (<source name>)»
         #expect(sections[0].iconUrl == nil)
@@ -673,31 +717,33 @@ private let nexus = "4086183896761281232" // flagged NSFW
         #expect(sections[1].iconUrl == URL(string: "https://suwayomi.example:4567/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.olympusscanlation"))
         #expect(sections[2].entries.map(\.key) == ["156"]) // also in its own source
         #expect(sections[3].entries.count == 25)
+        #expect(sections.prefix(4).allSatisfy { !$0.failed })
+        #expect(sections.dropFirst(4).allSatisfy { $0.failed }) // not answered in this fake server
         #expect(sections.allSatisfy { $0.entries.allSatisfy { $0.sourceKey == key } })
     }
 
-    @Test func groupedSearchLeavesOutFailingSourcesAndAnEmptyLibrary() async throws {
+    @Test func groupedSearchKeepsEmptyAndFailedSourcesButNotAnEmptyLibrary() async throws {
         defer { cleanUp() }
         try respondSpanishSources()
         server.respond("SearchManga", .success(Data(#"{"data":{"mangas":{"nodes":[]}}}"#.utf8)))
         server.respond("FetchSourceManga", source: emperor, .failure(URLError(.timedOut)))
+        server.respond("FetchSourceManga", source: taurus, .success(Data(#"{"data":{"fetchSourceManga":{"mangas":[],"hasNextPage":false}}}"#.utf8)))
         let runner = makeRunner(selected: [olympus, emperor, taurus])
         let sections = try await runner.groupedSearch(query: "solo")
-        #expect(sections.map(\.id) == [olympus, taurus])
-        // a source with no results keeps its section (the row shows nothing, as any other source)
-        server.respond("FetchSourceManga", source: taurus, .success(Data(#"{"data":{"fetchSourceManga":{"mangas":[],"hasNextPage":false}}}"#.utf8)))
-        let again = try await runner.groupedSearch(query: "solo")
-        #expect(again.map(\.id) == [olympus, taurus])
-        #expect(again.last?.entries.isEmpty == true)
+        #expect(Array(sections.map(\.id).prefix(3)) == [olympus, emperor, taurus]) // no library row
+        try #require(sections.count >= 3)
+        #expect(sections[1].failed) // «No respondió»
+        #expect(!sections[2].failed && sections[2].entries.isEmpty) // «Sin resultados»
     }
 
-    @Test func groupedSearchWithoutSourcesIsTheLibrary() async throws {
+    @Test func groupedSearchWithoutMarksCoversEveryServerSource() async throws {
         defer { cleanUp() }
         try respondSpanishSources()
         let runner = makeRunner(selected: [])
         let sections = try await runner.groupedSearch(query: "solo")
-        #expect(sections.map(\.id) == ["library"])
-        #expect(server.count("FetchSourceManga") == 0)
+        #expect(sections.first?.id == "library")
+        #expect(Set(sections.dropFirst().map(\.id)) == spanishSearchSources)
+        #expect(server.count("FetchSourceManga") == spanishSearchSources.count)
     }
 
     @Test func serverSourceOfAManga() async throws {

@@ -292,9 +292,26 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         let known = try JSONDecoder().decode(SuwayomiSourcesResponse.self, from: fixture("sources-es")).data.sources.nodes
         let olympus = "1596411039134168890", emperor = "4562754350961964148", taurus = "5157867187592331768"
         let selected = [taurus, emperor, olympus, "0", "999"]
-        #expect(SuwayomiServerSources.searchSources(selectedIds: selected, known: known, allowNsfw: true).map(\.id) == [olympus, emperor, taurus])
-        #expect(SuwayomiServerSources.searchSources(selectedIds: selected, known: known, allowNsfw: false).map(\.id) == [olympus, taurus])
-        #expect(SuwayomiServerSources.searchSources(selectedIds: [], known: known, allowNsfw: true).isEmpty)
+        func ids(_ selected: [String], nsfw: Bool = true, _ languages: Set<String>) -> [String] {
+            SuwayomiServerSources.searchSources(selectedIds: selected, known: known, allowNsfw: nsfw, languages: languages).map(\.id)
+        }
+        func names(_ ids: [String]) -> [String] { ids.compactMap { id in known.first { $0.id == id }?.displayName } }
+        // every source of the languages: the marked ones first, in the setting order, then the rest by name
+        let all = ids(selected, ["es"])
+        #expect(Array(all.prefix(3)) == [olympus, emperor, taurus])
+        let rest = names(Array(all.dropFirst(3)))
+        #expect(rest == rest.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
+        #expect(Set(rest) == ["Inmortal Scan (ES)", "InsanosScan (ES)", "Manga Crab (ES)", "MangaDex (ES)", "MangaDex (ES-419)", "MHScans (ES)", "NexusScanlation (ES)"])
+        // without marks: all of them by name
+        let unmarked = names(ids([], ["es"]))
+        #expect(unmarked.count == 10 && unmarked == unmarked.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
+        // NSFW hidden as before
+        #expect(Set(names(ids(selected, nsfw: false, ["es"]))) == ["Olympus Scanlation (ES)", "Taurus Fansub (ES)", "Inmortal Scan (ES)", "InsanosScan (ES)", "Manga Crab (ES)", "MHScans (ES)"])
+        // other languages; «multi» includes the all-languages sources; nothing enabled: no filter; never the local source
+        #expect(names(ids([], ["en"])) == ["MangaDex (EN)"])
+        #expect(names(ids([], ["en", "multi"])).sorted() == ["MangaDex (ALL)", "MangaDex (EN)"])
+        #expect(ids([], []).count == known.count - 1)
+        #expect(!ids([], []).contains("0"))
     }
 
     @Test func everythingResultsKeepOrderWithoutDuplicates() {
