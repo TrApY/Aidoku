@@ -66,15 +66,8 @@ import Testing
         "Aidoku/Features/Settings/Downloads/DownloadedMangaView+ViewModel.swift",
         "Aidoku/Features/Settings/SettingsTrackingView.swift",
         "Aidoku/Features/Settings/SettingsView.swift",
-        "Aidoku/Features/Source/Home/HomeComponents/HomeBigScrollerView.swift",
-        "Aidoku/Features/Source/Home/HomeComponents/HomeChapterListView.swift",
-        "Aidoku/Features/Source/Home/HomeComponents/HomeListView.swift",
-        "Aidoku/Features/Source/Home/HomeComponents/HomeScrollerView.swift",
         "Aidoku/Features/Source/Legacy/SourceViewController.swift",
         "Aidoku/Features/Source/Legacy/SourceViewModel.swift",
-        "Aidoku/Features/Source/MangaListViewController.swift",
-        "Aidoku/Features/Source/SourceHomeContentView.swift",
-        "Aidoku/Features/Source/SourceSearchViewModel.swift",
         "Aidoku/Features/Updates/MangaUpdatesView.swift",
     ]
 
