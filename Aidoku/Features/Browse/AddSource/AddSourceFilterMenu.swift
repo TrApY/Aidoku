@@ -54,14 +54,10 @@ struct AddSourceFilterMenu: View {
             }
             Menu {
                 ForEach(languages) { language in
-                    let code = SourceLanguage.normalized(language.id)
+                    let code = BrowseLanguages.code(language.id)
                     let isEnabled = selectedLanguages.contains(code)
                     Button {
-                        if isEnabled {
-                            selectedLanguages.remove(code)
-                        } else {
-                            selectedLanguages.insert(code)
-                        }
+                        selectedLanguages = BrowseLanguages.toggled(code, in: selectedLanguages)
                     } label: {
                         HStack {
                             Text(language.title)
@@ -90,23 +86,26 @@ struct AddSourceFilterMenu: View {
             NotificationCenter.default.post(name: .filterExternalSources, object: nil)
         }
         .onChange(of: selectedLanguages) { _ in
-            AppSettings.browse.languages.set(selectedLanguages)
-            NotificationCenter.default.post(name: .filterExternalSources, object: nil)
+            BrowseLanguages.set(selectedLanguages)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .browseLanguagesChanged)) { _ in
+            let active = BrowseLanguages.active()
+            if active != selectedLanguages {
+                selectedLanguages = active
+            }
         }
         .task {
             guard languages.isEmpty else { return }
 
-            var languageCodes = await SourceManager.shared.getSourceListLanguages().sorted {
-                SourceLanguage.compare($0, $1) == .orderedAscending
-            }
+            // the same list as the language button of Explorar
+            let installed = await SourceManager.shared.getSourceInfos(listedOnly: true).map(\.languages)
+            let languageCodes = BrowseLanguages.options(
+                installed: installed,
+                external: await SourceManager.shared.getSourceListLanguages(),
+                server: ServerExtensionLanguages.known
+            )
 
-            // bring local language to top
-            languageCodes.removeAll { $0 == Locale.current.languageCode || $0 == "multi" || $0 == "All" }
-            if let code = Locale.current.languageCode {
-                languageCodes.insert(code, at: 0)
-            }
-
-            self.languages = ([SourceLanguage.multi] + languageCodes).map { code in
+            self.languages = languageCodes.map { code in
                 .init(
                     id: code,
                     title: SourceLanguage.displayName(for: code)

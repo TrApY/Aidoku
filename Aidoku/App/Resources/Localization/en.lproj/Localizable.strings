@@ -919,6 +919,26 @@
 // SUWA-12
 "SUWAYOMI_POPULAR" = "Popular";
 "SUWAYOMI_LATEST" = "Latest";
+"EXPLORE_SOURCES" = "Sources";
+"EXPLORE_EXTENSIONS" = "Extensions";
+"EXPLORE_MIGRATE" = "Migrate";
+"RECENTLY_USED" = "Recently Used";
+"EXTENSIONS_UPDATES" = "Pending Updates";
+"EXTENSIONS_UPDATE_ALL" = "Update All";
+"EXTENSIONS_INSTALLED" = "Installed";
+"EXTENSIONS_AVAILABLE_%@" = "Available · %@";
+"EXTENSIONS_SEARCH" = "Search Extensions";
+"EXTENSIONS_NONE" = "No extensions match.";
+"EXTENSIONS_NO_CONNECTION" = "No Suwayomi server is set up. Set one up to see and install its extensions.";
+"EXTENSIONS_SERVER_DOWN" = "The Suwayomi server couldn't be reached.";
+"EXTENSION_INSTALL" = "Install";
+"EXTENSION_UPDATE" = "Update";
+"EXTENSION_UNINSTALL_CONFIRM_%@" = "Uninstall “%@” from the server? Its sources will leave Browse.";
+"EXTENSION_UNINSTALL_LIBRARY_TITLE" = "It has manga in your library";
+"EXTENSION_UNINSTALL_LIBRARY_%@_%i" = "“%1$@” has %2$i manga in your library. They stay in the library, but without their source they won't update until you install it again or migrate them.";
+"BADGE_18" = "18+";
+"BADGE_18_PARTLY" = "Partly 18+";
+"BADGE_MIXED" = "Mixed";
 "SUWAYOMI_SERVER" = "Suwayomi Server";
 "SUWAYOMI_CONFIGURE" = "Set Up";
 "SUWAYOMI_INVALID_SERVER" = "The address must start with http:// or https://.";

@@ -17,6 +17,9 @@ struct MigrateSourcesView: View {
         let source: AidokuRunner.Source?
     }
 
+    /// Inside Explorar › Migrar (no title of its own).
+    var embedded = false
+
     @State private var isLoading = true
     @State private var sources: [MigrateSourceInfo] = []
     @State private var manga: [String: [AidokuRunner.Manga]] = [:]
@@ -49,11 +52,14 @@ struct MigrateSourcesView: View {
                 ProgressView().progressViewStyle(.circular)
             }
         }
-        .navigationTitle(NSLocalizedString("MIGRATE_SOURCES"))
+        .navigationTitle(embedded ? "" : NSLocalizedString("MIGRATE_SOURCES"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadSources()
             isLoading = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .updateLibrary)) { _ in
+            Task { await loadSources() }
         }
     }
 }
@@ -92,14 +98,7 @@ extension MigrateSourcesView {
     func loadSources() async {
         manga = await CoreDataManager.shared.container.performBackgroundTask { context in
             let objects = CoreDataManager.shared.getLibraryManga(context: context)
-            var manga: [String: [AidokuRunner.Manga]] = [:]
-            for object in objects {
-                guard let mangaObject = object.manga else { continue }
-                var mangaArray = manga[mangaObject.sourceId] ?? []
-                mangaArray.append(mangaObject.toNewManga())
-                manga[mangaObject.sourceId] = mangaArray
-            }
-            return manga
+            return Self.group(objects.compactMap { $0.manga?.toNewManga() })
         }
         sources = manga.keys
             .map { id in
@@ -120,5 +119,12 @@ extension MigrateSourcesView {
                 }
                 return (lhs.name ?? "").localizedCaseInsensitiveCompare(rhs.name ?? "") == .orderedAscending
             }
+    }
+}
+
+extension MigrateSourcesView {
+    /// The library by source key: each Suwayomi server source on its own.
+    static func group(_ manga: [AidokuRunner.Manga]) -> [String: [AidokuRunner.Manga]] {
+        ["": manga] // pendiente
     }
 }

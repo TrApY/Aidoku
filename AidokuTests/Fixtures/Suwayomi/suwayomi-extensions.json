@@ -1,0 +1,320 @@
+{
+ "data": {
+  "extensions": {
+   "nodes": [
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.emperorscan",
+     "name": "Emperor Scan",
+     "lang": "es",
+     "versionName": "1.6.75",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.emperorscan",
+     "contentWarning": "MIXED",
+     "source": {
+      "nodes": [
+       {
+        "id": "4562754350961964148"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.inmortalscan",
+     "name": "Inmortal Scan",
+     "lang": "es",
+     "versionName": "1.6.63",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.inmortalscan",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": [
+       {
+        "id": "8879875375160764811"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.insanosscan",
+     "name": "InsanosScan",
+     "lang": "es",
+     "versionName": "1.6.1",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.insanosscan",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": [
+       {
+        "id": "4982291187322723927"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.mangacrab",
+     "name": "Manga Crab",
+     "lang": "es",
+     "versionName": "1.6.26",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.mangacrab",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": [
+       {
+        "id": "6167683270485370369"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.mhscans",
+     "name": "MHScans",
+     "lang": "es",
+     "versionName": "1.6.71",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.mhscans",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": [
+       {
+        "id": "9008444898589746680"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.nexusscanlation",
+     "name": "NexusScanlation",
+     "lang": "es",
+     "versionName": "1.6.8",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.nexusscanlation",
+     "contentWarning": "NSFW",
+     "source": {
+      "nodes": [
+       {
+        "id": "4086183896761281232"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.olympusscanlation",
+     "name": "Olympus Scanlation",
+     "lang": "es",
+     "versionName": "1.6.4",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.olympusscanlation",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": [
+       {
+        "id": "1596411039134168890"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.taurusfansub",
+     "name": "Taurus Fansub",
+     "lang": "es",
+     "versionName": "1.6.69",
+     "isInstalled": true,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.taurusfansub",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": [
+       {
+        "id": "5157867187592331768"
+       }
+      ]
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.anzmanga",
+     "name": "AnzManga",
+     "lang": "es",
+     "versionName": "1.6.1",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.anzmanga",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.barmanga",
+     "name": "BarManga",
+     "lang": "es",
+     "versionName": "1.6.70",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.barmanga",
+     "contentWarning": "MIXED",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.lectormangalat",
+     "name": "LectorManga.lat",
+     "lang": "es",
+     "versionName": "1.6.1",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.lectormangalat",
+     "contentWarning": "MIXED",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.es.lectorxd",
+     "name": "LectorXD",
+     "lang": "es",
+     "versionName": "1.6.5",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.es.lectorxd",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.all.ahottie",
+     "name": "AHottie",
+     "lang": "all",
+     "versionName": "1.6.5",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.ahottie",
+     "contentWarning": "NSFW",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.all.ahrigallery",
+     "name": "Ahri Gallery",
+     "lang": "all",
+     "versionName": "1.6.1",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.ahrigallery",
+     "contentWarning": "NSFW",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.all.akuma",
+     "name": "Akuma",
+     "lang": "all",
+     "versionName": "1.6.11",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.akuma",
+     "contentWarning": "NSFW",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.all.mangataro",
+     "name": "MangaTaro",
+     "lang": "en",
+     "versionName": "1.6.1",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangataro",
+     "contentWarning": "MIXED",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.all.mangaup",
+     "name": "Manga UP!",
+     "lang": "en",
+     "versionName": "1.6.4",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mangaup",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.all.mango",
+     "name": "Mango",
+     "lang": "en",
+     "versionName": "1.6.1",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.all.mango",
+     "contentWarning": "SAFE",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.pt.acervoeremita",
+     "name": "AcervoEremita",
+     "lang": "pt-BR",
+     "versionName": "1.6.3",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.pt.acervoeremita",
+     "contentWarning": "MIXED",
+     "source": {
+      "nodes": []
+     }
+    },
+    {
+     "pkgName": "eu.kanade.tachiyomi.extension.pt.acervohentai",
+     "name": "Acervo Hentai",
+     "lang": "pt-BR",
+     "versionName": "1.6.59",
+     "isInstalled": false,
+     "hasUpdate": false,
+     "isObsolete": false,
+     "iconUrl": "/api/v1/extension/icon/eu.kanade.tachiyomi.extension.pt.acervohentai",
+     "contentWarning": "NSFW",
+     "source": {
+      "nodes": []
+     }
+    }
+   ]
+  }
+ }
+}

@@ -19,6 +19,17 @@ class BrowseViewController: BaseTableViewController {
 
     private var hasAppliedInitialSnapshot = false
 
+    // SUWA-12: Fuentes / Extensiones / Migrar
+    private let tabHeader = UIView()
+    private lazy var tabControl = UISegmentedControl(items: [
+        NSLocalizedString("EXPLORE_SOURCES"),
+        NSLocalizedString("EXPLORE_EXTENSIONS"),
+        NSLocalizedString("EXPLORE_MIGRATE")
+    ])
+    private var tabChildren: [Int: UIViewController] = [:]
+    private var sourcesSearchController: UISearchController?
+    private static let tabHeaderHeight: CGFloat = 48
+
     override var tableViewStyle: UITableView.Style {
         .grouped
     }
@@ -36,6 +47,15 @@ class BrowseViewController: BaseTableViewController {
         searchController.searchResultsUpdater = self
         searchController.obscuresBackgroundDuringPresentation = false
         navigationItem.searchController = searchController
+        sourcesSearchController = searchController
+
+        // tabs (Tachimanga): a fixed bar under the navigation bar
+        tabControl.selectedSegmentIndex = 0
+        tabControl.addTarget(self, action: #selector(tabChanged), for: .valueChanged)
+        tabControl.translatesAutoresizingMaskIntoConstraints = false
+        tabHeader.backgroundColor = .systemBackground
+        tabHeader.translatesAutoresizingMaskIntoConstraints = false
+        tabHeader.addSubview(tabControl)
 
         // toolbar buttons
         let deleteButton = UIBarButtonItem(
@@ -87,6 +107,9 @@ class BrowseViewController: BaseTableViewController {
         emptyStackView.isHidden = true
         emptyStackView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(emptyStackView)
+        view.addSubview(tabHeader)
+        tableView.contentInset.top = Self.tabHeaderHeight
+        tableView.verticalScrollIndicatorInsets.top = Self.tabHeaderHeight
 
         // load data
         Task {
@@ -112,7 +135,15 @@ class BrowseViewController: BaseTableViewController {
 
         NSLayoutConstraint.activate([
             emptyStackView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            emptyStackView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            emptyStackView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+
+            tabHeader.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tabHeader.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabHeader.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabHeader.heightAnchor.constraint(equalToConstant: Self.tabHeaderHeight),
+            tabControl.leadingAnchor.constraint(equalTo: tabHeader.layoutMarginsGuide.leadingAnchor),
+            tabControl.trailingAnchor.constraint(equalTo: tabHeader.layoutMarginsGuide.trailingAnchor),
+            tabControl.centerYAnchor.constraint(equalTo: tabHeader.centerYAnchor)
         ])
     }
 
@@ -128,6 +159,12 @@ class BrowseViewController: BaseTableViewController {
                     self.viewModel.search(query: query)
                 }
                 self.updateDataSource()
+            }
+        }
+        // active languages changed (Explorar, Añadir fuente)
+        addObserver(forName: .browseLanguagesChanged) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateDataSource()
             }
         }
         // source lists added/removed
@@ -160,6 +197,9 @@ class BrowseViewController: BaseTableViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.isToolbarHidden = true
+        if hasAppliedInitialSnapshot {
+            updateDataSource() // «Usado recientemente»
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -322,7 +362,7 @@ extension BrowseViewController {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         let sectionId = dataSource.sectionIdentifier(for: indexPath.section)
         guard !isEditing else {
-            if sectionId != .pinned && sectionId != .installed {
+            if !(sectionId?.listsSources ?? false) {
                 tableView.deselectRow(at: indexPath, animated: false)
             } else {
                 updateToolbar()
@@ -330,7 +370,7 @@ extension BrowseViewController {
             return
         }
         if
-            sectionId == .installed || sectionId == .pinned,
+            sectionId?.listsSources == true,
             let item = dataSource.itemIdentifier(for: indexPath),
             !item.info.disabled,
             let source = SourceManager.shared.store.source(for: item.info.sourceId)
@@ -340,6 +380,7 @@ extension BrowseViewController {
             } else {
                 NewSourceViewController(source: source)
             }
+            SourceRecents.record(item.info.sourceId)
             navigationController?.pushViewController(vc, animated: true)
         }
         tableView.deselectRow(at: indexPath, animated: true)
@@ -366,8 +407,10 @@ extension BrowseViewController {
                 config.title = NSLocalizedString("UPDATES")
             case .pinned:
                 config.title = NSLocalizedString("PINNED")
-            case .installed:
-                config.title = NSLocalizedString("INSTALLED")
+            case .recent:
+                config.title = NSLocalizedString("RECENTLY_USED")
+            case let .language(code):
+                config.title = SourceLanguage.displayName(for: code)
             case .external:
                 config.title = NSLocalizedString("EXTERNAL")
         }
@@ -383,7 +426,8 @@ extension BrowseViewController {
         guard
             !tableView.isEditing, // do not allow context menu when the sources are being edited
             case let section = dataSource.sectionIdentifier(for: indexPath.section),
-            section == .installed || section == .pinned,
+            let section,
+            section.listsSources,
             let item = dataSource.itemIdentifier(for: indexPath)
         else {
             return nil
@@ -431,9 +475,17 @@ extension BrowseViewController {
                 self.uninstall(sourceKeys: [info.sourceId])
             }
 
+            let settingsAction = UIAction(
+                title: NSLocalizedString("SOURCE_SETTINGS"),
+                image: UIImage(systemName: "gearshape")
+            ) { _ in
+                self.openSettings(sourceKey: info.sourceId)
+            }
+
             return UIMenu(title: "", children: [
                 editAction,
                 pinAction,
+                settingsAction,
                 disableAction,
                 uninstallAction
             ])
@@ -443,11 +495,22 @@ extension BrowseViewController {
 
 // MARK: - Data Source
 extension BrowseViewController {
-    enum Section: Int {
+    enum Section: Hashable {
         case pinned
         case updates
-        case installed
+        /// The last sources opened (SUWA-12 B1).
+        case recent
+        /// The installed sources of a language (SUWA-12 B1).
+        case language(String)
         case external
+
+        /// Sections of installed sources (open, pin, edit).
+        var listsSources: Bool {
+            switch self {
+                case .pinned, .recent, .language: true
+                case .updates, .external: false
+            }
+        }
     }
 
     struct SourceItem: Hashable {
@@ -512,8 +575,7 @@ extension BrowseViewController {
         }
 
         override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-            let identifier = sectionIdentifier(for: indexPath.section)
-            return identifier == .pinned || identifier == .installed
+            sectionIdentifier(for: indexPath.section)?.listsSources ?? false
         }
     }
 
@@ -548,9 +610,22 @@ extension BrowseViewController {
             snapshot.appendSections([.pinned])
             snapshot.appendItems(sourceItems(viewModel.pinnedSources, in: .pinned), toSection: .pinned)
         }
-        if !viewModel.installedSources.isEmpty {
-            snapshot.appendSections([.installed])
-            snapshot.appendItems(sourceItems(viewModel.installedSources, in: .installed), toSection: .installed)
+        // by language, with the last ones used first (SUWA-12 B1)
+        let isSearching = !(sourcesSearchController?.searchBar.text ?? "").isEmpty
+        let groups = BrowseSourceGroups.make(
+            installed: viewModel.installedSources,
+            pinnedKeys: Set(viewModel.pinnedSources.map(\.sourceId)),
+            recents: SourceRecents.load(),
+            active: BrowseLanguages.active(),
+            showRecent: !isSearching
+        )
+        if !groups.recent.isEmpty {
+            snapshot.appendSections([.recent])
+            snapshot.appendItems(sourceItems(groups.recent, in: .recent), toSection: .recent)
+        }
+        for group in groups.languages where !group.sources.isEmpty {
+            snapshot.appendSections([.language(group.code)])
+            snapshot.appendItems(sourceItems(group.sources, in: .language(group.code)), toSection: .language(group.code))
         }
 //        if !viewModel.externalSources.isEmpty {
 //            snapshot.appendSections([.external])
@@ -587,8 +662,8 @@ extension BrowseViewController {
         }
 
         Task { @MainActor in
-            if navigationItem.searchController?.searchBar.text?.isEmpty ?? true {
-                emptyStackView.isHidden = !snapshot.itemIdentifiers.isEmpty
+            if sourcesSearchController?.searchBar.text?.isEmpty ?? true {
+                emptyStackView.isHidden = !snapshot.itemIdentifiers.isEmpty || tabControl.selectedSegmentIndex != 0
             }
             checkUpdateCount()
         }
@@ -601,8 +676,8 @@ extension BrowseViewController {
         if !viewModel.updatesSources.isEmpty {
             if snapshot.indexOfSection(.pinned) != nil {
                 snapshot.insertSections([.updates], beforeSection: .pinned)
-            } else if snapshot.indexOfSection(.installed) != nil {
-                snapshot.insertSections([.updates], beforeSection: .installed)
+            } else if let first = snapshot.sectionIdentifiers.first(where: { $0.listsSources }) {
+                snapshot.insertSections([.updates], beforeSection: first)
             } else {
                 snapshot.appendSections([.updates])
             }
@@ -617,7 +692,7 @@ extension BrowseViewController {
         dataSource.apply(snapshot)
 
         Task { @MainActor in
-            emptyStackView.isHidden = !snapshot.itemIdentifiers.isEmpty
+            emptyStackView.isHidden = !snapshot.itemIdentifiers.isEmpty || tabControl.selectedSegmentIndex != 0
             checkUpdateCount()
         }
     }
@@ -652,21 +727,21 @@ extension BrowseViewController {
                 addSourceBarButton.sharesBackground = false
             }
 
-            let migrateSourcesBarButton = UIBarButtonItem(
-                image: UIImage(systemName: "arrow.left.arrow.right"),
+            let languagesBarButton = UIBarButtonItem(
+                image: UIImage(systemName: "character.book.closed"),
                 style: .plain,
                 target: self,
-                action: #selector(openMigrateSourcePage)
+                action: #selector(openLanguages)
             )
-            migrateSourcesBarButton.title = NSLocalizedString("MIGRATE_SOURCES")
+            languagesBarButton.title = NSLocalizedString("LANGUAGES")
+            languagesBarButton.accessibilityLabel = NSLocalizedString("LANGUAGES")
             if #available(iOS 26.0, *) {
-                migrateSourcesBarButton.sharesBackground = false
+                languagesBarButton.sharesBackground = false
             }
 
-            navigationItem.rightBarButtonItems = [
-                addSourceBarButton,
-                migrateSourcesBarButton
-            ]
+            navigationItem.rightBarButtonItems = tabControl.selectedSegmentIndex == 0
+                ? [addSourceBarButton, languagesBarButton]
+                : [languagesBarButton]
         }
     }
 
@@ -726,5 +801,105 @@ extension BrowseViewController: @MainActor SourceCellDelegate {
         )
         alert.addAction(UIAlertAction(title: NSLocalizedString("OK"), style: .cancel) { _ in })
         present(alert, animated: true)
+    }
+}
+
+// MARK: - SUWA-12: tabs, languages, pin and settings
+extension BrowseViewController {
+    @objc func tabChanged() {
+        let index = tabControl.selectedSegmentIndex
+        if isEditing {
+            setEditing(false, animated: false)
+        }
+        for (key, child) in tabChildren {
+            child.view.isHidden = key != index
+        }
+        tableView.isHidden = index != 0
+        navigationItem.searchController = index == 0 ? sourcesSearchController : nil
+        if index == 0 {
+            emptyStackView.isHidden = !dataSource.snapshot().itemIdentifiers.isEmpty
+        } else {
+            emptyStackView.isHidden = true
+            showTab(index)
+        }
+        updateNavbar()
+    }
+
+    private func showTab(_ index: Int) {
+        guard tabChildren[index] == nil else { return }
+        let path = NavigationCoordinator(rootViewController: self)
+        let child: UIViewController = index == 1
+            ? UIHostingController(rootView: ServerExtensionsView().environmentObject(path))
+            : UIHostingController(rootView: MigrateSourcesView(embedded: true).environmentObject(path))
+        addChild(child)
+        child.view.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(child.view, belowSubview: tabHeader)
+        NSLayoutConstraint.activate([
+            child.view.topAnchor.constraint(equalTo: tabHeader.bottomAnchor),
+            child.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            child.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            child.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        child.didMove(toParent: self)
+        tabChildren[index] = child
+    }
+
+    @objc func openLanguages() {
+        let viewController = SwiftUINavigationViewController(rootView: BrowseLanguagesView())
+        viewController.modalPresentationStyle = .pageSheet
+        present(viewController, animated: true)
+    }
+
+    func openSettings(sourceKey: String) {
+        guard let source = SourceManager.shared.store.source(for: sourceKey) else { return }
+        let viewController = SwiftUINavigationViewController(rootView: SourceSettingsView(source: source))
+        viewController.modalPresentationStyle = .pageSheet
+        present(viewController, animated: true)
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+        guard
+            !tableView.isEditing,
+            let section = dataSource.sectionIdentifier(for: indexPath.section),
+            section.listsSources,
+            let item = dataSource.itemIdentifier(for: indexPath)
+        else { return nil }
+        let isPinned = section == .pinned
+        let pin = UIContextualAction(
+            style: .normal,
+            title: NSLocalizedString(isPinned ? "UNPIN" : "PIN")
+        ) { _, _, done in
+            if isPinned {
+                SourceManager.shared.unpin(sourceKey: item.info.sourceId)
+            } else {
+                SourceManager.shared.pin(sourceKey: item.info.sourceId)
+            }
+            done(true)
+        }
+        pin.image = UIImage(systemName: isPinned ? "pin.slash.fill" : "pin.fill")
+        pin.backgroundColor = .systemOrange
+        return UISwipeActionsConfiguration(actions: [pin])
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+        guard
+            !tableView.isEditing,
+            let section = dataSource.sectionIdentifier(for: indexPath.section),
+            section.listsSources,
+            let item = dataSource.itemIdentifier(for: indexPath)
+        else { return nil }
+        let settings = UIContextualAction(style: .normal, title: NSLocalizedString("SOURCE_SETTINGS")) { _, _, done in
+            self.openSettings(sourceKey: item.info.sourceId)
+            done(true)
+        }
+        settings.image = UIImage(systemName: "gearshape.fill")
+        settings.backgroundColor = .systemGray
+        return UISwipeActionsConfiguration(actions: [settings])
     }
 }

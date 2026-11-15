@@ -179,7 +179,7 @@ class SourceTableViewCell: UITableViewCell {
 
         titleLabel.text = info.name
         versionLabel.text = "v" + String(info.version)
-        badgeView.isHidden = info.contentRating != .primarilyNsfw
+        badgeView.isHidden = info.contentRating == .safe
         subtitleLabel.text = SourceLanguage.displayName(for: SourceLanguage.primaryCode(for: info.languages))
 
         warningButton.isHidden = !info.external || info.externalInfo != nil

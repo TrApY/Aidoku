@@ -60,6 +60,7 @@ extension Notification.Name {
 
     // browse
     static let filterExternalSources = Self("filterExternalSources")
+    static let browseLanguagesChanged = Self("browseLanguagesChanged")
 
     // reader
     static let readerShowingBars = Self("readerShowingBars")

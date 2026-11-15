@@ -234,7 +234,7 @@
 "PAGED" = "Paginado";
 "PAGE_LAYOUT" = "Diseño de página";
 "DOUBLE_PAGE" = "Doble página";
-"MULTI_LANGUAGE" = "Multi-lenguaje";
+"MULTI_LANGUAGE" = "Varios";
 "LOGOUT" = "Cerrar sesión";
 "LOGOUT_FROM_%@" = "¿Cerrar sesión de %@?";
 "TRACKERS" = "Rastreadores";
@@ -792,6 +792,26 @@
 // SUWA-12
 "SUWAYOMI_POPULAR" = "Populares";
 "SUWAYOMI_LATEST" = "Recientes";
+"EXPLORE_SOURCES" = "Fuentes";
+"EXPLORE_EXTENSIONS" = "Extensiones";
+"EXPLORE_MIGRATE" = "Migrar";
+"RECENTLY_USED" = "Usado recientemente";
+"EXTENSIONS_UPDATES" = "Actualizaciones pendientes";
+"EXTENSIONS_UPDATE_ALL" = "Actualizar todo";
+"EXTENSIONS_INSTALLED" = "Instaladas";
+"EXTENSIONS_AVAILABLE_%@" = "Disponibles · %@";
+"EXTENSIONS_SEARCH" = "Buscar extensión";
+"EXTENSIONS_NONE" = "Ninguna extensión con esos criterios.";
+"EXTENSIONS_NO_CONNECTION" = "No hay ningún servidor Suwayomi configurado. Configúralo para ver e instalar sus extensiones.";
+"EXTENSIONS_SERVER_DOWN" = "No se ha podido contactar con el servidor Suwayomi.";
+"EXTENSION_INSTALL" = "Instalar";
+"EXTENSION_UPDATE" = "Actualizar";
+"EXTENSION_UNINSTALL_CONFIRM_%@" = "¿Desinstalar «%@» del servidor? Sus fuentes dejarán de estar en Explorar.";
+"EXTENSION_UNINSTALL_LIBRARY_TITLE" = "Tiene mangas en tu biblioteca";
+"EXTENSION_UNINSTALL_LIBRARY_%@_%i" = "«%1$@» tiene %2$i mangas en tu biblioteca. Seguirán en la biblioteca, pero sin su fuente no se actualizarán hasta que la vuelvas a instalar o los migres.";
+"BADGE_18" = "18+";
+"BADGE_18_PARTLY" = "18+ en parte";
+"BADGE_MIXED" = "Mixto";
 "SUWAYOMI_SERVER" = "Servidor Suwayomi";
 "SUWAYOMI_CONFIGURE" = "Configurar";
 "SUWAYOMI_INVALID_SERVER" = "La dirección debe empezar por http:// o https://.";
