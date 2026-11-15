@@ -53,10 +53,9 @@ struct StoreDump: Equatable {
     static let storeFiles = ["Aidoku.sqlite", "Local.sqlite"]
     static let metadataPrefixes = ["ANSCK", "ATRANSACTION", "ACHANGE", "Z_METADATA", "Z_MODELCACHE", "Z_PRIMARYKEY"]
 
-    /// String attributes that are identifiers (kept as they are in the CSVs); every other text goes as a hash.
-    private static let plainStrings: Set<String> = ["id", "mangaId", "chapterId", "sourceId", "trackerId", "lang", "apiVersion"]
-    /// Entities whose natural key carries readable text (title, path, word): hashed in the CSVs.
-    private static let readableKeys: Set<String> = ["Category", "LocalFileInfo", "Vocab"]
+    /// String attributes kept as they are in the CSVs (sources, trackers, languages); every other text goes as a
+    /// hash, ids included (`id`, `mangaId`, `chapterId` are often slugs with the title).
+    private static let plainStrings: Set<String> = ["sourceId", "trackerId", "lang", "apiVersion"]
 
     // MARK: - Entities
 
@@ -269,10 +268,9 @@ struct StoreDump: Equatable {
         }
     }
 
+    /// Natural keys carry ids, titles, paths or words: always a hash in the CSVs.
     private static func csvKey(entity: String, _ key: String) -> String {
-        readableKeys.contains(entity)
-            ? "h:" + hash(key)
-            : key.replacingOccurrences(of: "\u{1F}", with: "|")
+        "h:" + hash(key)
     }
 
     private static func csvEscape(_ field: String) -> String {
