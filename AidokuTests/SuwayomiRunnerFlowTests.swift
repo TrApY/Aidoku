@@ -624,6 +624,37 @@ private let nexus = "4086183896761281232" // flagged NSFW
         _ = try await runner.getSearchMangaList(query: "solo", page: 1, filters: [.select(id: "searchIn", value: olympus)])
         #expect(server.timeouts("FetchSourceManga") == [30])
     }
+
+    @Test func stateOnlyAnswerIsEnough() async throws {
+        defer { cleanUp() }
+        // real answer with details and chapters left out by @include: only the state fields
+        server.respond("GetMangaUpdate", .success(try fixture("manga-update-state-only")))
+        let runner = makeRunner()
+        let manga = try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "54", title: "Guardado"),
+            needsDetails: false,
+            needsChapters: false
+        )
+        #expect(manga.title == "Guardado")
+        #expect(manga.chapters == nil)
+        #expect(server.count("FetchManga") == 0)
+        #expect(server.count("FetchChapters") == 0)
+    }
+
+    @Test func chaptersOnlyAnswerKeepsTheDetails() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaUpdate", .success(try fixture("manga-update-chapters-only")))
+        let runner = makeRunner()
+        let manga = try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "54", title: "Guardado", authors: ["Autor"]),
+            needsDetails: false,
+            needsChapters: true
+        )
+        #expect(manga.title == "Guardado")
+        #expect(manga.authors == ["Autor"])
+        #expect(manga.chapters?.count == 26)
+        #expect(server.count("GetMangaUpdate") == 1)
+    }
 }
 
 @Suite(.serialized) struct SuwayomiTrackerLibraryTests {
@@ -698,5 +729,21 @@ private let nexus = "4086183896761281232" // flagged NSFW
             CoreDataManager.shared.hasTrack(trackerId: tracker.id, mangaId: mangaId, context: context)
         }
         #expect(!left)
+    }
+
+    @Test func markingReadWithRepeatedAndDecimalNumbers() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: "\(key).server") }
+        server.respond("GetInLibrary", .success(Data(#"{"data":{"manga":{"inLibrary":true}}}"#.utf8)))
+        // the server filters by number < 11; 11 is in the answer only to check the app's own filter
+        server.respond(
+            "GetChaptersForTrackUpdate",
+            .success(Data(#"{"data":{"chapters":{"nodes":[{"id":1,"chapterNumber":10},{"id":2,"chapterNumber":10},{"id":3,"chapterNumber":10.5},{"id":4,"chapterNumber":11},{"id":5,"chapterNumber":9.9}]}}}"#.utf8))
+        )
+        server.respond("MarkChaptersRead", .success(Data(#"{"data":{"updateChapters":{"chapters":[]}}}"#.utf8)))
+        let tracker = makeTracker()
+        try await tracker.update(trackId: "\(key)|56", update: TrackUpdate(lastReadChapter: 10))
+        #expect(server.variables("GetChaptersForTrackUpdate").first?["below"] as? Double == 11)
+        // as before: every chapter whose whole number is ≤ 10 (both 10s and 10.5), not 11
+        #expect(server.variables("MarkChaptersRead").first?["ids"] as? [Int] == [1, 2, 3, 5])
     }
 }

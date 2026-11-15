@@ -52,6 +52,11 @@ extension MangaView {
 
         @Published var error: Error?
 
+        /// «Descarga adelantada» after a refresh found new chapters (injectable for tests).
+        var downloadAheadTrigger: @Sendable (MangaIdentifier) async -> Void = { mangaId in
+            await DownloadManager.shared.ensureAheadDownloaded(mangaId: mangaId)
+        }
+
         private var fetchedDetails = false
         private var markedOpened = false
         private var cancellables = Set<AnyCancellable>()

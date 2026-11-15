@@ -172,6 +172,16 @@ import Testing
         }
     }
 
+    @Test func indicatorOnlyWhereTheSettingIsOffered() {
+        #expect(DownloadAheadSetting.isAvailable(inLibrary: true, hasSource: true, isLocal: false))
+        #expect(!DownloadAheadSetting.isAvailable(inLibrary: false, hasSource: true, isLocal: false))
+        #expect(!DownloadAheadSetting.isAvailable(inLibrary: true, hasSource: false, isLocal: false))
+        #expect(!DownloadAheadSetting.isAvailable(inLibrary: true, hasSource: true, isLocal: true))
+        #expect(DownloadAheadSetting.indicator(setting: 3, available: true) == 3)
+        #expect(DownloadAheadSetting.indicator(setting: 0, available: true) == nil)
+        #expect(DownloadAheadSetting.indicator(setting: 3, available: false) == nil) // e.g. removed from the library
+    }
+
     @Test func settingIsStoredPerManga() {
         let manga = MangaIdentifier(sourceKey: "downloadaheadtest", mangaKey: "42")
         let other = MangaIdentifier(sourceKey: "downloadaheadtest", mangaKey: "43")
@@ -240,6 +250,29 @@ import Testing
         await MangaManager.shared.removeFromLibrary(mangaId: manga.identifier)
         #expect(DownloadAheadSetting.get(for: manga.identifier) == 0) // removed with the manga
         DownloadManager.directory.appendingPathComponent(manga.sourceKey).appendingPathComponent(manga.key).removeItem()
+    }
+
+    /// Refreshing the manga page with new chapters triggers «descarga adelantada» (and only then).
+    @Test func mangaPageRefreshWithNewChaptersTriggersDownloadAhead() async throws {
+        try await withLibraryManga(key: "70", target: 2) { manga, newestFirst, _ in
+            let runner = RefreshRunner(chapters: newestFirst)
+            let source = AidokuRunner.Source(key: manga.sourceKey, name: "Ficha", version: 1, contentRating: .safe, runner: runner)
+            let triggered = TriggerLog()
+            let viewModel = await MainActor.run {
+                let viewModel = MangaView.ViewModel(source: source, manga: manga)
+                viewModel.downloadAheadTrigger = { await triggered.add($0) }
+                return viewModel
+            }
+            // same chapters as stored: nothing new
+            await viewModel.refresh()
+            try await Task.sleep(nanoseconds: 500_000_000)
+            #expect(await triggered.ids.isEmpty)
+            // the source has a new chapter
+            runner.chapters = [.init(key: "c7", chapterNumber: 7)] + newestFirst
+            await viewModel.refresh()
+            #expect(await triggered.wait(count: 1, seconds: 5) == [manga.identifier])
+            await MangaManager.shared.removeFromLibrary(mangaId: manga.identifier)
+        }
     }
 
     private func status(_ manager: DownloadManager, _ manga: AidokuRunner.Manga, _ chapterKey: String) -> DownloadStatus {
@@ -519,4 +552,50 @@ private final class FakePageTracker: PageTracker, @unchecked Sendable {
     func search(for manga: AidokuRunner.Manga, includeNsfw: Bool) async throws -> [TrackSearchItem] { [] }
     func search(title: String, includeNsfw: Bool) async throws -> [TrackSearchItem] { [] }
     func logout() async throws {}
+}
+
+/// The manga page's source in the refresh test: its chapters can change between refreshes.
+private final class RefreshRunner: AidokuRunner.Runner, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedChapters: [AidokuRunner.Chapter]
+    let features = AidokuRunner.SourceFeatures()
+
+    init(chapters: [AidokuRunner.Chapter]) {
+        storedChapters = chapters
+    }
+
+    var chapters: [AidokuRunner.Chapter] {
+        get { lock.withLock { storedChapters } }
+        set { lock.withLock { storedChapters = newValue } }
+    }
+
+    func getSearchMangaList(query: String?, page: Int, filters: [AidokuRunner.FilterValue]) async throws -> AidokuRunner.MangaPageResult {
+        .init(entries: [], hasNextPage: false)
+    }
+
+    func getMangaUpdate(manga: AidokuRunner.Manga, needsDetails: Bool, needsChapters: Bool) async throws -> AidokuRunner.Manga {
+        var manga = manga
+        if needsChapters {
+            manga.chapters = chapters
+        }
+        return manga
+    }
+
+    func getPageList(manga: AidokuRunner.Manga, chapter: AidokuRunner.Chapter) async throws -> [AidokuRunner.Page] {
+        []
+    }
+}
+
+/// Manga the trigger was called for.
+private actor TriggerLog {
+    private(set) var ids: [MangaIdentifier] = []
+    func add(_ id: MangaIdentifier) { ids.append(id) }
+
+    func wait(count: Int, seconds: Double) async -> [MangaIdentifier] {
+        let deadline = Date().addingTimeInterval(seconds)
+        while ids.count < count && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return ids
+    }
 }

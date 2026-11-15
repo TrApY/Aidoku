@@ -1,0 +1,273 @@
+{
+  "data": {
+    "manga": {
+      "id": 54,
+      "initialized": true,
+      "inLibrary": true
+    },
+    "chapters": {
+      "nodes": [
+        {
+          "id": 26,
+          "url": "/chapter/b2f438bc-d9d0-4e62-86bf-cba0b15db1f2",
+          "chapterNumber": 25.0,
+          "name": "Vol.6 Ch.25 - Tercera Singularidad (6)",
+          "uploadDate": "1794674326000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 26,
+          "mangaId": 54
+        },
+        {
+          "id": 25,
+          "url": "/chapter/ed40a8b9-e9f0-4583-a31b-ba50593f91c0",
+          "chapterNumber": 24.0,
+          "name": "Vol.6 Ch.24 - Tercera Singularidad (5)",
+          "uploadDate": "1791569857000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 25,
+          "mangaId": 54
+        },
+        {
+          "id": 24,
+          "url": "/chapter/b58c59c3-2885-488f-8735-bd888a991ec7",
+          "chapterNumber": 23.0,
+          "name": "Vol.5 Ch.23 - Tercera Singularidad (4)",
+          "uploadDate": "1786900117000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 24,
+          "mangaId": 54
+        },
+        {
+          "id": 23,
+          "url": "/chapter/43a9abf2-bf68-44f9-9968-e51e88843289",
+          "chapterNumber": 22.0,
+          "name": "Vol.5 Ch.22 - Tercera Singularidad (3)",
+          "uploadDate": "1786900057000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 23,
+          "mangaId": 54
+        },
+        {
+          "id": 22,
+          "url": "/chapter/0927ff33-a7d9-4a4a-b01d-5c8dab8d1a31",
+          "chapterNumber": 21.0,
+          "name": "Vol.5 Ch.21 - Tercera Singularidad (2)",
+          "uploadDate": "1783273293000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 22,
+          "mangaId": 54
+        },
+        {
+          "id": 21,
+          "url": "/chapter/b76c0ccc-64c3-4e1b-af82-f4d4f1321174",
+          "chapterNumber": 20.0,
+          "name": "Vol.5 Ch.20 - Tercera Singularidad (1)",
+          "uploadDate": "1780153202000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 21,
+          "mangaId": 54
+        },
+        {
+          "id": 20,
+          "url": "/chapter/d4b9cb1e-3033-42c3-ab5a-93541dc607a9",
+          "chapterNumber": 19.0,
+          "name": "Vol.5 Ch.19 - Ep\u00edlogo/Pr\u00f3logo.",
+          "uploadDate": "1778688408000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 20,
+          "mangaId": 54
+        },
+        {
+          "id": 19,
+          "url": "/chapter/8765f950-4940-4f75-bc4b-3a565f0c7a38",
+          "chapterNumber": 18.5,
+          "name": "Vol.4 Ch.18.5 - Interlude 5.5",
+          "uploadDate": "1778257759000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 19,
+          "mangaId": 54
+        },
+        {
+          "id": 18,
+          "url": "/chapter/8b9384b2-604a-4d95-b6b9-d5fba7a9e246",
+          "chapterNumber": 18.0,
+          "name": "Vol.4 Ch.18 - Primera Singularidad- Verso Final La Santa Doncella De La Naci\u00f3n (2)",
+          "uploadDate": "1778256918000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 18,
+          "mangaId": 54
+        },
+        {
+          "id": 17,
+          "url": "/chapter/f40a2150-fa9e-4715-85f6-cb57e446962f",
+          "chapterNumber": 17.0,
+          "name": "Vol.4 Ch.17 - Primera Singularidad- Verso Final [La Santa Doncella De La Naci\u00f3n] (1)",
+          "uploadDate": "1776361598000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 17,
+          "mangaId": 54
+        },
+        {
+          "id": 16,
+          "url": "/chapter/d4cae7f0-87d7-4a81-a4c3-ec75019cd908",
+          "chapterNumber": 16.0,
+          "name": "Vol.4 Ch.16 - Primera Singularidad: Verso Final (4)",
+          "uploadDate": "1774286067000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 16,
+          "mangaId": 54
+        },
+        {
+          "id": 15,
+          "url": "/chapter/a2425f05-afc2-4e77-9898-d8a20b9b2feb",
+          "chapterNumber": 15.0,
+          "name": "Vol.4 Ch.15 - Primera Singularidad: Verso Final (3)",
+          "uploadDate": "1774285952000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 15,
+          "mangaId": 54
+        },
+        {
+          "id": 14,
+          "url": "/chapter/e5a1f8cb-6d40-4a0c-9047-6246bcb92814",
+          "chapterNumber": 14.0,
+          "name": "Vol.3 Ch.14 - Primera Singularidad: Verso Final (2)",
+          "uploadDate": "1773851887000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 14,
+          "mangaId": 54
+        },
+        {
+          "id": 13,
+          "url": "/chapter/d03f3c3e-212d-46bd-a59a-6e4b23822749",
+          "chapterNumber": 13.0,
+          "name": "Vol.3 Ch.13 - Primera Singularidad: Verso Final (1)",
+          "uploadDate": "1772210746000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 13,
+          "mangaId": 54
+        },
+        {
+          "id": 12,
+          "url": "/chapter/4ac1da0c-e084-47dc-a017-b4338d37ea4a",
+          "chapterNumber": 12.0,
+          "name": "Vol.3 Ch.12 - Y As\u00ed, Felicidad Del Pueblo.",
+          "uploadDate": "1770917557000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 12,
+          "mangaId": 54
+        },
+        {
+          "id": 11,
+          "url": "/chapter/7ee7baef-b7ac-4671-932f-9c31bcd293eb",
+          "chapterNumber": 11.0,
+          "name": "Vol.3 Ch.11 - Brillo En El Cielo, Bendiciones Para La Tierra.",
+          "uploadDate": "1768934679000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 11,
+          "mangaId": 54
+        },
+        {
+          "id": 10,
+          "url": "/chapter/549c5d66-78ef-474c-8d50-62d43e1facc5",
+          "chapterNumber": 10.0,
+          "name": "Vol.3 Ch.10 - Primera Singularidad (5)",
+          "uploadDate": "1766082534000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 10,
+          "mangaId": 54
+        },
+        {
+          "id": 9,
+          "url": "/chapter/c4ad540e-80ed-48cf-a555-6238d79e1134",
+          "chapterNumber": 9.0,
+          "name": "Vol.2 Ch.9 - Primera Singularidad (4)",
+          "uploadDate": "1765646084000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 9,
+          "mangaId": 54
+        },
+        {
+          "id": 8,
+          "url": "/chapter/c13ccc51-f420-4547-972b-fd07d29c5fb4",
+          "chapterNumber": 8.0,
+          "name": "Vol.2 Ch.8 - Primera Singularidad (3)",
+          "uploadDate": "1764271126000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 8,
+          "mangaId": 54
+        },
+        {
+          "id": 7,
+          "url": "/chapter/88595387-ca42-4f99-85cb-22f4b6010ec5",
+          "chapterNumber": 7.0,
+          "name": "Vol.2 Ch.7 - Primera Singularidad (2)",
+          "uploadDate": "1763310060000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 7,
+          "mangaId": 54
+        },
+        {
+          "id": 6,
+          "url": "/chapter/2e4d1334-de4a-405e-a78e-fd8c2272646f",
+          "chapterNumber": 6.0,
+          "name": "Vol.2 Ch.6 - Primera Singularidad (1)",
+          "uploadDate": "1762374116000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 6,
+          "mangaId": 54
+        },
+        {
+          "id": 5,
+          "url": "/chapter/249f23d2-1e21-4dee-8507-36295e0d021c",
+          "chapterNumber": 5.0,
+          "name": "Vol.2 Ch.5 - Grand Order.",
+          "uploadDate": "1761320629000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 5,
+          "mangaId": 54
+        },
+        {
+          "id": 4,
+          "url": "/chapter/27ea3534-f4f8-4168-acfe-738dae14a975",
+          "chapterNumber": 4.0,
+          "name": "Vol.1 Ch.4 - Singularidad F (4)",
+          "uploadDate": "1759429182000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 4,
+          "mangaId": 54
+        },
+        {
+          "id": 3,
+          "url": "/chapter/c5713314-c828-478a-abda-c473f716a7e4",
+          "chapterNumber": 3.0,
+          "name": "Vol.1 Ch.3 - Cap\u00edtulo 3, Singularidad F (3)",
+          "uploadDate": "1757086757000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 3,
+          "mangaId": 54
+        },
+        {
+          "id": 2,
+          "url": "/chapter/456fe74d-f8f1-4fd4-a639-2e42a97d91a3",
+          "chapterNumber": 2.0,
+          "name": "Vol.1 Ch.2 - Singularidad F",
+          "uploadDate": "1755707786000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 2,
+          "mangaId": 54
+        },
+        {
+          "id": 1,
+          "url": "/chapter/52b56424-2eda-4eba-b97a-88857533217f",
+          "chapterNumber": 1.0,
+          "name": "Vol.1 Ch.1 - Singularidad F",
+          "uploadDate": "1754161673000",
+          "scanlator": "Traductores de la Torre",
+          "sourceOrder": 1,
+          "mangaId": 54
+        }
+      ]
+    }
+  }
+}

@@ -93,4 +93,13 @@ struct LibraryRefreshTests {
         l.clock.advance(by: 30)
         #expect(l.refreshes.count == 1)
     }
+
+    @Test func theLibrarysStateGivesItsVisibility() {
+        typealias R = CoalescedRefresh<String>
+        #expect(R.visibility(isViewLoaded: false, isInWindow: false, isPresentingSomething: false) == .hidden)
+        #expect(R.visibility(isViewLoaded: true, isInWindow: false, isPresentingSomething: false) == .hidden) // another tab
+        #expect(R.visibility(isViewLoaded: true, isInWindow: false, isPresentingSomething: true) == .hidden)
+        #expect(R.visibility(isViewLoaded: true, isInWindow: true, isPresentingSomething: true) == .covered) // the reader
+        #expect(R.visibility(isViewLoaded: true, isInWindow: true, isPresentingSomething: false) == .visible)
+    }
 }

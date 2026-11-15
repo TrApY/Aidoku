@@ -326,16 +326,29 @@ actor DownloadQueue {
         userPaused
     }
 
-    /// Waits until the queue is empty (true) or `stopWaitingForEmpty` is called (false), without
-    /// spinning.
-    func waitUntilEmpty() async -> Bool {
+    /// Waits, for the background task `task`, until the queue is empty (true) or the task expires
+    /// (false), without spinning (pending: the expiry is not remembered).
+    func waitUntilEmpty(for task: AnyObject) async -> Bool {
         if hasNoDownloads { return true }
         return await withCheckedContinuation { emptyWaiters.append($0) }
     }
 
-    /// Ends the waits (the background task expired).
-    func stopWaitingForEmpty() {
+    /// The background task `task` expired: its wait ends (pending: ends every wait).
+    func backgroundTaskExpired(_ task: AnyObject) {
         resumeEmptyWaiters(false)
+    }
+
+    /// Lets go of the background task if it is still `task`; false if another one took over
+    /// (pending: always clears).
+    func finishBackgroundTask(_ task: AnyObject) -> Bool {
+        setBackgroundTask(nil)
+        return true
+    }
+
+    /// For tests.
+    func isCurrentBackgroundTask(_ task: AnyObject) -> Bool {
+        guard let bgTask else { return false }
+        return (bgTask as AnyObject) === task
     }
 
     /// No download left (a source whose downloads were cancelled without a task keeps an empty list).
@@ -362,7 +375,7 @@ actor DownloadQueue {
 }
 
 extension DownloadQueue {
-    private func setBackgroundTask(_ task: ProgressReporting?) {
+    func setBackgroundTask(_ task: ProgressReporting?) {
         bgTask = task
         totalDownloads = queue.values.reduce(0) { $0 + $1.count }
         completedDownloads = 0
@@ -380,7 +393,7 @@ extension DownloadQueue {
 
             task.expirationHandler = {
                 Task {
-                    await self.stopWaitingForEmpty()
+                    await self.backgroundTaskExpired(task)
                     await DownloadManager.shared.pauseDownloads(byUser: false) // system pause: automatic downloads may start it again
                     await self.setBackgroundTask(nil)
                 }
@@ -392,7 +405,7 @@ extension DownloadQueue {
                 await self.initAndResumeTasks()
 
                 // wait until downloads complete (woken when the queue empties, not polled), or until expiry
-                guard await self.waitUntilEmpty() else { return } // expired: already completed
+                guard await self.waitUntilEmpty(for: task) else { return } // expired: already completed
 
                 await self.setBackgroundTask(nil)
 

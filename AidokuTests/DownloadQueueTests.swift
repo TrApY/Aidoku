@@ -143,8 +143,9 @@ struct DownloadQueueTests {
         let queue = await makeQueue()
         await queue.pause(byUser: true)
         await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
+        let task = FakeBackgroundTask()
         let first = WaitResult()
-        Task { await first.set(await queue.waitUntilEmpty()) }
+        Task { await first.set(await queue.waitUntilEmpty(for: task)) }
         try await Task.sleep(nanoseconds: 300_000_000)
         #expect(await first.value == nil) // still waiting: the queue has a download
         await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
@@ -153,11 +154,47 @@ struct DownloadQueueTests {
         // the background task expiring ends the wait
         await queue.add(chapters: [.init(key: "c2", chapterNumber: 2)], manga: manga, start: .never)
         let second = WaitResult()
-        Task { await second.set(await queue.waitUntilEmpty()) }
+        Task { await second.set(await queue.waitUntilEmpty(for: task)) }
         try await Task.sleep(nanoseconds: 100_000_000)
-        await queue.stopWaitingForEmpty()
+        await queue.backgroundTaskExpired(task)
         #expect(await second.wait(seconds: 5) == false)
         await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c2")])
+    }
+
+    /// The system expires the background task before its wait starts (e.g. while the tasks are resumed):
+    /// the wait must not hang until the queue empties hours later.
+    @Test func anExpiryBeforeTheWaitEndsIt() async throws {
+        defer { cleanUp() }
+        let queue = await makeQueue()
+        await queue.pause(byUser: true)
+        await queue.add(chapters: [.init(key: "c1", chapterNumber: 1)], manga: manga, start: .never)
+        let expired = FakeBackgroundTask()
+        await queue.backgroundTaskExpired(expired)
+        let late = WaitResult()
+        Task { await late.set(await queue.waitUntilEmpty(for: expired)) }
+        #expect(await late.wait(seconds: 3) == false)
+        // another background task is not affected by that expiry
+        let other = FakeBackgroundTask()
+        let current = WaitResult()
+        Task { await current.set(await queue.waitUntilEmpty(for: other)) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(await current.value == nil)
+        await queue.cancelDownloads(for: [.init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: "c1")])
+        #expect(await current.wait(seconds: 5) == true)
+        #expect(await late.wait(seconds: 5) == false) // no wake-up later either
+    }
+
+    /// An old background task that wakes up late doesn't touch the current one.
+    @Test func onlyTheCurrentBackgroundTaskIsFinished() async {
+        let queue = await makeQueue()
+        let old = FakeBackgroundTask()
+        let new = FakeBackgroundTask()
+        await queue.setBackgroundTask(old)
+        await queue.setBackgroundTask(new)
+        #expect(!(await queue.finishBackgroundTask(old)))
+        #expect(await queue.isCurrentBackgroundTask(new))
+        #expect(await queue.finishBackgroundTask(new))
+        #expect(!(await queue.isCurrentBackgroundTask(new)))
     }
 }
 
@@ -237,4 +274,9 @@ private actor WaitResult {
         }
         return value
     }
+}
+
+/// Stands in for the system's background task.
+private final class FakeBackgroundTask: NSObject, ProgressReporting, @unchecked Sendable {
+    let progress = Progress()
 }

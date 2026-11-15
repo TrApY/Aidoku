@@ -227,6 +227,24 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         #expect(first.authors == ["Oda Eiichirou (尾田栄一郎)"])
     }
 
+    @Test func answersWithoutTheOptionalFieldsDecode() throws {
+        let decoder = JSONDecoder()
+        let state = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-state-only"))
+        #expect(state.data.chapters == nil)
+        #expect(state.chapterNodes.isEmpty)
+        #expect(state.data.manga.title == nil)
+        #expect(state.data.manga.initialized == true)
+        // nothing asked for: nothing to fetch, even without chapters in the answer
+        #expect(SuwayomiServerSources.remoteFetchPlan(state, needsDetails: false, needsChapters: false).isEmpty)
+        let chapters = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-chapters-only"))
+        #expect(chapters.chapterNodes.count == 26)
+        #expect(chapters.data.manga.title == nil)
+        // the newer answer only replaces what it was asked for
+        let merged = state.updated(with: chapters, details: false, chapters: true)
+        #expect(merged.chapterNodes.count == 26)
+        #expect(merged.data.manga.initialized == true)
+    }
+
     @Test func remoteFetchPlanUsesInitialized() throws {
         let decoder = JSONDecoder()
         let fresh = try decoder.decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-not-initialized"))

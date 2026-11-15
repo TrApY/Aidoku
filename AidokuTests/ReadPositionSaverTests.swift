@@ -368,6 +368,19 @@ struct ReadPositionSaverTests {
         #expect(h.saver.isCurrent(later))
     }
 
+    @Test func aChapterKeyWithAnAtSignStillMatchesItsOpening() {
+        // image reader (no position): only a «@<number>» position suffix is dropped
+        #expect(ReadPositionSaver<Position>.trackerKey(of: "ch@pter#5") == "ch@pter#5")
+        #expect(ReadPositionSaver<Position>.trackerKey(of: "ch@1#5@0.42") == "ch@1#5")
+        #expect(ReadPositionSaver<Position>.trackerKey(of: "c#5@0.00") == "c#5")
+        let h = Harness()
+        h.saver.chapterOpened(pageKey: "ch@pter#5")
+        h.turn(5, chapter: "ch@pter") // where it opened
+        h.scheduler.advance(by: 70)
+        #expect(h.local.isEmpty)
+        #expect(h.tracker.isEmpty)
+    }
+
     @Test func incognitoSavesNothing() {
         let h = Harness()
         h.enabled = false
