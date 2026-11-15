@@ -190,10 +190,7 @@ extension SettingsView {
                     message: NSLocalizedString("CLEAR_TRACKED_MANGA_TEXT")
                 ) {
                     Task {
-                        await CoreDataManager.shared.container.performBackgroundTask { context in
-                            CoreDataManager.shared.clearTracks(context: context)
-                            try? context.save()
-                        }
+                        await DataRepositories.shared.tracks.clearAll()
                     }
                 }
             case "Advanced.clearNetworkCache":

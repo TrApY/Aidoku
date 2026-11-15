@@ -72,9 +72,7 @@ actor TrackerManager {
         let key = "Manga.chapterDisplayMode.\(mangaId)"
         let displayMode = ChapterTitleDisplayMode(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .default
 
-        let trackItems: [TrackItem] = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.getTracks(mangaId: mangaId, context: context).map { $0.toItem() }
-        }
+        let trackItems = await DataRepositories.shared.tracks.items(of: mangaId)
 
         for item in trackItems {
             guard
@@ -196,12 +194,7 @@ actor TrackerManager {
     }
 
     func setProgress(mangaId: MangaIdentifier, chapters: [AidokuRunner.Chapter], progress: ChapterReadProgress) async {
-        let trackItems: [TrackItem] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getTracks(
-                mangaId: mangaId,
-                context: context
-            ).map { $0.toItem() }
-        }
+        let trackItems = await DataRepositories.shared.tracks.items(of: mangaId)
 
         var newUpdates: [PageTrackUpdate] = []
 
@@ -270,68 +263,27 @@ actor TrackerManager {
 
     /// Saves a TrackItem to the data store.
     private func saveTrackItem(item: TrackItem) async {
-        await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            CoreDataManager.shared.createTrack(
-                id: item.id,
-                trackerId: item.trackerId,
-                mangaId: item.mangaId,
-                title: item.title,
-                chapterOffset: item.chapterOffset,
-                context: context
-            )
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("TrackManager.saveTrackItem(item:): \(error)")
-            }
-        }
+        await DataRepositories.shared.tracks.add(item)
         NotificationCenter.default.post(name: .updateTrackers, object: nil)
         NotificationCenter.default.post(name: .trackItemAdded, object: item)
     }
 
     /// Removes the TrackItem from the data store.
     func removeTrackItem(item: TrackItem) async {
-        await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            self.removeTrackItem(item: item, context: context)
-        }
+        await DataRepositories.shared.tracks.remove(trackerId: item.trackerId, manga: item.mangaId)
+        NotificationCenter.default.post(name: .updateTrackers, object: nil)
     }
 
     /// Sets the chapter offset for a track item.
     func setTrackChapterOffset(item: TrackItem, chapterOffset: Int) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.setTrackChapterOffset(
-                trackerId: item.trackerId,
-                mangaId: item.mangaId,
-                chapterOffset: chapterOffset,
-                context: context
-            )
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("TrackManager.setTrackChapterOffset(item:chapterOffset:): \(error)")
-            }
-        }
-        NotificationCenter.default.post(name: .updateTrackers, object: nil)
-    }
-
-    nonisolated func removeTrackItem(item: TrackItem, context: NSManagedObjectContext) {
-        CoreDataManager.shared.removeTrack(
-            trackerId: item.trackerId,
-            mangaId: item.mangaId,
-            context: context
-        )
-        do {
-            try context.save()
-        } catch {
-            LogManager.logger.error("TrackManager.removeTrackItem(item:): \(error)")
-        }
+        await DataRepositories.shared.tracks.setChapterOffset(trackerId: item.trackerId, manga: item.mangaId, offset: chapterOffset)
         NotificationCenter.default.post(name: .updateTrackers, object: nil)
     }
 
     /// Checks if a manga is being tracked
     @MainActor
     func isTracking(mangaId: MangaIdentifier) -> Bool {
-        CoreDataManager.shared.hasTrack(mangaId: mangaId)
+        DataRepositories.shared.mainActorReads.isTracking(mangaId)
     }
 
     /// Checks if there is a tracker that can be added to the given manga.
@@ -397,12 +349,7 @@ actor TrackerManager {
         // fetch remote history from linked page trackers
         var result: [String: ChapterReadProgress] = [:]
 
-        let trackItems: [TrackItem] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getTracks(
-                mangaId: manga.identifier,
-                context: context
-            ).map { $0.toItem() }
-        }
+        let trackItems = await DataRepositories.shared.tracks.items(of: manga.identifier)
 
         for item in trackItems {
             guard let targetTracker = trackerLookup(item.trackerId) as? PageTracker else { continue }
@@ -551,13 +498,7 @@ actor TrackerManager {
     func bindEnhancedTrackers(manga: AidokuRunner.Manga) async {
         for tracker in Self.trackers where tracker is EnhancedTracker {
             if tracker.canRegister(mangaId: manga.identifier) {
-                let isTracking = await CoreDataManager.shared.container.performBackgroundTask { context in
-                    CoreDataManager.shared.hasTrack(
-                        trackerId: tracker.id,
-                        mangaId: manga.identifier,
-                        context: context
-                    )
-                }
+                let isTracking = await DataRepositories.shared.tracks.contains(trackerId: tracker.id, manga: manga.identifier)
                 guard !isTracking else { continue }
                 do {
                     let items = try await tracker.search(for: manga, includeNsfw: true)

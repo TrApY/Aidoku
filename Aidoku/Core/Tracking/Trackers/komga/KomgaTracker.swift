@@ -101,25 +101,11 @@ final class KomgaTracker: EnhancedTracker, PageTracker {
     }
 
     func removeTrackItems(sourceKey: String) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            let request = TrackObject.fetchRequest()
-            request.predicate = NSPredicate(
-                format: "trackerId == %@", self.id
-            )
-            do {
-                let items = try? context.fetch(request)
-                guard let items else { return }
-                for item in items {
-                    guard let id = item.id else { continue }
-                    let (itemSourceKey, _) = try self.getIdParts(from: id)
-                    if itemSourceKey == sourceKey {
-                        context.delete(item)
-                    }
-                }
-                try context.save()
-            } catch {
-                LogManager.logger.error("Error removing komga track items: \(error)")
-            }
+        let removed = await DataRepositories.shared.tracks.removeAll(trackerId: id) { id in
+            try self.getIdParts(from: id).sourceKey == sourceKey
+        }
+        if !removed {
+            LogManager.logger.error("Error removing komga track items")
         }
     }
 }

@@ -112,43 +112,22 @@ final class SuwayomiTracker: EnhancedTracker, PageTracker {
     /// Forgets every manga tracked with the servers (as removing a server source does), instead of
     /// crashing: there's no account to log out of, the server login lives in the source settings.
     func logout() async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            for item in CoreDataManager.shared.getTracks(trackerId: self.id, context: context) {
-                context.delete(item)
-            }
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("Error removing suwayomi track items: \(error)")
-            }
+        if await !DataRepositories.shared.tracks.removeAll(trackerId: id) {
+            LogManager.logger.error("Error removing suwayomi track items")
         }
         markedInLibrary.removeAll(withPrefix: "")
     }
 
     func removeTrackItems(sourceKey: String) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            let request = TrackObject.fetchRequest()
-            request.predicate = NSPredicate(
-                format: "trackerId == %@",
-                self.id
-            )
-            do {
-                let items = try? context.fetch(request)
-                guard let items else { return }
-                for item in items {
-                    guard let id = item.id else { continue }
-                    let (itemSourceKey, _) = try self.getIdParts(from: id)
-                    // removing a connection also removes its server sources' items (old `<parent>|<id>`
-                    // and new `<child>|<id>` ids)
-                    if itemSourceKey == sourceKey
-                        || SuwayomiConnections.shared.connectionKey(for: itemSourceKey) == sourceKey {
-                        context.delete(item)
-                    }
-                }
-                try context.save()
-            } catch {
-                LogManager.logger.error("Error removing suwayomi track items: \(error)")
-            }
+        let removed = await DataRepositories.shared.tracks.removeAll(trackerId: id) { id in
+            let itemSourceKey = try self.getIdParts(from: id).sourceKey
+            // removing a connection also removes its server sources' items (old `<parent>|<id>`
+            // and new `<child>|<id>` ids)
+            return itemSourceKey == sourceKey
+                || SuwayomiConnections.shared.connectionKey(for: itemSourceKey) == sourceKey
+        }
+        if !removed {
+            LogManager.logger.error("Error removing suwayomi track items")
         }
     }
 }

@@ -518,12 +518,7 @@ extension MangaView.ViewModel {
 
         // sync progress from regular trackers if auto sync enabled
         if AppSettings.tracking.autoSyncFromTracker.get() {
-            let trackItems: [TrackItem] = await CoreDataManager.shared.container.performBackgroundTask { @Sendable [manga] context in
-                CoreDataManager.shared.getTracks(
-                    mangaId: manga.identifier,
-                    context: context
-                ).map { $0.toItem() }
-            }
+            let trackItems = await DataRepositories.shared.tracks.items(of: manga.identifier)
             for trackItem in trackItems {
                 guard let tracker = TrackerManager.getTracker(id: trackItem.trackerId) else { continue }
                 await TrackerManager.shared.syncProgressFromTracker(

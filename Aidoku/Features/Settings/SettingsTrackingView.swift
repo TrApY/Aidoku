@@ -168,10 +168,7 @@ struct SettingsTrackingView: View {
                         }
                         NotificationCenter.default.post(name: .updateTrackers, object: nil)
                         // Remove all tracked items for this tracker
-                        await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-                            CoreDataManager.shared.removeTracks(trackerId: tracker.id, context: context)
-                            try? context.save()
-                        }
+                        await DataRepositories.shared.tracks.removeAll(trackerId: tracker.id)
                     }
                 }
             }

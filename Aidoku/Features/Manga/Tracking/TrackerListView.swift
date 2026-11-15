@@ -59,9 +59,12 @@ struct TrackerListView: View {
         .padding([.bottom])
         .onChange(of: refresh) { _ in } // in order to trigger a refresh
         .onReceive(refreshPublisher) { _ in
-            withAnimation {
-                loadTrackItems()
-                refresh.toggle()
+            Task {
+                let items = await loadTrackItems()
+                withAnimation {
+                    trackItems = items
+                    refresh.toggle()
+                }
             }
         }
         .task {
@@ -75,17 +78,14 @@ struct TrackerListView: View {
                     trackerInfo[tracker.id] = info
                 }
             }
-            loadTrackItems()
+            trackItems = await loadTrackItems()
             withAnimation {
                 availableTrackers = trackers
             }
         }
     }
 
-    func loadTrackItems() {
-        trackItems = CoreDataManager.shared.getTracks(
-            mangaId: manga.identifier,
-            context: CoreDataManager.shared.context
-        ).map { $0.toItem() }
+    func loadTrackItems() async -> [TrackItem] {
+        await DataRepositories.shared.tracks.items(of: manga.identifier)
     }
 }
