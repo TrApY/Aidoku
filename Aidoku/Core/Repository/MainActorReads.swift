@@ -8,4 +8,6 @@
 
 @MainActor
 protocol MainActorReads: Sendable {
+    /// Whether the manga has any track item (TrackerManager.isTracking).
+    func isTracking(_ manga: MangaIdentifier) -> Bool
 }

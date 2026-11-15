@@ -13,4 +13,8 @@ final class CoreDataMainActorReads: MainActorReads {
     nonisolated init(container: NSPersistentContainer) {
         self.container = container
     }
+
+    func isTracking(_ manga: MangaIdentifier) -> Bool {
+        false // STUB (rojo de L1)
+    }
 }
