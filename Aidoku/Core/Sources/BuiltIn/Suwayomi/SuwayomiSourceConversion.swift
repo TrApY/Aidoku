@@ -351,7 +351,29 @@ extension SuwayomiSourceConversion {
         if kept.value(forKey: "fileInfo") == nil, let file = old.value(forKey: "fileInfo") as? NSManagedObject {
             file.setValue(kept, forKey: "manga")
         }
-        for (name, _) in kept.entity.attributesByName where kept.value(forKey: name) == nil { if name != "sourceId", let value = old.value(forKey: name) { kept.setValue(value, forKey: name) } } // pendiente[B3#4]
+        // per field, what was set (not the default) wins over a default; both set: the kept row's
+        for (name, attribute) in kept.entity.attributesByName where name != "sourceId" && name != "id" && !attribute.isDerived {
+            guard let oldValue = old.value(forKey: name), !isDefault(oldValue, attribute) else { continue }
+            if let keptValue = kept.value(forKey: name), !isDefault(keptValue, attribute) { continue }
+            kept.setValue(oldValue, forKey: name)
+        }
+        // both in the library: the earliest added, the latest opened, read and updated
+        if
+            let keptLibrary = kept.value(forKey: "libraryObject") as? NSManagedObject,
+            let library = old.value(forKey: "libraryObject") as? NSManagedObject,
+            keptLibrary != library
+        {
+            for (name, earliest) in [("dateAdded", true), ("lastOpened", false), ("lastRead", false), ("lastUpdated", false), ("lastUpdatedChapters", false)] {
+                guard let oldDate = library.value(forKey: name) as? Date else { continue }
+                guard let keptDate = keptLibrary.value(forKey: name) as? Date else {
+                    keptLibrary.setValue(oldDate, forKey: name)
+                    continue
+                }
+                if earliest ? oldDate < keptDate : oldDate > keptDate {
+                    keptLibrary.setValue(oldDate, forKey: name)
+                }
+            }
+        }
     }
 
     private static func isDefault(_ value: Any, _ attribute: NSAttributeDescription) -> Bool {
