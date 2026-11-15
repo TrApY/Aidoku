@@ -349,6 +349,28 @@ func expectMetadataListed(_ dump: StoreDump) {
         #expect(tokens.contains("sanilist"))
     }
 
+    /// C6: a separator inside a text cannot make two keys the same (sourceId "a␟b" + id "c" against "a" + "b␟c").
+    @Test func separatorsInsideATextDoNotCollide() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("suwa13-sep-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try StoreDump.appContainer(directory: directory)
+        defer { StoreDump.close(container) }
+        let context = container.newBackgroundContext()
+        try context.performAndWait {
+            for (source, id) in [("a\u{1F}b", "c"), ("a", "b\u{1F}c"), ("x\u{1E}y", "\u{1B}"), ("x", "y\u{1E}\u{1B}")] {
+                let manga = NSEntityDescription.insertNewObject(forEntityName: "Manga", into: context)
+                manga.setValue(source, forKey: "sourceId")
+                manga.setValue(id, forKey: "id")
+                manga.setValue("", forKey: "title")
+            }
+            try context.save()
+        }
+        let dump = try StoreDump.make(context: context)
+        #expect(dump.entities["Manga"]?.count == 4)
+        #expect(dump.entities["Manga"]?.duplicateKeys == 0)
+    }
+
     /// Deleting follows the model's rules:
     /// - a Manga: its LibraryManga goes (Cascade); its chapters, their updates and histories, its LocalFileInfo
     ///   and the categories stay, only without it (Nullify);
