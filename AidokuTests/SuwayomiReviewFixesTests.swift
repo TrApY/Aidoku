@@ -196,10 +196,11 @@ import Testing
         )
         #expect(report.converted == 1)
         #expect(report.merged == 1)
-        let values: [String: String] = context.performAndWait {
+        let reader = store.container.newBackgroundContext() // not the one that inserted (it caches the rows)
+        let values: [String: String] = reader.performAndWait {
             let request = NSFetchRequest<NSManagedObject>(entityName: "Manga")
             request.predicate = NSPredicate(format: "sourceId == %@ AND id == %@", childA, "101")
-            guard let kept = try? context.fetch(request).first else { return [:] }
+            guard let kept = try? reader.fetch(request).first else { return [:] }
             let library = kept.value(forKey: "libraryObject") as? NSManagedObject
             return [
                 "title": "\(kept.value(forKey: "title") ?? "")",

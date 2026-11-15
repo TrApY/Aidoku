@@ -374,7 +374,7 @@ extension SuwayomiSourceConversion {
             file.setValue(kept, forKey: "manga")
         }
         // per field, what was set (not the default) wins over a default; both set: the kept row's
-        for (name, attribute) in kept.entity.attributesByName where name != "sourceId" && name != "id" && !attribute.isDerived {
+        for (name, attribute) in kept.entity.attributesByName where name != "sourceId" && name != "id" && !(attribute is NSDerivedAttributeDescription) {
             guard let oldValue = old.value(forKey: name), !isDefault(oldValue, attribute) else { continue }
             if let keptValue = kept.value(forKey: name), !isDefault(keptValue, attribute) { continue }
             kept.setValue(oldValue, forKey: name)
