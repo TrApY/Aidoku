@@ -256,15 +256,14 @@ final class DeletedDownloads: @unchecked Sendable {
     }
 }
 
-@Suite(.serialized) struct SuwayomiMigrationOptionsTests {
-    private let key = "suwayomi.migrationtest"
-    private let server = SuwayomiFakeServer()
+/// In the serialized Suwayomi tracker suite: its logout test deletes every Suwayomi track item, which
+/// would race with these tests if they ran in parallel.
+extension SuwayomiTrackerLibraryTests {
+    private var migrationOld: AidokuRunner.Manga { .init(sourceKey: key, key: "753", title: "Viejo") }
+    private var migrationNew: AidokuRunner.Manga { .init(sourceKey: key, key: "897", title: "Nuevo") }
+    private var migrationChapters: [AidokuRunner.Chapter] { (1...3).reversed().map { .init(key: "c\($0)", chapterNumber: Float($0)) } }
 
-    private var old: AidokuRunner.Manga { .init(sourceKey: key, key: "753", title: "Viejo") }
-    private var new: AidokuRunner.Manga { .init(sourceKey: key, key: "897", title: "Nuevo") }
-    private var chapters: [AidokuRunner.Chapter] { (1...3).reversed().map { .init(key: "c\($0)", chapterNumber: Float($0)) } }
-
-    private func run(_ options: MigrationOptions) async {
+    private func runMigration(_ options: MigrationOptions) async {
         UserDefaults.standard.set("https://suwayomi.example:4567", forKey: "\(key).server")
         server.respond("GetInLibrary", .success(Data(#"{"data":{"manga":{"inLibrary":false}}}"#.utf8)))
         server.respond("AddToServerLibrary", .success(Data(#"{"data":{"updateManga":{"manga":{"id":897,"inLibrary":true}}}}"#.utf8)))
@@ -272,11 +271,11 @@ final class DeletedDownloads: @unchecked Sendable {
         server.respond("GetChaptersForTrackUpdate", .success(Data(#"{"data":{"chapters":{"nodes":[{"id":11,"chapterNumber":1}]}}}"#.utf8)))
         server.respond("MarkChaptersRead", .success(Data(#"{"data":{"updateChapters":{"chapters":[]}}}"#.utf8)))
         server.respond("RemoveFromServerLibrary", .success(Data(#"{"data":{"updateManga":{"manga":{"id":753,"inLibrary":false}}}}"#.utf8)))
-        let old = old
-        await MangaManager.shared.addToLibrary(manga: old, chapters: chapters, bindTrackers: false)
+        let old = migrationOld
+        await MangaManager.shared.addToLibrary(manga: old, chapters: migrationChapters, bindTrackers: false)
         await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.setCompleted(chapterIds: [.init(sourceKey: old.sourceKey, mangaKey: old.key, chapterKey: "c1")], context: context)
-            CoreDataManager.shared.createTrack(id: "\(old.sourceKey)|753", trackerId: "suwayomi", mangaId: old.identifier, title: nil, context: context)
+            CoreDataManager.shared.createTrack(id: "\(old.sourceKey)|753", trackerId: "suwayomi", mangaId: migrationOld.identifier, title: nil, context: context)
             try? context.save()
         }
         let environment = MigrationEnvironment(
@@ -286,11 +285,11 @@ final class DeletedDownloads: @unchecked Sendable {
             bindEnhancedTrackers: false
         )
         let newChapters: [AidokuRunner.Chapter] = (1...3).reversed().map { .init(key: "d\($0)", chapterNumber: Float($0)) }
-        _ = await MangaManager.migrate(options: options, from: old, to: new, withChapters: newChapters, environment: environment)
+        _ = await MangaManager.migrate(options: options, from: old, to: migrationNew, withChapters: newChapters, environment: environment)
     }
 
-    private func cleanUp() async {
-        for id in [old.identifier, new.identifier] {
+    private func cleanUpMigration() async {
+        for id in [migrationOld.identifier, migrationNew.identifier] {
             await MangaManager.shared.removeFromLibrary(mangaId: id)
             await CoreDataManager.shared.container.performBackgroundTask { context in
                 CoreDataManager.shared.removeHistory(mangaId: id, context: context)
@@ -301,29 +300,29 @@ final class DeletedDownloads: @unchecked Sendable {
     }
 
     @Test func withoutReadChaptersTheServerGetsNoMarks() async {
-        await run(MigrationOptions(readChapters: false))
+        await runMigration(MigrationOptions(readChapters: false))
         #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897]) // still in the server library
         #expect(server.count("GetChaptersForTrackUpdate") == 0)
         #expect(server.count("MarkChaptersRead") == 0)
         #expect(server.variables("RemoveFromServerLibrary").map { $0["id"] as? Int } == [753])
-        await cleanUp()
+        await cleanUpMigration()
     }
 
     @Test func withoutTrackingTheServerTrackerStillRegisters() async {
-        await run(MigrationOptions(tracking: false))
+        await runMigration(MigrationOptions(tracking: false))
         #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
         #expect(server.count("MarkChaptersRead") == 1)
-        let tracks = await CoreDataManager.shared.container.performBackgroundTask { [new] context in
-            CoreDataManager.shared.getTracks(mangaId: new.identifier, context: context).compactMap(\.id)
+        let tracks = await CoreDataManager.shared.container.performBackgroundTask { [migrationNew] context in
+            CoreDataManager.shared.getTracks(mangaId: migrationNew.identifier, context: context).compactMap(\.id)
         }
         #expect(tracks == ["\(key)|897"])
-        await cleanUp()
+        await cleanUpMigration()
     }
 
     @Test func keepingTheOriginalKeepsItOnTheServer() async {
-        await run(MigrationOptions(keepOriginal: true))
+        await runMigration(MigrationOptions(keepOriginal: true))
         #expect(server.variables("AddToServerLibrary").map { $0["id"] as? Int } == [897])
         #expect(server.count("RemoveFromServerLibrary") == 0)
-        await cleanUp()
+        await cleanUpMigration()
     }
 }

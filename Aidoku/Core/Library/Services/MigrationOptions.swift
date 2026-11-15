@@ -42,23 +42,44 @@ struct MigrationOptions: Codable, Equatable, Sendable {
 
     static let defaultsKey = "Migration.options"
 
-    /// The last choice (pending: always the defaults).
+    /// The last choice (the defaults the first time, or if it can't be read).
     static func load(from defaults: UserDefaults = .standard) -> MigrationOptions {
-        MigrationOptions()
+        guard
+            let data = defaults.data(forKey: defaultsKey),
+            let options = try? JSONDecoder().decode(MigrationOptions.self, from: data)
+        else {
+            return MigrationOptions()
+        }
+        return options
     }
 
-    /// Remembers this choice for the next migration (pending).
-    func save(to defaults: UserDefaults = .standard) {}
+    /// Remembers this choice for the next migration (as Tachimanga).
+    func save(to defaults: UserDefaults = .standard) {
+        if let data = try? JSONEncoder().encode(self) {
+            defaults.set(data, forKey: Self.defaultsKey)
+        }
+    }
 
     /// Delete the original's downloads? Only after the migration went well, and never when the destination
-    /// is the same entry (pending).
+    /// is the same entry (they would be its own).
     func shouldDeleteDownloads(old: MangaIdentifier, new: MangaIdentifier, succeeded: Bool) -> Bool {
-        deleteDownloads
+        deleteDownloads && succeeded && old != new
     }
 
-    /// Localization keys of the notice under the options, for `count` entries (pending).
+    /// Localization keys of the notice under the options, for `count` entries.
     func noteKeys(count: Int) -> [String] {
-        []
+        let key = switch (keepOriginal, deleteDownloads) {
+            case (false, true): "MIGRATION_NOTE_REPLACE_DELETE"
+            case (false, false): "MIGRATION_NOTE_REPLACE_KEEP_DOWNLOADS"
+            case (true, true): "MIGRATION_NOTE_KEEP_DELETE"
+            case (true, false): "MIGRATION_NOTE_KEEP"
+        }
+        let many = count == 1 ? "" : "_MANY"
+        var keys = [key + many]
+        if !keepOriginal && !readChapters {
+            keys.append("MIGRATION_NOTE_HISTORY_LOST" + many)
+        }
+        return keys
     }
 }
 

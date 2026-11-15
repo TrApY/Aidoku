@@ -900,6 +900,8 @@ extension MangaManager {
                 UserDefaults.standard.removeObject(forKey: "Reader.readingMode.\(oldManga.identifier)")
             }
         }
+        // was the new entry already in the library (it keeps its own categories)
+        var newWasInLibrary = false
         // add new item to library if copying
         if copy {
             let inLibrary = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
@@ -920,6 +922,7 @@ extension MangaManager {
                 )
                 return true
             }
+            newWasInLibrary = inLibrary
             if !inLibrary {
                 // the enhanced trackers are bound once the history is carried over
                 await MangaManager.shared.addToLibrary(
@@ -951,6 +954,7 @@ extension MangaManager {
                 // remove old entry if the new one already exists in library
                 if !copy {
                     var mangaObjectToUpdate: MangaObject?
+                    let oldCategories = CoreDataManager.shared.getCategories(mangaId: oldManga.identifier, context: context)
 
                     // new is already in library
                     if newManga.key != oldManga.key, let storedNewManga = CoreDataManager.shared.getManga(
@@ -964,19 +968,37 @@ extension MangaManager {
                             mangaId: oldManga.identifier,
                             context: context
                         )
+                        mangaObjectToUpdate?.load(from: newManga)
+                        // it keeps its own categories, plus the old ones if asked
+                        if options.categories {
+                            CoreDataManager.shared.addCategoriesToManga(
+                                mangaId: newManga.identifier,
+                                categories: oldCategories,
+                                context: context
+                            )
+                        }
                     } else {
                         // get existing old object to replace data with new details
                         mangaObjectToUpdate = CoreDataManager.shared.getManga(
                             mangaId: oldManga.identifier,
                             context: context
                         )
+                        let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: oldManga.identifier, context: context)
+                        mangaObjectToUpdate?.load(from: newManga)
+                        // the old library object stays: drop what wasn't asked for
+                        if let libraryObject {
+                            if !options.categories {
+                                libraryObject.categories = NSSet()
+                            }
+                            if !options.readChapters {
+                                libraryObject.lastRead = nil
+                            }
+                        }
                     }
-
-                    mangaObjectToUpdate?.load(from: newManga)
                 }
 
                 // copy categories
-                if copy {
+                if copy && options.categories {
                     let categories = CoreDataManager.shared.getCategories(
                         mangaId: oldManga.identifier,
                         context: context
@@ -986,6 +1008,10 @@ extension MangaManager {
                         categories: categories,
                         context: context
                     )
+                } else if copy && !newWasInLibrary,
+                          let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: newManga.identifier, context: context) {
+                    // without categories (also without the default one it got when added)
+                    libraryObject.categories = NSSet()
                 }
 
                 // migrate history
@@ -1030,8 +1056,8 @@ extension MangaManager {
                     )
                 }
 
-                // mark new chapters as read, with the old reading dates
-                for completed in historyPlan.completed {
+                // mark new chapters as read, with the old reading dates (only if asked)
+                for completed in options.readChapters ? historyPlan.completed : [] {
                     CoreDataManager.shared.setCompleted(
                         chapterIds: [.init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: completed.chapterKey)],
                         date: completed.date,
@@ -1039,7 +1065,7 @@ extension MangaManager {
                     )
                 }
                 // the unfinished chapter keeps its page (unless the new chapter already has its own history)
-                for unfinished in historyPlan.inProgress {
+                for unfinished in options.readChapters ? historyPlan.inProgress : [] {
                     let chapterId = ChapterIdentifier(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: unfinished.chapterKey)
                     if let existing = CoreDataManager.shared.getHistory(chapterId: chapterId, context: context),
                        existing.completed || existing.progress > 0 {
@@ -1093,6 +1119,7 @@ extension MangaManager {
                         continue
                     }
                     guard
+                        options.tracking, // the user's trackers only if asked
                         let trackId = item.id,
                         let trackerId = item.trackerId,
                         !CoreDataManager.shared.hasTrack(
@@ -1139,10 +1166,16 @@ extension MangaManager {
         if result != nil, let suwayomiTracker, suwayomiPlan != .none {
             // best effort on the server: failures are logged and don't undo the migration on the device
             let newId = newManga.identifier
-            let highestRead = await CoreDataManager.shared.container.performBackgroundTask { context in
+            // without the read chapters, the server gets no last read chapter
+            let highestRead = options.readChapters ? await CoreDataManager.shared.container.performBackgroundTask { context in
                 CoreDataManager.shared.getHighestReadNumber(mangaId: newId, context: context)
-            }
+            } : nil
             await suwayomiTracker.applyMigration(suwayomiPlan, old: oldManga.identifier, highestChapterRead: highestRead)
+        }
+
+        // the original's downloads, only once the migration went well
+        if options.shouldDeleteDownloads(old: oldManga.identifier, new: newManga.identifier, succeeded: result != nil) {
+            await environment.deleteDownloads(oldManga.identifier)
         }
 
         if copy && result != nil {
