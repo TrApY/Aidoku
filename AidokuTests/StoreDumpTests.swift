@@ -404,6 +404,7 @@ func expectMetadataListed(_ dump: StoreDump) {
         try expectComplete(restored, stores: try #require(Self.restored))
         let tables = original.differences(to: restored).filter { $0.hasPrefix("tabla ") }
         if let out = ProcessInfo.processInfo.environment["SUWA13_OUT"] {
+            try FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
             try (tables.joined(separator: "\n") + "\n")
                 .write(to: URL(fileURLWithPath: out).appendingPathComponent("restaurado-tablas.txt"), atomically: true, encoding: .utf8)
         }

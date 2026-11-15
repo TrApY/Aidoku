@@ -215,9 +215,10 @@ struct StoreDump: Equatable {
     /// Metadata tables that change on their own when the app's stack opens a copy without CloudKit and saves
     /// nothing; the rest (CloudKit mirroring ANSCK*, persistent history, primary keys, model cache) stays byte for
     /// byte. Z_METADATA keeps the store's metadata plist, with NSPersistenceFrameworkVersion: Core Data rewrites it
-    /// when the store was last written by another version of the framework (measured in F3 P4: the iPad copy, from
-    /// iPadOS 27.2, says 1634; the iOS 27.0 simulator writes 1629; the iPhone copy, from iOS 27.0.1, already said 1629
-    /// and does not change). Model hashes and checksum stay the same.
+    /// when it saves and closes a store last written by another version of the framework (measured in F3 P4: the
+    /// iPad copy, from iPadOS 27.2, says 1634; the iOS 27.0 simulator writes 1629; the iPhone copy, from iOS 27.0.1,
+    /// already said 1629 and does not change; the app opened and killed in the simulator, P5, left it at 1634).
+    /// Model hashes and checksum stay the same.
     static let changesWhenOpened: Set<String> = ["Aidoku.sqlite/Z_METADATA", "Local.sqlite/Z_METADATA"]
 
     static func metadataThatStays(in dump: StoreDump) -> Set<String> {
