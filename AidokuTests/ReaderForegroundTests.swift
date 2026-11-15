@@ -27,9 +27,8 @@ func makeTestReader(mangaKey: String, center: NotificationCenter) -> (ReaderView
 }
 
 func storedProgress(_ chapterId: ChapterIdentifier) async -> (completed: Bool, progress: Int?) {
-    await CoreDataManager.shared.container.performBackgroundTask { context in
-        CoreDataManager.shared.getProgress(chapterId: chapterId, context: context)
-    }
+    let stored = await DataRepositories.shared.history.progress(of: chapterId)
+    return (stored.completed, stored.progress)
 }
 
 func removeTestHistory(_ chapterId: ChapterIdentifier) async {

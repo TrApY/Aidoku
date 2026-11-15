@@ -223,7 +223,7 @@ final class DeletedDownloads: @unchecked Sendable {
     }
 
     private func state(_ id: MangaIdentifier) async -> State {
-        let history = await CoreDataManager.shared.getReadingHistory(mangaId: id).mapValues(\.page)
+        let history = await DataRepositories.shared.history.readingHistory(of: id).mapValues(\.page)
         let tracks = await DataRepositories.shared.tracks.items(of: id).map(\.id)
         let categories = await DataRepositories.shared.categories.categories(of: id)
         let inLibrary = await DataRepositories.shared.library.contains(id)

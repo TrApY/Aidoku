@@ -62,9 +62,9 @@ private final class NoDateTracker: PageTracker, @unchecked Sendable {
             downloadAhead: { _ in }
         )
         await DataRepositories.shared.tracks.remove(trackerId: tracker.id, manga: manga.identifier)
+        let completed = await DataRepositories.shared.history.progress(of: c1).completed
         return await CoreDataManager.shared.container.performBackgroundTask { context in
             let lastRead = CoreDataManager.shared.getLibraryManga(mangaId: manga.identifier, context: context)?.lastRead
-            let completed = CoreDataManager.shared.getProgress(chapterId: c1, context: context).0
             CoreDataManager.shared.removeHistory(mangaId: manga.identifier, context: context)
             CoreDataManager.shared.removeManga(mangaId: manga.identifier, context: context)
             try? context.save()
