@@ -759,6 +759,7 @@
 "DOWNLOAD_AHEAD_OFF" = "Desactivada";
 "DOWNLOAD_AHEAD_ONE" = "1 capítulo";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i capítulos";
+"DOWNLOAD_AHEAD_ACTIVE" = "Descarga adelantada: %i";
 
 // Pillarbox per orientation
 "PILLARBOX_AMOUNT_PORTRAIT" = "Margen en vertical";

@@ -887,6 +887,7 @@
 "DOWNLOAD_AHEAD_OFF" = "Off";
 "DOWNLOAD_AHEAD_ONE" = "1 chapter";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i chapters";
+"DOWNLOAD_AHEAD_ACTIVE" = "Download ahead: %i";
 
 // Pillarbox per orientation
 "PILLARBOX_AMOUNT_PORTRAIT" = "Portrait Margin";

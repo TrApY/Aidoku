@@ -24,6 +24,8 @@ struct ChapterListHeaderView: View {
     private var languages: [String] = []
     private var scanlators: [String] = []
     private var mangaId: MangaIdentifier
+    /// «Descarga adelantada» of this manga (follows the setting as it changes).
+    @AppStorage private var downloadAhead: Int
 
     init(
         allChapters: [AidokuRunner.Chapter]? = nil,
@@ -44,6 +46,7 @@ struct ChapterListHeaderView: View {
         self._scanlatorFilter = scanlatorFilter
         self._displayMode = displayMode
         self.mangaId = mangaId
+        self._downloadAhead = AppStorage(wrappedValue: 0, DownloadAheadSetting.key(for: mangaId))
 
         if let allChapters, !allChapters.isEmpty {
             var languages: Set<String> = []
@@ -79,10 +82,20 @@ struct ChapterListHeaderView: View {
             } else {
                 NSLocalizedString("LOADING_ELLIPSIS")
             }
-            Text(text)
-                .font(.headline)
-                .transition(.scale) // for some reason this makes it animate correctly
-                .id("chapters")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text)
+                    .font(.headline)
+                    .transition(.scale) // for some reason this makes it animate correctly
+                    .id("chapters")
+                if downloadAhead > 0 {
+                    Label(
+                        String(format: NSLocalizedString("DOWNLOAD_AHEAD_ACTIVE"), downloadAhead),
+                        systemImage: "arrow.down.circle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
 
             Spacer()
 
