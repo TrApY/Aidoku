@@ -57,7 +57,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     }
 
     // Stores the last calculated page number
-    private var previousPage = 0
+    /// Reports only real page changes, and the first page of each chapter.
+    private var pageReports = PageReportFilter()
 
     private var autoScrollDisplayLink: CADisplayLink?
     private var autoScrollLastTimestamp: CFTimeInterval?
@@ -381,20 +382,19 @@ extension ReaderWebtoonViewController {
             if chapterIndex > 0 && pageSection < chapterIndex {
                 movePreviousChapter()
                 needsInfoRefresh = true
-                previousPage = 0
+                pageReports.reset()
             } else if chapterIndex < chapters.count - 1 {
                 if pageSection > chapterIndex {
                     moveNextChapter()
                     needsInfoRefresh = true
-                    previousPage = 0
+                    pageReports.reset()
                 }
             }
         }
 
         // update page number
         let page = getCurrentPage()
-        if previousPage != page {
-            previousPage = page
+        if pageReports.shouldReport(page) {
             delegate?.setCurrentPage(page, position: nil)
         }
     }
@@ -929,7 +929,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     func setChapter(_ chapter: AidokuRunner.Chapter, startPage: Int) {
         self.chapter = chapter
         // a new chapter: its first page is reported even if it has the number the last one had
-        previousPage = 0
+        pageReports.reset()
         updateDoubleTapZoomSetting()
         chapters = [chapter]
 

@@ -56,13 +56,14 @@ class ReaderViewController: BaseObservingViewController {
         let scrollPosition: Double?
 
         var pageKey: String { Self.pageKey(chapter: chapter, page: page, position: scrollPosition) }
+        var trackerKey: String { Self.pageKey(chapter: chapter, page: page, position: nil) }
 
         static func pageKey(chapter: AidokuRunner.Chapter, page: Int, position: Double?) -> String {
             ReadPositionKey.make(chapterKey: chapter.key, page: page, position: position)
         }
     }
 
-    /// Saves the page while reading (locally after ~2 s, page trackers after ~10 s), so it isn't lost
+    /// Saves the page while reading (locally after ~2 s, page trackers after ~30 s), so it isn't lost
     /// if the app is killed without leaving the reader.
     private lazy var readPositionSaver = ReadPositionSaver<ReadPosition>(
         isEnabled: { !AppSettings.general.incognitoMode.get() },
@@ -86,7 +87,7 @@ class ReaderViewController: BaseObservingViewController {
                     page: position.page,
                     chapter: position.chapter,
                     generation: generation,
-                    pageKey: position.pageKey
+                    pageKey: position.trackerKey
                 )
             }
         }
@@ -545,7 +546,8 @@ extension ReaderViewController {
         let page = currentPage
         let chapter = chapter
         let needsSave = readPositionSaver.claimImmediateSave(
-            pageKey: ReadPosition.pageKey(chapter: chapter, page: page, position: currentPosition)
+            pageKey: ReadPosition.pageKey(chapter: chapter, page: page, position: currentPosition),
+            trackerKey: ReadPosition.pageKey(chapter: chapter, page: page, position: nil)
         )
         let needsSession = sessionStartDate != nil && !AppSettings.general.incognitoMode.get()
         guard needsSave || needsSession else { return }
@@ -680,15 +682,24 @@ extension ReaderViewController {
     /// Where the chapter starts, as the reader will report it: the stored page (the first one without
     /// history or when completed) and, for text readers, the stored scroll position.
     private func openingPageKey() -> String {
-        let page = max(1, currentPage)
-        var position: Double?
-        if reader is ReaderTextViewController || reader is ReaderPagedTextViewController {
-            position = CoreDataManager.shared.getHistory(
+        let isTextReader = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
+        var storedPosition: Double?
+        if isTextReader, currentPage >= 1 {
+            let history = CoreDataManager.shared.getHistory(
                 chapterId: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key),
                 context: CoreDataManager.shared.context
-            )?.scrollPosition?.doubleValue
+            )
+            // only the position stored for the page it opens at (not for a completed chapter)
+            if let history, !history.completed, Int(history.progress) == currentPage {
+                storedPosition = history.scrollPosition?.doubleValue
+            }
         }
-        return ReadPosition.pageKey(chapter: chapter, page: page, position: position)
+        return ReadPositionKey.opening(
+            chapterKey: chapter.key,
+            startPage: currentPage,
+            isTextReader: isTextReader,
+            storedPosition: storedPosition
+        )
     }
 
     func loadCurrentChapter() {
