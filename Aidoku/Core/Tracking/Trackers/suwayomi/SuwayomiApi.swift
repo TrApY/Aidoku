@@ -205,9 +205,17 @@ actor SuwayomiApi {
             result["\(chapter.id)"] = .init(
                 completed: chapter.isRead,
                 page: chapter.isRead ? max(chapter.pageCount, chapter.lastPageRead + 1) : chapter.lastPageRead + 1,
-                date: Date(suwayomiTimestamp: chapter.lastReadAt)
+                date: Self.readDate(lastReadAt: chapter.lastReadAt)
             )
         }
         return result
+    }
+}
+
+extension SuwayomiApi {
+    /// When the chapter was read on the server; nil when it has no date (a chapter marked read with
+    /// `updateChapters(isRead:)` keeps `lastReadAt` 0). SUWA-12 F.
+    static func readDate(lastReadAt: String) -> Date? {
+        Date(suwayomiTimestamp: lastReadAt) // pendiente[A#1]
     }
 }

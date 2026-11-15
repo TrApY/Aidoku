@@ -706,7 +706,8 @@ extension MangaView.ViewModel {
                     await HistoryManager.shared.addHistory(
                         mangaId: self.manga.identifier,
                         chapters: chaptersToMark,
-                        skipTracker: tracker
+                        skipTracker: tracker,
+                        reason: "ficha: sincronizar con \(tracker.id)"
                     )
                 }
             })
@@ -735,7 +736,8 @@ extension MangaView.ViewModel {
 
         await HistoryManager.shared.addHistory(
             mangaId: manga.identifier,
-            chapters: chapters
+            chapters: chapters,
+            reason: "ficha: marcar como leído"
         )
         let date = Int(Date().timeIntervalSince1970)
         for chapter in chapters {

@@ -1526,7 +1526,8 @@ extension LibraryViewController {
 
                             await HistoryManager.shared.addHistory(
                                 mangaId: manga.identifier,
-                                chapters: chapters.map { $0.toNew() }
+                                chapters: chapters.map { $0.toNew() },
+                                reason: "biblioteca: marcar como leído"
                             )
                         }
 

@@ -59,6 +59,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     // Stores the last calculated page number
     /// Reports only real page changes, and the first page of each chapter.
     private var pageReports = PageReportFilter()
+    /// Chapters whose end this reader already wrote to the completion journal (once each).
+    private var journaledEnds = Set<String>()
 
     private var autoScrollDisplayLink: CADisplayLink?
     private var autoScrollLastTimestamp: CFTimeInterval?
@@ -653,6 +655,16 @@ extension ReaderWebtoonViewController {
             let chapterPages = pages[safe: chapterIndex],
             bottomPath == nil || (bottomPath?.section == chapterIndex && bottomPath?.item == chapterPages.count - 1)
         {
+            if !journaledEnds.contains(chapter.key) {
+                journaledEnds.insert(chapter.key)
+                CompletionJournal.record(
+                    .init(sourceKey: viewModel.manga.sourceKey, mangaKey: viewModel.manga.key, chapterKey: chapter.key),
+                    reason: "webtoon: final visto",
+                    detail: "abajo \(bottomPath.map { "\($0.section)/\($0.item)" } ?? "fuera"), capítulo \(chapterIndex) de \(pages.count) "
+                        + "con \(chapterPages.count), desplazamiento \(Int(collectionNode.contentOffset.y)), alto \(Int(collectionNode.bounds.height)), "
+                        + "contenido \(Int(collectionNode.view.contentSize.height)), zoom \(scrollView.zoomScale)"
+                )
+            }
             delegate?.setCompleted()
         }
 

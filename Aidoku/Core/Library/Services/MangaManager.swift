@@ -1056,6 +1056,10 @@ extension MangaManager {
 
                 // mark new chapters as read, with the old reading dates (only if asked)
                 for completed in options.readChapters ? historyPlan.completed : [] {
+                    CompletionJournal.record(
+                        .init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: completed.chapterKey),
+                        reason: "migración desde \(oldManga.identifier)"
+                    )
                     CoreDataManager.shared.setCompleted(
                         chapterIds: [.init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: completed.chapterKey)],
                         date: completed.date,

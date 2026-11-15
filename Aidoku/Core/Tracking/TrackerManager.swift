@@ -369,7 +369,8 @@ actor TrackerManager {
                 await HistoryManager.shared.addHistory(
                     mangaId: manga.identifier,
                     chapters: chaptersToMark,
-                    skipTracker: tracker
+                    skipTracker: tracker,
+                    reason: "tracker \(tracker.id) (último leído)"
                 )
             }
         }
@@ -433,6 +434,7 @@ actor TrackerManager {
         }
 
         guard !result.isEmpty else { return }
+        let trackerIdsForJournal = trackItems.map(\.trackerId).joined(separator: ",")
 
         // create local history
         let (completed, progressed) = await CoreDataManager.shared.container.performBackgroundTask { [result] context in
@@ -451,6 +453,7 @@ actor TrackerManager {
                     chapterId: chapterId,
                     context: context
                 )
+                 // pendiente[A#2]
                 if let existingDate = existingHistory?.dateRead, let newDate = progress.date, newDate <= existingDate {
                     // don't update if the existing history is newer than the tracker history
                     continue
@@ -458,6 +461,11 @@ actor TrackerManager {
                 // mark chapters as read
                 if progress.completed {
                     if !(existingHistory?.completed ?? false) {
+                        CompletionJournal.record(
+                            chapterId,
+                            reason: "sincronización \(trackerIdsForJournal)",
+                            detail: "fecha \(progress.date.map { "\($0)" } ?? "ninguna"), local \(existingHistory.map { "pág \($0.progress)/\($0.total)" } ?? "sin historial")"
+                        )
                         completed.append(chapterKey)
                         let readDate = progress.date ?? Date.now
                         lastRead = readDate > lastRead ? readDate : lastRead

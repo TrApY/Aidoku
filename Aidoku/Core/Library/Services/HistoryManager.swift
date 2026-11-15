@@ -76,7 +76,8 @@ extension HistoryManager {
         mangaId: MangaIdentifier,
         chapters: [AidokuRunner.Chapter],
         date: Date = Date(),
-        skipTracker: Tracker? = nil
+        skipTracker: Tracker? = nil,
+        reason: String = "?"
     ) async {
         // mark each manga as read
         let success = await CoreDataManager.shared.container.performBackgroundTask { context in
@@ -89,6 +90,12 @@ extension HistoryManager {
                 context: context
             )
             if success {
+                for chapter in chapters {
+                    CompletionJournal.record(
+                        .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key),
+                        reason: reason
+                    )
+                }
                 CoreDataManager.shared.setRead(
                     mangaId: mangaId,
                     date: date,

@@ -28,6 +28,8 @@ class ReaderViewController: BaseObservingViewController {
 
     private var chapterList: [AidokuRunner.Chapter]
     private var chaptersToMark: [AidokuRunner.Chapter] = []
+    /// How the reader saw the end of the chapter, for the completion journal (SUWA-12 F).
+    private var completionTrigger = "lector"
     private var chaptersToRemoveDownload: [AidokuRunner.Chapter] = [] {
         didSet {
             // ensure chapters queued for deletion are persistent, in case of app termination
@@ -1248,6 +1250,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             && self.pages.first?.isTextPage == true
             && !(reader is ReaderPagedTextViewController && (reader as? ReaderPagedTextViewController)?.hasPaginated == true)
         if pages.upperBound >= totalPages && !isPrePaginationPlaceholder {
+            completionTrigger = "lector: página \(pages.lowerBound)...\(pages.upperBound) de \(totalPages)"
             setCompleted()
         }
     }
@@ -1328,10 +1331,13 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     func setCompleted() {
         guard !AppSettings.general.incognitoMode.get() else { return }
 
+        let reason = "\(completionTrigger) (\(String(describing: type(of: reader as Any))), página \(currentPage) de \(toolbarView.totalPages ?? 0))"
+        completionTrigger = "lector"
         Task { [chaptersToMark] in
             await HistoryManager.shared.addHistory(
                 mangaId: manga.identifier,
-                chapters: chaptersToMark
+                chapters: chaptersToMark,
+                reason: reason
             )
         }
 
