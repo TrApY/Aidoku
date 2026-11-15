@@ -263,16 +263,12 @@ extension WasmNet {
         { descriptor in
             guard let request = self.globalStore.requests[descriptor] else { return }
             let url: URL?
-            // iOS 17 encodes by default the url string causing double encoded characters
-            if #available(iOS 17.0, macOS 14.0, *) {
-                // it seems if we pass a valid RFC 3986 url string to URL() it behaves the same as on iOS 16
-                let urlEncoded = request.URL?
-                    .removingPercentEncoding?
-                    .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                url = URL(string: urlEncoded ?? "", encodingInvalidCharacters: false)
-            } else {
-                url = URL(string: request.URL ?? "")
-            }
+            // iOS 17 encodes by default the url string causing double encoded characters;
+            // it seems if we pass a valid RFC 3986 url string to URL() it behaves the same as on iOS 16
+            let urlEncoded = request.URL?
+                .removingPercentEncoding?
+                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            url = URL(string: urlEncoded ?? "", encodingInvalidCharacters: false)
             guard let url else { return }
 
             var urlRequest = URLRequest(url: url)

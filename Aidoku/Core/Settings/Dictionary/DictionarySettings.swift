@@ -26,9 +26,6 @@ struct DictionarySettings: Sendable {
     }
 
     let enable = SettingsKey<Bool>("Dictionary.enable", default: false, requires: {
-        if #unavailable(iOS 18.0) {
-            return false
-        }
         return nil
     })
     let lookupGesture = SettingsKey<LookupGesture>("Dictionary.lookupGesture", default: .singleTap)

@@ -111,11 +111,7 @@ struct KavitaHelper: Sendable {
                 let container = try decoder.singleValueContainer()
                 let string = try container.decode(String.self)
                 let formatter = DateFormatter()
-                formatter.timeZone = if #available(iOS 16.0, macOS 13.0, *) {
-                    .gmt
-                } else {
-                    .init(secondsFromGMT: 0)
-                }
+                formatter.timeZone = .gmt
                 formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSS"
                 var date = formatter.date(from: string)
                 if date == nil {
