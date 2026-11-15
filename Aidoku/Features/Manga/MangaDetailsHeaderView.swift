@@ -566,7 +566,6 @@ private struct MangaActionButtonStyle: ButtonStyle {
     }
 }
 
-@available(iOS 17.0, macOS 14.0, *)
 #Preview {
     @Previewable @State var bookmarked = false
     @Previewable @State var chapterSortOption = ChapterSortOption.sourceOrder
