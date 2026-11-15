@@ -709,8 +709,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/siteline/swiftui-introspect";
 			requirement = {
-				kind = revision;
-				revision = d2987affc5482a94d94aa730914aa26b124648a6;
+				kind = upToNextMajorVersion;
+				minimumVersion = 27.1.0;
 			};
 		};
 		FBBCB31B2E08D6AF00ED5CAB /* XCRemoteSwiftPackageReference "Gifu" */ = {
