@@ -43,7 +43,9 @@ enum ReaderCompletion {
         if pages.contains(totalPages) || seenPages.contains(totalPages) {
             return true
         }
-        return false // pendiente[I2#1]
+        // past the last page in one go (37 → 39), as before and as upstream: the transition only comes after
+        // it. A jump from further back (18 → 39, the iPad's) doesn't count. SUWA-12 I2
+        return pages.lowerBound > totalPages && (previousPage ?? 0) >= totalPages - 2
     }
 }
 
