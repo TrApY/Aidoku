@@ -49,7 +49,23 @@ enum SuwayomiServerSourceSync {
         existing: [SuwayomiServerSourceConfig],
         snapshot: [SuwayomiServerSource]
     ) -> [SuwayomiServerSourceConfig] {
-        [] // pendiente[M1#1]
+        let known = Set(existing.map(\.key))
+        let byId = Dictionary(snapshot.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var result: [SuwayomiServerSourceConfig] = []
+        for key in sourceKeysInData.sorted() where key.hasPrefix("\(parentKey).") && !known.contains(key) {
+            let id = String(key.dropFirst(parentKey.count + 1))
+            guard !id.isEmpty, id.allSatisfy(\.isNumber), id != SuwayomiServerSources.localSourceId else { continue }
+            if let source = byId[id] {
+                result.append(.init(parentKey: parentKey, server: source))
+            } else {
+                result.append(.init(
+                    key: key, parentKey: parentKey, serverSourceId: id,
+                    name: NSLocalizedString("SUWAYOMI_SERVER_SOURCE_PROVISIONAL"), lang: SourceLanguage.multi,
+                    iconUrl: "", isNsfw: false, supportsLatest: false, available: true
+                ))
+            }
+        }
+        return result
     }
 
     static func snapshotKey(parentKey: String) -> String {

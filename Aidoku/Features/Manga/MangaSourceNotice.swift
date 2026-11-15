@@ -24,7 +24,7 @@ struct MangaSourceNotice: Equatable {
         pendingServerSource: Bool = false
     ) -> MangaSourceNotice? {
         guard sourcesLoaded, !hasSource else { return nil }
-         // pendiente[M1#6]
+        guard !pendingServerSource else { return nil }
         return .init(migrate: inLibrary, webView: hasWebUrl)
     }
 }

@@ -234,7 +234,29 @@ extension SuwayomiSourceConversion {
     /// SUWA-12 M1: manga id → the server source its rows already use, for the ids with no row under
     /// `parent` and rows under exactly one of its server sources.
     static func childKeysInRows(parent: String, mangaIds: [String], env: Environment) async -> [String: String] {
-        [:] // pendiente[M1#3]
+        let wanted = Set(mangaIds)
+        let context = env.container.newBackgroundContext()
+        let keysById: [String: Set<String>] = await context.perform {
+            var keys: [String: Set<String>] = [:]
+            for entity in entities {
+                let idField = entity == "Manga" ? "id" : "mangaId"
+                let request = NSFetchRequest<NSDictionary>(entityName: entity)
+                request.predicate = NSPredicate(format: "sourceId == %@ OR sourceId BEGINSWITH %@", parent, "\(parent).")
+                request.resultType = .dictionaryResultType
+                request.propertiesToFetch = ["sourceId", idField]
+                request.returnsDistinctResults = true
+                for row in (try? context.fetch(request)) ?? [] {
+                    guard let id = row[idField] as? String, wanted.contains(id), let key = row["sourceId"] as? String else { continue }
+                    keys[id, default: []].insert(key)
+                }
+            }
+            return keys
+        }
+        var result: [String: String] = [:]
+        for (id, keys) in keysById where !keys.contains(parent) && keys.count == 1 {
+            result[id] = keys.first
+        }
+        return result
     }
 
     /// Moves every row of (`parent`, `mangaId`) to `child` in one save; rows that already exist under

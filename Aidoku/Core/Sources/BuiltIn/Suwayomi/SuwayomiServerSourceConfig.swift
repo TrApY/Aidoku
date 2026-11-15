@@ -151,7 +151,13 @@ final class SuwayomiConnections: @unchecked Sendable {
     /// SUWA-12 M1: `<connection>.<server source id>` of a registered connection (its child may not be
     /// registered yet: it came by iCloud and the server hasn't answered here).
     func isServerSourceOfConnection(_ key: String) -> Bool {
-        false // pendiente[M1#2]
+        lock.withLock {
+            connections.contains { connection in
+                guard key.hasPrefix("\(connection).") else { return false }
+                let id = key.dropFirst(connection.count + 1)
+                return !id.isEmpty && id.allSatisfy(\.isNumber)
+            }
+        }
     }
 
     /// False for what must not be offered as a source (Explorar, search, migration targets): a connection,
