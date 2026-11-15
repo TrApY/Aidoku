@@ -277,7 +277,7 @@ private let nexus = "4086183896761281232" // flagged NSFW
                 UserDefaults.standard.removeObject(forKey: "\(key).\(suffix)")
             }
         }
-        UserDefaults.standard.set("jota", forKey: "\(key).login.username")
+        UserDefaults.standard.set("usuario-prueba", forKey: "\(key).login.username")
         UserDefaults.standard.set("clave-de-prueba", forKey: "\(key).login.password")
         let requests = SuwayomiRequestLog()
         let child = makeChild(olympus)

@@ -120,7 +120,7 @@ import Testing
         SuwayomiConnections.shared.register(connection: parent)
         SuwayomiConnections.shared.register(child: child())
         UserDefaults.standard.set("https://suwayomi.example:4567", forKey: "\(parent).server")
-        UserDefaults.standard.set("jota", forKey: "\(parent).login.username")
+        UserDefaults.standard.set("usuario-prueba", forKey: "\(parent).login.username")
         UserDefaults.standard.set("clave-de-prueba", forKey: "\(parent).login.password")
         let server = SuwayomiFakeServer()
         server.respond("UpdateChapterProgress", .success(Data(#"{"data":{"updateChapter":{"chapter":{"id":11}}}}"#.utf8)))
