@@ -471,7 +471,7 @@ actor TrackerManager {
                             detail: "fecha \(progress.date.map { "\($0)" } ?? "ninguna"), local \(existingHistory.map { "pág \($0.progress)/\($0.total)" } ?? "sin historial")"
                         )
                         completed.append(chapterKey)
-                        let readDate = progress.date ?? Date.now
+                        let readDate = progress.date ?? Date.now // pendiente[H4#13]
                         lastRead = readDate > lastRead ? readDate : lastRead
                         CoreDataManager.shared.setCompleted(
                             chapterIds: [chapterId],
@@ -493,8 +493,8 @@ actor TrackerManager {
                 }
             }
 
-            // mark manga as read only if history was updated
-            if !completed.isEmpty || !progressed.isEmpty {
+            // mark manga as read only if history was updated, with a date
+            if (!completed.isEmpty || !progressed.isEmpty) && lastRead > Date.distantPast {
                 CoreDataManager.shared.setRead(
                     mangaId: manga.identifier,
                     date: lastRead,

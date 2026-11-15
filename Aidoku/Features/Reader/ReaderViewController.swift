@@ -1249,7 +1249,14 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         let isPrePaginationPlaceholder = totalPages == 1
             && self.pages.first?.isTextPage == true
             && !(reader is ReaderPagedTextViewController && (reader as? ReaderPagedTextViewController)?.hasPaginated == true)
-        if pages.upperBound >= totalPages && !isPrePaginationPlaceholder {
+        // the last page seen (now or before in this session), with the app in the foreground (SUWA-12 H1)
+        let completes = ReaderCompletion.pageReportCompletes(
+            pages: pages,
+            totalPages: totalPages,
+            seenPages: sessionReadPages,
+            inForeground: UIApplication.shared.applicationState != .background
+        )
+        if completes && !isPrePaginationPlaceholder {
             completionTrigger = "lector: página \(pages.lowerBound)...\(pages.upperBound) de \(totalPages)"
             setCompleted()
         }

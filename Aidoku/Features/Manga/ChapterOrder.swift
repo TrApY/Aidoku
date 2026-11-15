@@ -32,8 +32,13 @@ struct ChapterSortChoice: Codable, Equatable, Sendable {
     static let initial = ChapterSortChoice(option: ChapterSortOption.sourceOrder.rawValue, ascending: false)
 }
 
-/// Each manga keeps its order on the device (also out of the library); the last order chosen in any
-/// manga is the default for those without one (as Tachimanga). A library entry's stored flags still count.
+extension ChapterFlagMask {
+    /// An order chosen on purpose (also the source's, descending, which has no other bit). SUWA-12 H5.
+    static let sortChosen: Int = 1 << 10
+}
+
+/// The order of a manga: in the library, the one in its library flags (synced by iCloud); out of it, the
+/// device's own; with none chosen, the last one chosen in any manga (as Tachimanga). SUWA-12 G2/H5.
 enum ChapterSortMemory {
     static let defaultKey = "Manga.chapterSortDefault"
 
@@ -41,23 +46,51 @@ enum ChapterSortMemory {
         "Manga.chapterSort.\(mangaId)"
     }
 
-    static func load(for mangaId: MangaIdentifier, flags: Int, defaults: UserDefaults = .standard) -> ChapterSortChoice {
-        if let own = decode(defaults.data(forKey: key(mangaId))) {
-            return own
-        }
+    /// The order in the library flags, if one was chosen (the bit, or an order other than the source's
+    /// descending stored before the bit existed).
+    static func chosen(inFlags flags: Int) -> ChapterSortChoice? {
         let stored = ChapterSortChoice(
             option: ChapterSortOption(flags: flags).rawValue,
             ascending: flags & ChapterFlagMask.sortAscending != 0
         )
-        if stored != .initial {
-            return stored // chosen before and kept in the library entry (synced by iCloud)
-        }
-        return decode(defaults.data(forKey: defaultKey)) ?? .initial
+        return stored != .initial ? stored : nil // pendiente[H5#3]
     }
 
-    static func record(_ choice: ChapterSortChoice, for mangaId: MangaIdentifier, defaults: UserDefaults = .standard) {
+    /// `flags` with the order and the «chosen» bit.
+    static func flags(_ choice: ChapterSortChoice, into flags: Int) -> Int {
+        var flags = flags & ~(ChapterFlagMask.sortAscending | ChapterFlagMask.sortMethod)
+        if choice.ascending {
+            flags |= ChapterFlagMask.sortAscending
+        }
+        flags |= choice.option << 1
+        return flags | ChapterFlagMask.sortChosen
+    }
+
+    static func local(for mangaId: MangaIdentifier, defaults: UserDefaults = .standard) -> ChapterSortChoice? {
+        decode(defaults.data(forKey: key(mangaId)))
+    }
+
+    static func forgetLocal(_ mangaId: MangaIdentifier, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key(mangaId))
+    }
+
+    static func isChosen(for mangaId: MangaIdentifier, flags: Int, defaults: UserDefaults = .standard) -> Bool {
+        chosen(inFlags: flags) != nil || local(for: mangaId, defaults: defaults) != nil
+    }
+
+    static func load(for mangaId: MangaIdentifier, flags: Int, defaults: UserDefaults = .standard) -> ChapterSortChoice {
+        return local(for: mangaId, defaults: defaults) ?? chosen(inFlags: flags) ?? decode(defaults.data(forKey: defaultKey)) ?? .initial // pendiente[H5#4]
+    }
+
+    /// In the library the order goes to its flags (the caller saves them) and not to the device.
+    static func record(
+        _ choice: ChapterSortChoice,
+        for mangaId: MangaIdentifier,
+        inLibrary: Bool = false,
+        defaults: UserDefaults = .standard
+    ) {
         guard let data = try? JSONEncoder().encode(choice) else { return }
-        defaults.set(data, forKey: key(mangaId))
+        defaults.set(data, forKey: key(mangaId)) // pendiente[H5#5]
         defaults.set(data, forKey: defaultKey)
     }
 

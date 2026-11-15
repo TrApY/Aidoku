@@ -159,6 +159,8 @@ extension MangaManager {
                 chapters: chapters,
                 context: context
             )
+            // the order chosen out of the library goes to its flags (synced). SUWA-12 H5
+             // pendiente[H5#8]
             // add to default category
             let defaultCategory = AppSettings.library.defaultCategory.get()
             if let defaultCategory {
@@ -177,6 +179,7 @@ extension MangaManager {
                 LogManager.logger.error("MangaManager.addToLibrary: \(error.localizedDescription)")
             }
         }
+         // pendiente[H5#9]
         // add enhanced trackers
         if bindTrackers {
             await TrackerManager.shared.bindEnhancedTrackers(manga: manga)
@@ -190,7 +193,8 @@ extension MangaManager {
     }
 
     func removeFromLibrary(mangaId: MangaIdentifier) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
+        let sortInFlags = await CoreDataManager.shared.container.performBackgroundTask { context in
+            let sortInFlags = false // pendiente[H6#10]
             CoreDataManager.shared.removeManga(mangaId: mangaId, context: context)
             CoreDataManager.shared.removeChapters(mangaId: mangaId, context: context)
             CoreDataManager.shared.removeTracks(mangaId: mangaId, context: context)
@@ -199,6 +203,10 @@ extension MangaManager {
             } catch {
                 LogManager.logger.error("Failed to remove manga: \(error)")
             }
+            return sortInFlags
+        }
+        if sortInFlags {
+            ChapterSortMemory.forgetLocal(mangaId) // the order was in the library flags (SUWA-12 H6)
         }
         DownloadAheadSetting.set(0, for: mangaId)
         await MainActor.run {
@@ -212,13 +220,18 @@ extension MangaManager {
         if mangaIds.count > 100 {
             await UIApplication.shared.appDelegate?.showLoadingIndicator()
         }
-        await CoreDataManager.shared.container.performBackgroundTask { context in
+        let sortInFlags = await CoreDataManager.shared.container.performBackgroundTask { context in
+            let sortInFlags: [MangaIdentifier] = [] // pendiente[H6#11]
             CoreDataManager.shared.removeFromLibrary(ids: mangaIds, context: context)
             do {
                 try context.save()
             } catch {
                 LogManager.logger.error("Failed to remove multiple manga: \(error)")
             }
+            return sortInFlags
+        }
+        for mangaId in sortInFlags {
+            ChapterSortMemory.forgetLocal(mangaId) // SUWA-12 H6
         }
         for mangaId in mangaIds {
             DownloadAheadSetting.set(0, for: mangaId)
@@ -881,6 +894,24 @@ extension MangaManager {
         }
     }
 
+    /// The manga's own settings on the device go to the new entry (copied if the old one stays).
+    static func moveMangaSettings(
+        from oldId: MangaIdentifier,
+        to newId: MangaIdentifier,
+        copy: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        var prefixes = ["Reader.readingMode"]
+         // pendiente[H6#12]
+        for prefix in prefixes {
+            guard let value = defaults.object(forKey: "\(prefix).\(oldId)") else { continue }
+            defaults.set(value, forKey: "\(prefix).\(newId)")
+            if !copy {
+                defaults.removeObject(forKey: "\(prefix).\(oldId)")
+            }
+        }
+    }
+
     /// One entry. Internal for tests (no source needed: the new details and chapters come in).
     static func migrate(
         options: MigrationOptions,
@@ -892,12 +923,7 @@ extension MangaManager {
         // keep the original = add the new entry next to it (the old «copy»); otherwise replace it
         let copy = options.keepOriginal
         // migrate settings
-        if let readingMode = UserDefaults.standard.string(forKey: "Reader.readingMode.\(oldManga.identifier)") {
-            UserDefaults.standard.set(readingMode, forKey: "Reader.readingMode.\(newManga.identifier)")
-            if !copy {
-                UserDefaults.standard.removeObject(forKey: "Reader.readingMode.\(oldManga.identifier)")
-            }
-        }
+        moveMangaSettings(from: oldManga.identifier, to: newManga.identifier, copy: copy)
         // was the new entry already in the library (it keeps its own categories)
         var newWasInLibrary = false
         // add new item to library if copying

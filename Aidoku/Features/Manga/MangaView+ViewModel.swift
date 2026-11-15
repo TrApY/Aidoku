@@ -47,6 +47,8 @@ extension MangaView {
         }
         /// Set while the stored order is applied (not a choice of the user). SUWA-12 G2.
         var applyingStoredSort = false
+        /// This manga has an order chosen (its own), not the one inherited. SUWA-12 H5.
+        private var sortChosen = false
 
         @Published var chapterFilters: [ChapterFilterOption] = [] {
             didSet { refilterChapters() }
@@ -401,6 +403,7 @@ extension MangaView.ViewModel {
 
         let filters = CoreDataManager.shared.getMangaChapterFilters(mangaId: manga.identifier, context: context)
         let sort = ChapterSortMemory.load(for: manga.identifier, flags: filters.flags)
+        sortChosen = ChapterSortMemory.isChosen(for: manga.identifier, flags: filters.flags)
         applyingStoredSort = true
         chapterSortOption = ChapterSortOption(rawValue: sort.option) ?? .sourceOrder
         chapterSortAscending = sort.ascending
@@ -410,6 +413,7 @@ extension MangaView.ViewModel {
         chapterScanlatorFilter = filters.scanlators ?? []
 
         await loadBookmarked()
+        await adoptLocalSort(flags: filters.flags)
         await loadHistory()
         await fetchData()
     }
@@ -778,10 +782,19 @@ extension MangaView.ViewModel {
     /// The order chosen is this manga's and the default for the rest (SUWA-12 G2).
     private func rememberSort() {
         guard !applyingStoredSort else { return }
+        sortChosen = true
+        // in the library it goes to the flags (refilterChapters saves them), out of it to the device
         ChapterSortMemory.record(
             .init(option: chapterSortOption.rawValue, ascending: chapterSortAscending),
-            for: manga.identifier
+            for: manga.identifier,
+            inLibrary: bookmarked
         )
+    }
+
+    /// A manga of the library with an order of this device (chosen before it was added, or with the build
+    /// of 15-nov): the order goes to its flags and the device's one goes away. SUWA-12 H5.
+    private func adoptLocalSort(flags: Int) async {
+         // pendiente[H5#6]
     }
 
     private func refilterChapters() {
@@ -948,10 +961,7 @@ extension MangaView.ViewModel {
 
     private func generateChapterFlags() -> Int {
         var flags: Int = 0
-        if chapterSortAscending {
-            flags |= ChapterFlagMask.sortAscending
-        }
-        flags |= chapterSortOption.rawValue << 1
+        flags = ChapterSortMemory.flags(.init(option: chapterSortOption.rawValue, ascending: chapterSortAscending), into: 0) & ~ChapterFlagMask.sortChosen // pendiente[H5#7]
         for filter in chapterFilters {
             switch filter.type {
                 case .downloaded:
