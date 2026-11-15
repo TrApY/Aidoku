@@ -55,7 +55,6 @@ struct StoreDump: Equatable {
 
     /// Dump of every entity of the model, read through `context` (one fetch per entity, nothing is changed).
     static func make(context: NSManagedObjectContext) throws -> StoreDump {
-        return StoreDump() // STUB: rojo
         try context.performAndWait {
             var dump = StoreDump()
             guard let model = context.persistentStoreCoordinator?.managedObjectModel else { return dump }
