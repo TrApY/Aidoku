@@ -21,12 +21,18 @@ struct MigrateSingleSearchView: View {
     @State private var results: [SearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var targetSeries: AidokuRunner.Manga?
-    /// The destination's row: its source and the name shown (a server source's own name for Suwayomi).
-    @State private var targetRow: SearchResult?
+    /// The chosen destination, with its row (its source and the name shown: a server source's own name for
+    /// Suwayomi). An item sheet: `isPresented` showed the first destination's header empty (stale state).
+    @State private var pendingMigration: PendingMigration?
+
+    struct PendingMigration: Identifiable {
+        let manga: AidokuRunner.Manga
+        let row: SearchResult
+        var id: String { "\(row.id)|\(manga.key)" }
+    }
     @State private var isMigrating = false
     @State private var isLoading = false
     @State private var didFirstLoad = false
-    @State private var showMigrateAlert = false
 
     @EnvironmentObject private var path: NavigationCoordinator
 
@@ -69,8 +75,7 @@ struct MigrateSingleSearchView: View {
                                     dismiss()
                                 } else {
                                     targetSeries = manga
-                                    targetRow = searchResult
-                                    showMigrateAlert = true
+                                    pendingMigration = .init(manga: manga, row: searchResult)
                                 }
                             }
                         )
@@ -117,15 +122,14 @@ struct MigrateSingleSearchView: View {
         )
         .environment(\.autocorrectionDisabled, true)
         .navigationBarBackButtonHidden(isMigrating)
-        .sheet(isPresented: $showMigrateAlert) {
+        .sheet(item: $pendingMigration) { pending in
             MigrationOptionsView(
                 count: 1,
-                destination: targetSeries,
-                destinationSource: targetRow?.source,
-                destinationSourceName: targetRow?.title,
+                destination: pending.manga,
+                destinationSource: pending.row.source,
+                destinationSourceName: pending.row.title,
                 showEntry: {
-                    guard let targetSeries else { return }
-                    path.push(MangaViewController(manga: targetSeries, parent: path.rootViewController))
+                    path.push(MangaViewController(manga: pending.manga, parent: path.rootViewController))
                 },
                 start: { options in
                     migrate(options: options)
