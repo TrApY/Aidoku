@@ -34,11 +34,19 @@ extension MangaView {
         @Published var initialDataLoaded = false
 
         @Published var chapterSortOption: ChapterSortOption = .sourceOrder {
-            didSet { refilterChapters() }
+            didSet {
+                refilterChapters()
+                rememberSort()
+            }
         }
         @Published var chapterSortAscending = false {
-            didSet { refilterChapters() }
+            didSet {
+                refilterChapters()
+                rememberSort()
+            }
         }
+        /// Set while the stored order is applied (not a choice of the user). SUWA-12 G2.
+        var applyingStoredSort = false
 
         @Published var chapterFilters: [ChapterFilterOption] = [] {
             didSet { refilterChapters() }
@@ -392,8 +400,11 @@ extension MangaView.ViewModel {
         }
 
         let filters = CoreDataManager.shared.getMangaChapterFilters(mangaId: manga.identifier, context: context)
-        chapterSortOption = .init(flags: filters.flags)
-        chapterSortAscending = filters.flags & ChapterFlagMask.sortAscending != 0
+        let sort = ChapterSortMemory.load(for: manga.identifier, flags: filters.flags)
+        applyingStoredSort = true
+        chapterSortOption = ChapterSortOption(rawValue: sort.option) ?? .sourceOrder
+        chapterSortAscending = sort.ascending
+        applyingStoredSort = false
         chapterFilters = ChapterFilterOption.parseOptions(flags: filters.flags)
         chapterLangFilter = filters.language
         chapterScanlatorFilter = filters.scanlators ?? []
@@ -757,6 +768,20 @@ extension MangaView.ViewModel {
             readingHistory[chapter.key] = nil
         }
         updateReadButton()
+    }
+
+    /// The chapters before `chapter` for «Marcar anteriores» (SUWA-12 G1).
+    func previousChapters(before chapter: AidokuRunner.Chapter) -> [AidokuRunner.Chapter] {
+        chapters.firstIndex(of: chapter).map { Array(chapters[($0 + 1)...]) } ?? [] // pendiente[G1#3]
+    }
+
+    /// The order chosen is this manga's and the default for the rest (SUWA-12 G2).
+    private func rememberSort() {
+        guard !applyingStoredSort else { return }
+        ChapterSortMemory.record(
+            .init(option: chapterSortOption.rawValue, ascending: chapterSortAscending),
+            for: manga.identifier
+        )
     }
 
     private func refilterChapters() {

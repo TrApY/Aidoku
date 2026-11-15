@@ -474,12 +474,11 @@ extension MangaView {
                     Label(NSLocalizedString("MARK_READ"), systemImage: "checkmark.circle")
                 }
             }
-            if !last && !secondSection {
+            // the chapters before this one in the source's order, whatever the order and filters shown
+            if !secondSection, case let previous = viewModel.previousChapters(before: chapter), !previous.isEmpty {
                 Menu(NSLocalizedString("MARK_PREVIOUS")) {
                     Button {
-                        let chapters = [AidokuRunner.Chapter](viewModel.chapters[
-                            index + 1..<viewModel.chapters.count
-                        ])
+                        let chapters = previous
                         Task {
                             await viewModel.markRead(chapters: chapters)
                         }
@@ -487,9 +486,7 @@ extension MangaView {
                         Label(NSLocalizedString("READ"), systemImage: "checkmark.circle")
                     }
                     Button {
-                        let chapters = [AidokuRunner.Chapter](viewModel.chapters[
-                            index + 1..<viewModel.chapters.count
-                        ])
+                        let chapters = previous
                         Task {
                             await viewModel.markUnread(chapters: chapters)
                         }
