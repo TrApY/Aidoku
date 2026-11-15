@@ -291,7 +291,7 @@ private let nexus = "4086183896761281232" // flagged NSFW
         _ = child
         let request = try #require(requests.all.first)
         #expect(request.url?.absoluteString == "https://suwayomi.example:4567/api/graphql")
-        let expected = "Basic " + Data("jota:clave-de-prueba".utf8).base64EncodedString()
+        let expected = "Basic " + Data("usuario-prueba:clave-de-prueba".utf8).base64EncodedString()
         #expect(request.value(forHTTPHeaderField: "Authorization") == expected)
         // and the images
         let image = try? await logged.getImageRequest(url: "https://suwayomi.example:4567/api/v1/manga/1/thumbnail", context: nil)

@@ -133,7 +133,7 @@ import Testing
             try? await tracker.setProgress(trackId: trackId, chapterId: chapter, progress: .init(completed: false, page: 3))
             _ = try? await tracker.getState(trackId: trackId)
         }
-        let expected = "Basic " + Data("jota:clave-de-prueba".utf8).base64EncodedString()
+        let expected = "Basic " + Data("usuario-prueba:clave-de-prueba".utf8).base64EncodedString()
         let requests = log.all
         #expect(requests.count == 4)
         #expect(requests.allSatisfy { $0.url?.absoluteString == "https://suwayomi.example:4567/api/graphql" })
