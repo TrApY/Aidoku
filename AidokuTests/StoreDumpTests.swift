@@ -300,9 +300,13 @@ func expectMetadataListed(_ dump: StoreDump) {
         }
         var previous = try StoreDump.make(context: context)
         func change(_ what: String, shows entities: Set<String>, _ edit: () throws -> Void) throws {
-            try context.performAndWait {
-                try edit()
-                try context.save()
+            // run right away on the context's queue (performAndWait does not keep it)
+            try withoutActuallyEscaping(edit) { edit in
+                nonisolated(unsafe) let edit = edit
+                try context.performAndWait {
+                    try edit()
+                    try context.save()
+                }
             }
             let next = try StoreDump.make(context: context)
             let differing = Set(previous.differences(to: next).map { line in String(line.prefix { $0 != ":" }) })

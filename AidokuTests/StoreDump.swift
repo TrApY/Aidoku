@@ -67,6 +67,8 @@ struct StoreDump: Equatable {
         let raw = try rawColumns(stores: coordinator.persistentStores.compactMap(\.url), model: model)
         return try context.performAndWait {
             var dump = StoreDump()
+            // the model again inside: it is not Sendable
+            guard let model = context.persistentStoreCoordinator?.managedObjectModel else { return dump }
             for entity in model.entities.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
                 guard let name = entity.name else { continue }
                 dump.entities[name] = try entityDump(entity, context: context, raw: raw)
