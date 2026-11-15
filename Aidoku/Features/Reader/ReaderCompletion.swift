@@ -20,7 +20,12 @@ enum ReaderCompletion {
         transitionVisible: Bool,
         inForeground: Bool
     ) -> Bool {
-        return bottomEdgePage.map { $0 >= totalPages } ?? true // pendiente[H1#1]
+        guard inForeground, totalPages > 0 else { return false }
+        if transitionVisible {
+            return true
+        }
+        guard let maxVisiblePage else { return false }
+        return maxVisiblePage >= totalPages
     }
 
     /// A page change completes the chapter at the last page (or past it, the transition) only if the last
@@ -31,6 +36,7 @@ enum ReaderCompletion {
         seenPages: Set<Int>,
         inForeground: Bool
     ) -> Bool {
-        return totalPages.map { pages.upperBound >= $0 } ?? false // pendiente[H1#2]
+        guard inForeground, let totalPages, totalPages > 0, pages.upperBound >= totalPages else { return false }
+        return pages.contains(totalPages) || seenPages.contains(totalPages)
     }
 }
