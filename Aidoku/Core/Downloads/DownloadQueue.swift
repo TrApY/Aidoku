@@ -105,7 +105,10 @@ actor DownloadQueue {
     }
 
     func start() async {
-         // pendiente[M2#7]
+        if suspendedForExternalChange {
+            startAfterExternalChange = true
+            return
+        }
         paused = false
         userPaused = false
 
@@ -334,13 +337,40 @@ actor DownloadQueue {
     /// it. Returns whether it was running.
     @discardableResult
     func suspendForExternalChange() async -> Bool {
-        false // pendiente[M2#8]
+        let wasRunning = await isRunning()
+        suspendedForExternalChange = true
+        if wasRunning {
+            startAfterExternalChange = true
+        }
+        await pause()
+        return wasRunning
     }
 
     /// The change is done: the queue is read again from the rewritten saved state (its tasks held the old
     /// keys) and goes on if it was running or something asked to start, unless the user paused it.
     func resumeAfterExternalChange() async {
-         // pendiente[M2#9]
+        guard suspendedForExternalChange else { return }
+        suspendedForExternalChange = false
+        if
+            stateLoaded,
+            let stateKey,
+            let queueData = UserDefaults.standard.data(forKey: stateKey),
+            let queueState = try? JSONDecoder().decode([String: [Download]].self, from: queueData)
+        {
+            for (key, task) in tasks {
+                await task.pause()
+#if DEBUG
+                aliveTasks[key, default: 1] -= 1
+#endif
+            }
+            tasks = [:]
+            queue = queueState
+        }
+        let shouldStart = startAfterExternalChange
+        startAfterExternalChange = false
+        if shouldStart && !userPaused && !queue.isEmpty {
+            await start()
+        }
     }
 
     func isPausedByUser() -> Bool {
