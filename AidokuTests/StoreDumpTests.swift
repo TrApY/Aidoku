@@ -10,6 +10,7 @@
 
 import CoreData
 import Foundation
+import SQLite3
 import Testing
 
 @testable import Aidoku
@@ -192,6 +193,61 @@ func expectMetadataListed(_ dump: StoreDump) {
         let fromFiles = try StoreDump.dumpCopy(of: directory)
         #expect(fromFiles.entities == first.entities)
         expectMetadataListed(fromFiles)
+    }
+
+    /// C1: a transformable is dumped as the bytes in its column, not re-archived: the same [String] archived
+    /// another way (an XML keyed archive, which Core Data decodes the same) dumps differently.
+    @Test func aTransformableArchivedAnotherWayDumpsDifferently() throws {
+        let directory = try Self.extremeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let before = try StoreDump.dumpCopy(of: directory)
+
+        let archiver = NSKeyedArchiver(requiringSecureCoding: true)
+        archiver.outputFormat = .xml
+        archiver.encode(["uno"] as NSArray, forKey: NSKeyedArchiveRootObjectKey)
+        archiver.finishEncoding()
+        let store = directory.appendingPathComponent("Aidoku.sqlite").path
+        let stored = try sqliteBlob(store, "SELECT ZTAGS FROM ZMANGA WHERE ZSOURCEID = 'test' AND ZID = 'm2'")
+        #expect(stored != archiver.encodedData)
+        try sqliteExec(store, "UPDATE ZMANGA SET ZTAGS = ?1 WHERE ZSOURCEID = 'test' AND ZID = 'm2'", [.blob(archiver.encodedData)])
+
+        // Core Data reads the same value
+        let container = try StoreDump.appContainer(directory: directory)
+        let context = container.newBackgroundContext()
+        let tags = try context.performAndWait {
+            let request = NSFetchRequest<NSManagedObject>(entityName: "Manga")
+            request.predicate = NSPredicate(format: "sourceId == %@ AND id == %@", "test", "m2")
+            return try context.fetch(request).first?.value(forKey: "tags") as? [String]
+        }
+        StoreDump.close(container)
+        #expect(tags == ["uno"])
+
+        let after = try StoreDump.dumpCopy(of: directory)
+        #expect(after.entities["Manga"] != before.entities["Manga"])
+        #expect(before.differences(to: after).contains { $0.hasPrefix("Manga:") })
+    }
+
+    /// C1: a Float is dumped also as the REAL in its column: a REAL written with more precision than a Float holds
+    /// (Core Data reads the same Float) dumps differently.
+    @Test func aRealWrittenWithAnotherPrecisionDumpsDifferently() throws {
+        let directory = try Self.extremeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let before = try StoreDump.dumpCopy(of: directory)
+        let store = directory.appendingPathComponent("Aidoku.sqlite").path
+        try sqliteExec(store, "UPDATE ZCHAPTER SET ZCHAPTER = ?1 WHERE ZMANGAID = 'm2' AND ZID = 'c10'", [.double(9.000000001)])
+
+        let container = try StoreDump.appContainer(directory: directory)
+        let context = container.newBackgroundContext()
+        let number = try context.performAndWait {
+            let request = NSFetchRequest<NSManagedObject>(entityName: "Chapter")
+            request.predicate = NSPredicate(format: "mangaId == %@ AND id == %@", "m2", "c10")
+            return try context.fetch(request).first?.value(forKey: "chapter") as? NSNumber
+        }
+        StoreDump.close(container)
+        #expect(number?.floatValue == 9)
+
+        let after = try StoreDump.dumpCopy(of: directory)
+        #expect(after.entities["Chapter"] != before.entities["Chapter"])
     }
 
     /// Deleting follows the model's rules:
@@ -412,4 +468,48 @@ func expectMetadataListed(_ dump: StoreDump) {
         #expect(restored.entities == original.entities)
         try restored.write(label: "restaurado-\(device)")
     }
+}
+
+// MARK: - Writing into a test store with sqlite (to fake what Core Data would not write)
+
+enum SQLiteValue {
+    case blob(Data)
+    case double(Double)
+}
+
+/// Runs `sql` on the sqlite file at `path` (read-write), binding `values` to ?1, ?2…
+func sqliteExec(_ path: String, _ sql: String, _ values: [SQLiteValue] = []) throws {
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db else { throw StoreDump.DumpError.sqlite("open") }
+    defer { sqlite3_close(db) }
+    var statement: OpaquePointer?
+    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+        throw StoreDump.DumpError.sqlite(String(cString: sqlite3_errmsg(db)))
+    }
+    defer { sqlite3_finalize(statement) }
+    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    for (index, value) in values.enumerated() {
+        switch value {
+            case .blob(let data):
+                _ = data.withUnsafeBytes { sqlite3_bind_blob(statement, Int32(index + 1), $0.baseAddress, Int32(data.count), transient) }
+            case .double(let number):
+                sqlite3_bind_double(statement, Int32(index + 1), number)
+        }
+    }
+    guard sqlite3_step(statement) == SQLITE_DONE else { throw StoreDump.DumpError.sqlite(String(cString: sqlite3_errmsg(db))) }
+    #expect(sqlite3_changes(db) > 0, "\(sql)")
+}
+
+/// The first column of the first row of `sql`, as bytes.
+func sqliteBlob(_ path: String, _ sql: String) throws -> Data {
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { throw StoreDump.DumpError.sqlite("open") }
+    defer { sqlite3_close(db) }
+    var statement: OpaquePointer?
+    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement, sqlite3_step(statement) == SQLITE_ROW else {
+        throw StoreDump.DumpError.sqlite(sql)
+    }
+    defer { sqlite3_finalize(statement) }
+    let count = Int(sqlite3_column_bytes(statement, 0))
+    return sqlite3_column_blob(statement, 0).map { Data(bytes: $0, count: count) } ?? Data()
 }
