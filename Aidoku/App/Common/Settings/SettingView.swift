@@ -418,11 +418,7 @@ extension SettingView {
         .foregroundStyle(.primary)
         .disabled(disabled)
         .opacity({
-            if #available(iOS 26.0, *) {
-                1 // ios 26 has the correct disabled style
-            } else {
-                disabled ? disabledOpacity : 1
-            }
+            1 // ios 26 has the correct disabled style
         }())
     }
 
@@ -501,11 +497,7 @@ extension SettingView {
         .foregroundStyle(.primary)
         .disabled(disabled)
         .opacity({
-            if #available(iOS 26.0, *) {
-                1
-            } else {
-                disabled ? disabledOpacity : 1
-            }
+            1
         }())
     }
 
@@ -573,13 +565,7 @@ extension SettingView {
             }
             .opacity(disabled ? disabledOpacity : 1)
             .padding(.vertical, {
-                if #available(iOS 26.0, *) {
-                    0
-                } else if value.subtitle != nil {
-                    2
-                } else {
-                    0
-                }
+                0
             }())
 
             Spacer()
@@ -798,11 +784,7 @@ extension SettingView {
             }
             switch value.method {
                 case .basic:
-                    if #available(iOS 16.0, *) {
-                        showLoginAlert = true
-                    } else {
-                        showLoginAlertView(value: value)
-                    }
+                    showLoginAlert = true
                 case .oauth:
                     handleOAuthLogin(value: value)
                 case .web:
@@ -836,12 +818,10 @@ extension SettingView {
                 username = SettingsStore.shared.get(key: key + Self.usernameKeySuffix)
                 password = SettingsStore.shared.get(key: key + Self.passwordKeySuffix)
             }
-            let is16 = UIDevice.current.systemVersion.hasPrefix("16.")
             Button(NSLocalizedString("LOGIN")) {
                 handleBasicLogin(username: username, password: password)
             }
-            // the disabled modifier just hides the button on iOS 15/16, so don't use it if we're on those versions
-            .disabled(!is16 && (username.isEmpty || password.isEmpty))
+            .disabled(username.isEmpty || password.isEmpty)
         } message: {
             Text(NSLocalizedString("LOGIN_BASIC_TEXT"))
         }
@@ -1253,11 +1233,7 @@ extension SettingView {
         .foregroundStyle(.primary)
         .disabled(disabled)
         .opacity({
-            if #available(iOS 26.0, *) {
-                1
-            } else {
-                disabled ? disabledOpacity : 1
-            }
+            1
         }())
     }
 }
@@ -1462,11 +1438,7 @@ extension SettingView {
         }
         .disabled(disabled)
         .opacity({
-            if #available(iOS 26.0, *) {
-                1 // ios 26 has the correct disabled style
-            } else {
-                disabled ? disabledOpacity : 1
-            }
+            1 // ios 26 has the correct disabled style
         }())
     }
 }

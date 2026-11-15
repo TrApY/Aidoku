@@ -15,12 +15,8 @@ struct LargeButton<Content: View>: View {
         Button {
             action()
         } label: {
-            let padding: CGFloat = if #available(iOS 26.0, *) {
-                // ios 26 uses larger list cells
-                16
-            } else {
-                12
-            }
+            // ios 26 uses larger list cells
+            let padding: CGFloat = 16
             label
                 .padding(padding)
                 .frame(maxWidth: .infinity)

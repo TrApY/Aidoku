@@ -12,15 +12,8 @@ struct PlatformNavigationStack<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        if #available(iOS 16.0, macOS 13.0, *) {
-            NavigationStack {
-                content
-            }
-        } else {
-            NavigationView {
-                content
-            }
-            .navigationViewStyle(.stack)
+        NavigationStack {
+            content
         }
     }
 }

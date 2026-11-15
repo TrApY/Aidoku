@@ -39,15 +39,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let progressViewSidePadding: CGFloat
         let progressViewBottomPadding: CGFloat
         let indicatorViewSidePadding: CGFloat
-        if #available(iOS 26.0, *) {
-            progressViewSidePadding = 32
-            progressViewBottomPadding = 16
-            indicatorViewSidePadding = 16
-        } else {
-            progressViewSidePadding = 16
-            progressViewBottomPadding = 8
-            indicatorViewSidePadding = 10
-        }
+        progressViewSidePadding = 32
+        progressViewBottomPadding = 16
+        indicatorViewSidePadding = 16
 
         NSLayoutConstraint.activate([
             progressView.centerXAnchor.constraint(equalTo: loadingAlert.view.centerXAnchor),
@@ -212,9 +206,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             await SourceManager.shared.waitForSourcesLoad()
             await SuwayomiStartup.shared.run()
             await BackupManager.shared.scheduleAutoBackup()
-            if #available(iOS 18.0, *) {
-                DictionaryManager.shared.autoUpdateDictionaries()
-            }
+            DictionaryManager.shared.autoUpdateDictionaries()
 
             networkObserverId = await Reachability.shared.registerConnectionTypeObserver { connectionType in
                 switch connectionType {

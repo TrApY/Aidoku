@@ -11,12 +11,8 @@ struct CloseButton: View {
     let action: () -> Void
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            Button(role: .close) {
-                action()
-            }
-        } else {
-            CloseButtonUIKit(action: action)
+        Button(role: .close) {
+            action()
         }
     }
 }
