@@ -42,11 +42,23 @@ enum ChapterSortMemory {
     }
 
     static func load(for mangaId: MangaIdentifier, flags: Int, defaults: UserDefaults = .standard) -> ChapterSortChoice {
-        ChapterSortChoice(option: ChapterSortOption(flags: flags).rawValue, ascending: flags & ChapterFlagMask.sortAscending != 0) // pendiente[G2#1]
+        if let own = decode(defaults.data(forKey: key(mangaId))) {
+            return own
+        }
+        let stored = ChapterSortChoice(
+            option: ChapterSortOption(flags: flags).rawValue,
+            ascending: flags & ChapterFlagMask.sortAscending != 0
+        )
+        if stored != .initial {
+            return stored // chosen before and kept in the library entry (synced by iCloud)
+        }
+        return decode(defaults.data(forKey: defaultKey)) ?? .initial
     }
 
     static func record(_ choice: ChapterSortChoice, for mangaId: MangaIdentifier, defaults: UserDefaults = .standard) {
-         // pendiente[G2#2]
+        guard let data = try? JSONEncoder().encode(choice) else { return }
+        defaults.set(data, forKey: key(mangaId))
+        defaults.set(data, forKey: defaultKey)
     }
 
     private static func decode(_ data: Data?) -> ChapterSortChoice? {
