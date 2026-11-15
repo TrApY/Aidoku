@@ -61,8 +61,10 @@ struct MigrateSingleSearchView: View {
                     }
                     return hasher.finalize()
                 }()
-                if !result.entries.isEmpty {
-                    Section {
+                Section {
+                    if searchResult.status != .results {
+                        GlobalSearchEmptyRow(status: searchResult.status)
+                    } else {
                         HomeScrollerView(
                             source: source,
                             component: .init(
@@ -83,6 +85,7 @@ struct MigrateSingleSearchView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(.zero)
                         .listRowSeparator(.hidden)
+                    }
                     } header: {
                         HStack {
                             SourceIconView(
@@ -102,7 +105,6 @@ struct MigrateSingleSearchView: View {
                         .font(.body)
                         .textCase(nil)
                     }
-                }
             }
         }
         .listStyle(.grouped)

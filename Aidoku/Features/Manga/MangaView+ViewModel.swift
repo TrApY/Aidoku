@@ -13,6 +13,8 @@ extension MangaView {
     @MainActor
     class ViewModel: ObservableObject {
         @Published var source: AidokuRunner.Source?
+        /// The installed sources are loaded: a missing source is really missing (no notice flicker before).
+        @Published var sourcesLoaded: Bool
 
         @Published var manga: AidokuRunner.Manga
         @Published var chapters: [AidokuRunner.Chapter] = []
@@ -63,12 +65,25 @@ extension MangaView {
 
         init(source: AidokuRunner.Source?, manga: AidokuRunner.Manga) {
             self.source = source
+            self.sourcesLoaded = source != nil
             self.manga = manga
 
             let key = "Manga.chapterDisplayMode.\(manga.identifier)"
             self.chapterTitleDisplayMode = .init(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .default
 
             registerNotifications()
+
+            if source == nil {
+                let sourceKey = manga.sourceKey
+                Task { @MainActor [weak self] in
+                    await SourceManager.shared.waitForSourcesLoad()
+                    guard let self else { return }
+                    if self.source == nil {
+                        self.source = SourceManager.shared.store.source(for: sourceKey)
+                    }
+                    self.sourcesLoaded = true
+                }
+            }
         }
     }
 }

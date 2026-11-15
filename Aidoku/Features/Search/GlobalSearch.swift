@@ -26,8 +26,8 @@ struct GroupedSearchSection: Sendable, Equatable {
 
 /// A source whose search covers several server sources and can give the results of each one apart.
 protocol GroupedSearchRunner: Sendable {
-    /// The library section (if it found something) and one section per server source that answered, in
-    /// the settings order. Sources that fail or take too long are left out.
+    /// The library section (if it found something) and one section per server source a search covers
+    /// (the marked ones first), also those without results or that didn't answer (`failed`).
     func groupedSearch(query: String) async throws -> [GroupedSearchSection]
     /// The server source of a manga of this source (nil if unknown).
     func serverSourceId(ofMangaKey mangaKey: String) async -> String?
@@ -72,37 +72,42 @@ struct GlobalSearchRow: Identifiable, Equatable {
 }
 
 enum GlobalSearch {
-    /// The rows of one source for `query` (none if it fails).
+    /// The rows of one source for `query`; a source that fails keeps its row, as «No respondió» (as Tachimanga).
     static func rows(for source: AidokuRunner.Source, query: String) async -> [GlobalSearchRow] {
         if let grouped = source.runner as? GroupedSearchRunner {
             do {
                 return rows(source: source, sections: try await grouped.groupedSearch(query: query))
             } catch {
                 LogManager.logger.warn("Grouped search in \(source.key) failed: \(error)")
-                return []
+                return [.init(source: source, result: .init(entries: [], hasNextPage: false), failed: true)]
             }
         }
-        guard let result = try? await source.getSearchMangaList(query: query, page: 1, filters: []) else {
-            return []
+        do {
+            let result = try await source.getSearchMangaList(query: query, page: 1, filters: [])
+            return [.init(source: source, result: result)]
+        } catch {
+            LogManager.logger.warn("Search in \(source.key) failed: \(error)")
+            return [.init(source: source, result: .init(entries: [], hasNextPage: false), failed: true)]
         }
-        return [.init(source: source, result: result)]
     }
 
-    /// One row per section, in order (the view hides rows without results, as for any source).
+    /// One row per section, in order (empty ones say «Sin resultados», failed ones «No respondió»).
     static func rows(source: AidokuRunner.Source, sections: [GroupedSearchSection]) -> [GlobalSearchRow] {
         sections.map {
             .init(source: source, result: .init(entries: $0.entries, hasNextPage: false), section: $0)
         }
     }
 
-    /// The rows without the manga being migrated.
+    /// The rows without the manga being migrated (a library row left empty goes: it only shows results).
     static func excluding(_ mangaId: MangaIdentifier, from rows: [GlobalSearchRow]) -> [GlobalSearchRow] {
-        rows.map { row in
+        rows.compactMap { row in
             let entries = row.result.entries.filter { $0.identifier != mangaId }
+            if entries.isEmpty, row.section?.isLibrary == true { return nil }
             return .init(
                 source: row.source,
                 result: .init(entries: entries, hasNextPage: row.result.hasNextPage),
-                section: row.section.map { .init(id: $0.id, title: $0.title, iconUrl: $0.iconUrl, entries: entries) }
+                section: row.section.map { .init(id: $0.id, title: $0.title, iconUrl: $0.iconUrl, entries: entries, failed: $0.failed) },
+                failed: row.failed
             )
         }
     }

@@ -62,8 +62,13 @@ struct MangaView: View {
             List(selection: $selectedChapters) {
                 headerView
 
-                if viewModel.source == nil && viewModel.bookmarked {
-                    sourceMissingNotice
+                if let notice = MangaSourceNotice.make(
+                    sourcesLoaded: viewModel.sourcesLoaded,
+                    hasSource: viewModel.source != nil,
+                    inLibrary: viewModel.bookmarked,
+                    hasWebUrl: openWebAction != nil
+                ) {
+                    sourceMissingNotice(notice)
                 }
 
                 if let error = viewModel.error {
@@ -765,12 +770,14 @@ extension MangaView {
     }
 
     /// The source isn't installed: the stored chapters stay below, with a way out.
-    var sourceMissingNotice: some View {
-        ErrorView(
+    func sourceMissingNotice(_ notice: MangaSourceNotice) -> some View {
+        let migrate: (() -> Void)? = notice.migrate ? { showMigration() } : nil
+        let footer = notice.migrate ? "MANGA_SOURCE_NOT_INSTALLED_HINT" : (notice.webView ? "MANGA_SOURCE_NOT_INSTALLED_HINT_WEB" : nil)
+        return ErrorView(
             error: SourceError.message("MANGA_SOURCE_NOT_INSTALLED"),
-            migrate: { showMigration() },
-            openWeb: openWebAction,
-            footer: NSLocalizedString("MANGA_SOURCE_NOT_INSTALLED_HINT")
+            migrate: migrate,
+            openWeb: notice.webView ? openWebAction : nil,
+            footer: footer.map { NSLocalizedString($0) }
         )
         .frame(maxWidth: .infinity)
         .listRowBackground(Color.clear)

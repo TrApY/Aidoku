@@ -15,8 +15,7 @@ struct MangaSourceNotice: Equatable {
 
     /// nil: no notice (the source is there, or the installed sources are still loading: no flicker).
     static func make(sourcesLoaded: Bool, hasSource: Bool, inLibrary: Bool, hasWebUrl: Bool) -> MangaSourceNotice? {
-        // pending: as before, only for library entries and without waiting for the sources
-        guard !hasSource, inLibrary else { return nil }
-        return .init(migrate: true, webView: hasWebUrl)
+        guard sourcesLoaded, !hasSource else { return nil }
+        return .init(migrate: inLibrary, webView: hasWebUrl)
     }
 }

@@ -791,3 +791,7 @@
 "MIGRATION_NOTE_KEEP_DELETE_MANY" = "Las entradas originales se quedan en la biblioteca, pero se borrarán sus descargas. Las descargas no pasan al destino.";
 "MIGRATION_NOTE_HISTORY_LOST" = "Sin los capítulos leídos se pierde su historial de lectura.";
 "MIGRATION_NOTE_HISTORY_LOST_MANY" = "Sin los capítulos leídos se pierde su historial de lectura.";
+
+// SUWA-11 ronda final
+"SEARCH_SOURCE_NO_RESPONSE" = "No respondió";
+"MANGA_SOURCE_NOT_INSTALLED_HINT_WEB" = "Puedes abrirla en la web.";

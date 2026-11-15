@@ -26,8 +26,9 @@ extension SearchContentView {
         private var searchQuery: String = ""
         private var searchTask: Task<Void, Never>?
 
+        /// No row yet (rows without results stay, with «Sin resultados» / «No respondió», as Tachimanga).
         var resultsIsEmpty: Bool {
-            !results.contains(where: { !$0.result.entries.isEmpty })
+            results.isEmpty
         }
 
         init() {

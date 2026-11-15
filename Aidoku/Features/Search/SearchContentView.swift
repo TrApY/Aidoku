@@ -153,8 +153,10 @@ struct SearchContentView: View {
                 }
                 return hasher.finalize()
             }()
-            if !result.entries.isEmpty {
-                Section {
+            Section {
+                if searchResult.status != .results {
+                    GlobalSearchEmptyRow(status: searchResult.status)
+                } else {
                     HomeScrollerView(
                         source: source,
                         component: .init(
@@ -167,7 +169,8 @@ struct SearchContentView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(.zero)
                     .listRowSeparator(.hidden)
-                } header: {
+                }
+            } header: {
                     HStack {
                         SourceIconView(
                             sourceId: source.key,
@@ -187,7 +190,20 @@ struct SearchContentView: View {
                     .font(.body)
                     .textCase(nil)
                 }
-            }
         }
+    }
+}
+
+/// The content of a result row without results: «Sin resultados» or «No respondió» (as Tachimanga).
+struct GlobalSearchEmptyRow: View {
+    let status: GlobalSearchRow.Status
+
+    var body: some View {
+        Text(NSLocalizedString(status == .failed ? "SEARCH_SOURCE_NO_RESPONSE" : "NO_RESULTS"))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }

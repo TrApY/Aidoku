@@ -918,3 +918,7 @@
 "MIGRATION_NOTE_KEEP_DELETE_MANY" = "The original entries stay in the library, but their downloads will be deleted. Downloads are not moved to the destination.";
 "MIGRATION_NOTE_HISTORY_LOST" = "Without the read chapters, its reading history is lost.";
 "MIGRATION_NOTE_HISTORY_LOST_MANY" = "Without the read chapters, their reading history is lost.";
+
+// SUWA-11 ronda final
+"SEARCH_SOURCE_NO_RESPONSE" = "Didn't respond";
+"MANGA_SOURCE_NOT_INSTALLED_HINT_WEB" = "You can open it on the web.";
