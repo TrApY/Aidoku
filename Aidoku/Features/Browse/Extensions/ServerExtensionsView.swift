@@ -352,7 +352,6 @@ private struct ServerExtensionIcon: View {
 struct BrowseLanguagesView: View {
     @State private var options: [String] = []
     @State private var selected = BrowseLanguages.active()
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         List(options, id: \.self) { code in
@@ -372,11 +371,7 @@ struct BrowseLanguagesView: View {
         }
         .navigationTitle(NSLocalizedString("LANGUAGES"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("DONE")) { dismiss() }
-            }
-        }
+        // closed with the sheet's own close button (SwiftUINavigationViewController)
         .task {
             let installed = await SourceManager.shared.getSourceInfos(listedOnly: true).map(\.languages)
             let external = await SourceManager.shared.getSourceListLanguages()
