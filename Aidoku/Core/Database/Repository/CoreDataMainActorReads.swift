@@ -27,10 +27,10 @@ final class CoreDataMainActorReads: MainActorReads {
     }
 
     func manga(contains id: MangaIdentifier) -> Bool {
-        false
+        CoreDataManager.shared.hasManga(mangaId: id, context: container.viewContext)
     }
 
     func readingMode(of id: MangaIdentifier) -> Int {
-        0
+        CoreDataManager.shared.getMangaSourceReadingMode(mangaId: id, context: container.viewContext)
     }
 }

@@ -15,26 +15,39 @@ final class CoreDataMangaRepository: MangaRepository, @unchecked Sendable {
     }
 
     func manga(_ id: MangaIdentifier) async -> AidokuRunner.Manga? {
-        nil
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getManga(mangaId: id, context: context)?.toNewManga()
+        }
     }
 
     func contains(_ id: MangaIdentifier) async -> Bool {
-        false
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.hasManga(mangaId: id, context: context)
+        }
     }
 
     func chapterFilters(_ id: MangaIdentifier) async -> MangaChapterFilters {
-        MangaChapterFilters(flags: 0)
+        await container.performBackgroundTask { context in
+            let filters = CoreDataManager.shared.getMangaChapterFilters(mangaId: id, context: context)
+            return MangaChapterFilters(flags: filters.flags, language: filters.language, scanlators: filters.scanlators)
+        }
     }
 
     func readingMode(_ id: MangaIdentifier) async -> Int {
-        0
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getMangaSourceReadingMode(mangaId: id, context: context)
+        }
     }
 
     func hasEditedKey(_ key: EditedKeys, _ id: MangaIdentifier) async -> Bool {
-        false
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.hasEditedKey(mangaId: id, key: key, context: context)
+        }
     }
 
     func setCover(_ id: MangaIdentifier, url: String?, original: Bool) async -> String? {
-        nil
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.setCover(mangaId: id, coverUrl: url, original: original, context: context)
+        }
     }
 }

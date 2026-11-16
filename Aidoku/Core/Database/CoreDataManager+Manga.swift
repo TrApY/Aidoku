@@ -92,30 +92,40 @@ extension CoreDataManager {
         original: Bool = false,
     ) async -> String? {
         await container.performBackgroundTask { context in
-            guard let object = self.getManga(
-                mangaId: mangaId,
-                context: context
-            ) else {
-                return nil
-            }
-            let originalCover = object.cover
-            object.cover = coverUrl
-            var editedKeys = EditedKeys(rawValue: object.editedKeys)
-            if original {
-                // if the cover is set to original, remove the cover edited key
-                editedKeys.remove(.cover)
-            } else {
-                // otherwise, set the cover edited key
-                editedKeys.insert(.cover)
-            }
-            object.editedKeys = editedKeys.rawValue
-            do {
-                try context.save()
-                return originalCover
-            } catch {
-                LogManager.logger.error("CoreDataManager.setCover: \(error.localizedDescription)")
-                return nil
-            }
+            self.setCover(mangaId: mangaId, coverUrl: coverUrl, original: original, context: context)
+        }
+    }
+
+    /// The same in this context: the cover before; nil if there is no manga or the save failed.
+    func setCover(
+        mangaId: MangaIdentifier,
+        coverUrl: String?,
+        original: Bool,
+        context: NSManagedObjectContext
+    ) -> String? {
+        guard let object = self.getManga(
+            mangaId: mangaId,
+            context: context
+        ) else {
+            return nil
+        }
+        let originalCover = object.cover
+        object.cover = coverUrl
+        var editedKeys = EditedKeys(rawValue: object.editedKeys)
+        if original {
+            // if the cover is set to original, remove the cover edited key
+            editedKeys.remove(.cover)
+        } else {
+            // otherwise, set the cover edited key
+            editedKeys.insert(.cover)
+        }
+        object.editedKeys = editedKeys.rawValue
+        do {
+            try context.save()
+            return originalCover
+        } catch {
+            LogManager.logger.error("CoreDataManager.setCover: \(error.localizedDescription)")
+            return nil
         }
     }
 
