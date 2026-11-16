@@ -135,24 +135,15 @@ struct MangaUpdatesView: View {
 
 extension MangaUpdatesView {
     private func loadNewEntries() async {
-        let newUpdates = await CoreDataManager.shared.container.performBackgroundTask { [offset] context in
-            CoreDataManager.shared.getRecentMangaUpdates(limit: limit, offset: offset, context: context).compactMap {
-                if let mangaObj = CoreDataManager.shared.getManga(
-                    mangaId: $0.identifier.mangaIdentifier,
-                    context: context
-                ) {
-                    return UpdateInfo(
-                        id: $0.id,
-                        chapterIdentifier: $0.identifier,
-                        date: $0.date ?? Date(),
-                        manga: mangaObj.toNewManga(),
-                        chapter: $0.chapter?.toChapter(),
-                        viewed: $0.viewed
-                    )
-                } else {
-                    return nil
-                }
-            }
+        let newUpdates = await DataRepositories.shared.mangaUpdates.recent(limit: limit, offset: offset).map { entry in
+            UpdateInfo(
+                id: entry.id,
+                chapterIdentifier: entry.chapterId,
+                date: entry.date ?? Date(),
+                manga: entry.manga,
+                chapter: entry.chapter.map { Self.oldChapter($0, of: entry) },
+                viewed: entry.viewed
+            )
         }
         guard !newUpdates.isEmpty else {
             reachedEnd = true
@@ -210,10 +201,29 @@ extension MangaUpdatesView {
         }
     }
 
+    /// The chapter as the list shows it (the old `Chapter`, for its title).
+    private static func oldChapter(_ chapter: AidokuRunner.Chapter, of entry: MangaUpdateEntry) -> Chapter {
+        Chapter(
+            sourceId: entry.chapterId.sourceKey,
+            id: chapter.key,
+            mangaId: entry.chapterId.mangaKey,
+            title: chapter.title,
+            scanlator: chapter.scanlators?.joined(separator: ", "),
+            url: chapter.url?.absoluteString,
+            lang: chapter.language ?? "",
+            chapterNum: chapter.chapterNumber,
+            volumeNum: chapter.volumeNumber,
+            dateUploaded: chapter.dateUploaded,
+            thumbnail: chapter.thumbnail,
+            locked: chapter.locked,
+            sourceOrder: entry.chapterSourceOrder ?? 0
+        )
+    }
+
     private func setOpened(manga: AidokuRunner.Manga) {
         if !AppSettings.general.incognitoMode.get() {
             Task {
-                await CoreDataManager.shared.setOpened(mangaId: manga.identifier)
+                await DataRepositories.shared.library.markOpened(manga.identifier)
                 NotificationCenter.default.post(name: .updateLibrary, object: nil)
             }
         }
@@ -241,13 +251,7 @@ extension MangaUpdatesView {
         }
 
         Task {
-            await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.removeMangaUpdates(
-                    updates: updates,
-                    context: context
-                )
-                try? context.save()
-            }
+            await DataRepositories.shared.mangaUpdates.remove(updates)
         }
     }
 }

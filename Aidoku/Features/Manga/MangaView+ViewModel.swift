@@ -538,62 +538,14 @@ extension MangaView.ViewModel {
 
             // update manga in db
             if inLibrary {
-                let (resultManga, foundNewChapters): (AidokuRunner.Manga?, Bool) =
-                    await CoreDataManager.shared.container.performBackgroundTask { [
-                        newManga,
-                        chapterLangFilter,
-                        chapterScanlatorFilter
-                    ] context in
-                        guard
-                            let libraryObject = CoreDataManager.shared.getLibraryManga(
-                                mangaId: mangaId,
-                                context: context
-                            ),
-                            let mangaObject = libraryObject.manga
-                        else {
-                            return (nil, false)
-                        }
-
-                        // update details
-                        mangaObject.load(from: newManga)
-
-                        var foundNewChapters = false
-                        if let chapters = newManga.chapters {
-                            let newChapters = CoreDataManager.shared.setChapters(
-                                chapters,
-                                mangaId: mangaId,
-                                context: context
-                            )
-                            if !newChapters.isEmpty {
-                                foundNewChapters = true
-                                // add manga updates
-                                for chapter in newChapters
-                                where
-                                    chapterLangFilter != nil ? chapter.lang == chapterLangFilter : true
-                                    && !chapterScanlatorFilter.isEmpty ? chapterScanlatorFilter.contains(chapter.scanlator ?? "") : true
-                                {
-                                    CoreDataManager.shared.createMangaUpdate(
-                                        mangaId: mangaId,
-                                        chapterObject: chapter,
-                                        context: context
-                                    )
-                                }
-                                libraryObject.lastChapter = chapters.compactMap { $0.dateUploaded }.max()
-                                libraryObject.lastUpdatedChapters = Date.now
-                            }
-                        }
-
-                        let now = Date.now
-                        libraryObject.lastUpdated = now
-
-                        if !AppSettings.general.incognitoMode.get() {
-                            libraryObject.lastOpened = now.addingTimeInterval(1) // ensure item isn't re-pinned, since it's already open
-                        }
-
-                        try? context.save()
-
-                        return (mangaObject.toNewManga(), foundNewChapters)
-                    }
+                let refreshed = await DataRepositories.shared.library.refreshOpened(
+                    mangaId,
+                    with: newManga,
+                    languageFilter: chapterLangFilter,
+                    scanlatorFilter: chapterScanlatorFilter,
+                    incognito: AppSettings.general.incognitoMode.get()
+                )
+                let (resultManga, foundNewChapters) = (refreshed?.manga, refreshed?.foundNewChapters ?? false)
 
                 if newManga.chapters != nil {
                     await markUpdatesViewed()

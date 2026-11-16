@@ -6,7 +6,7 @@
 //
 
 import AidokuRunner
-import CoreData
+import Foundation
 
 struct MangaUpdateManager {
     static let shared = MangaUpdateManager()
@@ -14,13 +14,11 @@ struct MangaUpdateManager {
 
 extension MangaUpdateManager {
     func viewAllUpdates(of manga: AidokuRunner.Manga) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            let updates = CoreDataManager.shared.setMangaUpdatesViewed(
-                mangaId: manga.identifier,
-                context: context
-            )
-            if !updates.isEmpty {
-                NotificationCenter.default.post(name: .mangaUpdatesViewed, object: updates.map { $0.toItem() })
+        let updates = await DataRepositories.shared.mangaUpdates.markViewed(of: manga.identifier)
+        if !updates.isEmpty {
+            // on the main thread (it was posted from the context's queue before)
+            await MainActor.run {
+                NotificationCenter.default.post(name: .mangaUpdatesViewed, object: updates)
             }
         }
     }
