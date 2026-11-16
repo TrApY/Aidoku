@@ -3,6 +3,7 @@
 //  Aidoku
 //
 
+import AidokuRunner
 import CoreData
 
 /// Not an actor (D5): each call runs on its own background context, as the callers did before.
@@ -20,6 +21,44 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         await container.performBackgroundTask { context in
             CoreDataManager.shared.hasLibraryManga(mangaId: id, context: context)
         }
+    }
+
+    func page(_ query: LibraryQuery) async -> LibraryPage? {
+        LibraryPage(pinned: [], manga: [], sourceKeys: [], isEmpty: true, unappliedFilters: [])
+    }
+
+    /// The stored key of each order (spec §2.3: the contract hides it).
+    private static func sortKey(_ sort: LibraryQuery.Sort) -> String? {
+        switch sort {
+            case .title: "manga.title"
+            case .lastRead: "lastRead"
+            case .lastOpened: "lastOpened"
+            case .lastUpdated: "lastUpdated"
+            case .dateAdded: "dateAdded"
+            case .lastChapter: "lastChapter"
+            case .unreadChapters: nil
+            case .totalChapters: "manga.chapterCount"
+        }
+    }
+
+    func entries(sourceKey: String) async -> [AidokuRunner.Manga] {
+        []
+    }
+
+    func entries(category: String?) async -> [AidokuRunner.Manga] {
+        []
+    }
+
+    func entry(_ id: MangaIdentifier) async -> AidokuRunner.Manga? {
+        nil
+    }
+
+    func sourceKeysInLibrary() async -> Set<String> {
+        []
+    }
+
+    func countInLibrary(sourceKeys: [String]) async -> Int? {
+        0
     }
 
     func contained(in ids: [MangaIdentifier]) async -> Set<MangaIdentifier> {

@@ -54,6 +54,22 @@ struct MangaSeed: Sendable {
     var scanlators: [String]?
     var viewer = 0
     var cover: String?
+    /// nil: keep it (a new manga is titled with its key)
+    var title: String?
+    var author: String?
+    var url: String?
+    var status = 0
+    var nsfw = 0
+}
+
+/// The dates of a library entry.
+struct LibraryDatesSeed: Sendable {
+    var dateAdded: Date
+    var lastOpened: Date
+    var lastUpdated: Date
+    var lastUpdatedChapters: Date
+    var lastChapter: Date?
+    var lastRead: Date?
 }
 
 protocol FixtureSeeder: Sendable {
@@ -71,6 +87,12 @@ protocol FixtureSeeder: Sendable {
     func sessions(of chapter: ChapterIdentifier) async -> [HistoryManager.ReadingSessionData]
     /// Stores the manga (not in the library) if it is not stored, and sets these fields.
     func setManga(_ manga: MangaIdentifier, _ fields: MangaSeed) async
+    /// Sets the dates of the manga's library entry (the first one, if there are several).
+    func setLibraryDates(_ manga: MangaIdentifier, _ dates: LibraryDatesSeed) async
+    /// Another stored manga with the same identifier, in the library too (as a sync can leave them).
+    func addDuplicateLibraryEntry(_ manga: MangaIdentifier) async
+    /// A library entry without a manga.
+    func addLibraryEntryWithoutManga() async
 }
 
 struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
@@ -151,6 +173,50 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
         }
     }
 
+    private func saveSeed(_ context: NSManagedObjectContext) {
+        do {
+            try context.save()
+        } catch {
+            Issue.record("the seed was not saved: \(error)")
+            context.rollback()
+        }
+    }
+
+    func setLibraryDates(_ manga: MangaIdentifier, _ dates: LibraryDatesSeed) async {
+        await container.performBackgroundTask { context in
+            guard let entry = CoreDataManager.shared.getLibraryManga(mangaId: manga, context: context) else {
+                Issue.record("not in the library: \(manga)")
+                return
+            }
+            entry.dateAdded = dates.dateAdded
+            entry.lastOpened = dates.lastOpened
+            entry.lastUpdated = dates.lastUpdated
+            entry.lastUpdatedChapters = dates.lastUpdatedChapters
+            entry.lastChapter = dates.lastChapter
+            entry.lastRead = dates.lastRead
+            saveSeed(context)
+        }
+    }
+
+    func addDuplicateLibraryEntry(_ manga: MangaIdentifier) async {
+        await container.performBackgroundTask { context in
+            let object = CoreDataManager.shared.createManga(
+                AidokuRunner.Manga(sourceKey: manga.sourceKey, key: manga.mangaKey, title: manga.mangaKey),
+                context: context
+            )
+            let entry = LibraryMangaObject(context: context)
+            entry.manga = object
+            saveSeed(context)
+        }
+    }
+
+    func addLibraryEntryWithoutManga() async {
+        await container.performBackgroundTask { context in
+            _ = LibraryMangaObject(context: context)
+            saveSeed(context)
+        }
+    }
+
     func setManga(_ manga: MangaIdentifier, _ fields: MangaSeed) async {
         await container.performBackgroundTask { context in
             let object = CoreDataManager.shared.getOrCreateManga(
@@ -162,6 +228,13 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
             object.scanlatorFilter = fields.scanlators
             object.viewer = Int16(fields.viewer)
             object.cover = fields.cover
+            if let title = fields.title {
+                object.title = title
+            }
+            object.author = fields.author
+            object.url = fields.url
+            object.status = Int16(fields.status)
+            object.nsfw = Int16(fields.nsfw)
             do {
                 try context.save()
             } catch {
