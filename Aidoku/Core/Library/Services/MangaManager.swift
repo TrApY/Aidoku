@@ -97,12 +97,7 @@ actor MangaManager {
             }
         }
 
-        let filters = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getMangaChapterFilters(
-                mangaId: mangaId,
-                context: context
-            )
-        }
+        let filters = await DataRepositories.shared.manga.chapterFilters(mangaId)
         let sortOption = ChapterSortOption(flags: filters.flags)
         let sortAscending = filters.flags & ChapterFlagMask.sortAscending != 0
 
@@ -496,13 +491,12 @@ extension MangaManager {
     }
 
     /// Check if a manga should skip updating based on skip options.
-    private nonisolated func shouldSkip(
+    private func shouldSkip(
         manga: Manga,
         options: [String],
         excludedCategories: [String] = [],
-        loadedSourceKeys: Set<String>,
-        context: NSManagedObjectContext
-    ) -> Bool {
+        loadedSourceKeys: Set<String>
+    ) async -> Bool {
         // update strategy is never
         if manga.updateStrategy == .never {
             return true
@@ -522,30 +516,25 @@ extension MangaManager {
             return true
         }
         // has unread chapters
-        if options.contains("hasUnread") && CoreDataManager.shared.unreadCount(
-            mangaId: manga.identifier,
-            lang: manga.langFilter,
-            scanlators: manga.scanlatorFilter,
-            context: context
+        if options.contains("hasUnread"), await DataRepositories.shared.chapters.unreadCount(
+            of: manga.identifier,
+            language: manga.langFilter,
+            scanlators: manga.scanlatorFilter
         ) > 0 {
             return true
         }
         // has no read chapters
-        if options.contains("notStarted") && CoreDataManager.shared.readCount(
-            mangaId: manga.identifier,
-            lang: manga.langFilter,
-            scanlators: manga.scanlatorFilter,
-            context: context
+        if options.contains("notStarted"), await DataRepositories.shared.chapters.readCount(
+            of: manga.identifier,
+            language: manga.langFilter,
+            scanlators: manga.scanlatorFilter
         ) == 0 {
             return true
         }
 
         if !excludedCategories.isEmpty {
             // check if excluded via category
-            let categories = CoreDataManager.shared.getCategories(
-                mangaId: manga.identifier,
-                context: context
-            ).compactMap { $0.title }
+            let categories = await DataRepositories.shared.categories.categories(of: manga.identifier)
 
             if !categories.isEmpty {
                 if excludedCategories.contains(where: categories.contains) {
@@ -599,15 +588,16 @@ extension MangaManager {
         let allLoadedSourceKeys = await Set(SourceManager.shared.getLoadedSources().map { $0.key })
 
         // filter items that we should skip
-        let filteredManga = await CoreDataManager.shared.container.performBackgroundTask { context in
-            allManga.filter { manga in
-                !self.shouldSkip(
-                    manga: manga,
-                    options: skipOptions,
-                    excludedCategories: excludedCategories,
-                    loadedSourceKeys: allLoadedSourceKeys,
-                    context: context
-                )
+        var filteredManga: [Manga] = []
+        for manga in allManga {
+            let skip = await shouldSkip(
+                manga: manga,
+                options: skipOptions,
+                excludedCategories: excludedCategories,
+                loadedSourceKeys: allLoadedSourceKeys
+            )
+            if !skip {
+                filteredManga.append(manga)
             }
         }
 

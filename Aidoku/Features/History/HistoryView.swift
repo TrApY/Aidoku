@@ -269,12 +269,7 @@ struct HistoryView: View {
 
         var manga = viewModel.mangaCache[mangaId]
         if manga == nil {
-            manga = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getManga(
-                    mangaId: mangaId,
-                    context: context
-                )?.toNewManga()
-            }
+            manga = await DataRepositories.shared.manga.manga(mangaId)
         }
 
         let (chapters, nextChapter) = await MangaManager.shared.getNextChapter(

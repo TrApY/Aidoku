@@ -422,36 +422,12 @@ extension LibraryViewModel {
     // updates unread counts and manga sort order for history change
     func updateHistory(for manga: [MangaInfo], read: Bool) async {
         let currentManga = self.manga + self.pinnedManga
-        let unreadCounts = await withTaskGroup(of: (Int, Int)?.self, returning: [Int: Int].self) { group in
-            for item in manga {
-                group.addTask {
-                    func getUnreadCount() async -> Int {
-                        await CoreDataManager.shared.container.performBackgroundTask { context in
-                            let filters = CoreDataManager.shared.getMangaChapterFilters(
-                                mangaId: item.id,
-                                context: context
-                            )
-                            return CoreDataManager.shared.unreadCount(
-                                mangaId: item.id,
-                                lang: filters.language,
-                                scanlators: filters.scanlators,
-                                context: context
-                            )
-                        }
-                    }
-                    if let info = currentManga.first(where: { $0.id == item.id }) {
-                        return (info.hashValue, await getUnreadCount())
-                    } else {
-                        return nil
-                    }
-                }
-            }
-            var ret: [Int: Int] = [:]
-            for await result in group {
-                guard let result = result else { continue }
-                ret[result.0] = result.1
-            }
-            return ret
+        // the ones still shown, counted at once (each with its own filters)
+        let shown = manga.compactMap { item in currentManga.first(where: { $0.id == item.id }) }
+        let counts = await DataRepositories.shared.chapters.unreadCounts(of: shown.map(\.id))
+        var unreadCounts: [Int: Int] = [:]
+        for info in shown {
+            unreadCounts[info.hashValue] = counts[info.id] ?? 0
         }
         await MainActor.run {
             for count in unreadCounts {
@@ -486,27 +462,10 @@ extension LibraryViewModel {
         let currentManga = self.manga + self.pinnedManga
 
         // fetch new unread counts
-        let unreadCounts = await withTaskGroup(of: (Int, Int).self) { group in
-            var unreadCounts: [Int: Int] = [:]
-            for manga in currentManga {
-                group.addTask {
-                    let context = CoreDataManager.shared.container.newBackgroundContext()
-                    return context.performAndWait {
-                        let filters = CoreDataManager.shared.getMangaChapterFilters(mangaId: manga.id, context: context)
-                        let count = CoreDataManager.shared.unreadCount(
-                            mangaId: manga.id,
-                            lang: filters.language,
-                            scanlators: filters.scanlators,
-                            context: context
-                        )
-                        return (manga.hashValue, count)
-                    }
-                }
-            }
-            for await (key, count) in group {
-                unreadCounts[key] = count
-            }
-            return unreadCounts
+        let counts = await DataRepositories.shared.chapters.unreadCounts(of: currentManga.map(\.id))
+        var unreadCounts: [Int: Int] = [:]
+        for manga in currentManga {
+            unreadCounts[manga.hashValue] = counts[manga.id] ?? 0
         }
 
         // set unread counts
@@ -526,18 +485,7 @@ extension LibraryViewModel {
     }
 
     func fetchUnreads(for identifier: MangaIdentifier) async {
-        let unreadCount = await CoreDataManager.shared.container.performBackgroundTask { @Sendable context in
-            let filters = CoreDataManager.shared.getMangaChapterFilters(
-                mangaId: identifier,
-                context: context
-            )
-            return CoreDataManager.shared.unreadCount(
-                mangaId: identifier,
-                lang: filters.language,
-                scanlators: filters.scanlators,
-                context: context
-            )
-        }
+        let unreadCount = await DataRepositories.shared.chapters.unreadCount(of: identifier)
         var didUpdate = false
         if let index = self.manga.firstIndex(where: { $0.id == identifier }) {
             if self.manga[index].unread != unreadCount {

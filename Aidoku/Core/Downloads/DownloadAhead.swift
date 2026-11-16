@@ -243,9 +243,7 @@ extension DownloadManager {
             let chapters = Array(await DataRepositories.shared.chapters.chapters(of: mangaId).reversed())
             guard target > 0, !chapters.isEmpty else { continue }
             let readingHistory = await DataRepositories.shared.history.readingHistory(of: mangaId).pagesAndDates
-            let filters = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getMangaChapterFilters(mangaId: mangaId, context: context)
-            }
+            let filters = await DataRepositories.shared.manga.chapterFilters(mangaId)
             // the download status (files on disk) only of the chapters in the window
             let toQueue = DownloadAheadPlanner.chaptersToQueue(
                 chapters: chapters,

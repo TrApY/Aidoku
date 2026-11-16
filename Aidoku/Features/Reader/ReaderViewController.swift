@@ -829,9 +829,9 @@ extension ReaderViewController {
                 // use given default reading mode
                 if let defaultReadingMode {
                     readingMode = defaultReadingMode
-                } else if CoreDataManager.shared.hasManga(mangaId: manga.identifier) {
+                } else if DataRepositories.shared.mainActorReads.manga(contains: manga.identifier) {
                     // fall back to stored manga viewer
-                    let sourceMode = CoreDataManager.shared.getMangaSourceReadingMode(mangaId: manga.identifier)
+                    let sourceMode = DataRepositories.shared.mainActorReads.readingMode(of: manga.identifier)
                     if let mode = ReadingMode(rawValue: sourceMode) {
                         readingMode = mode
                     } else {
