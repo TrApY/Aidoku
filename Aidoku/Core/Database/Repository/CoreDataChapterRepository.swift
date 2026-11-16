@@ -26,6 +26,10 @@ final class CoreDataChapterRepository: ChapterRepository, @unchecked Sendable {
         }
     }
 
+    func chaptersBlankAsNil(of manga: MangaIdentifier) async -> [AidokuRunner.Chapter] {
+        await chapters(of: manga)
+    }
+
     func unreadCount(of manga: MangaIdentifier) async -> Int {
         await container.performBackgroundTask { context in
             // the filters and the count in one context, as the library did
