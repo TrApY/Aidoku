@@ -20,6 +20,7 @@ extension DataRepositories {
             history: CoreDataHistoryRepository(container: container),
             chapters: CoreDataChapterRepository(container: container),
             manga: CoreDataMangaRepository(container: container),
+            mangaUpdates: CoreDataMangaUpdateRepository(container: container),
             sessions: CoreDataReadingSessionRepository(container: container),
             mainActorReads: CoreDataMainActorReads(container: container)
         )

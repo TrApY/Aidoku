@@ -8,7 +8,6 @@
 
 /// L6: stored manga.
 /// L8: chapter updates.
-protocol MangaUpdateRepository: Sendable {}
 /// L9: installed sources.
 protocol SourceRepository: Sendable {}
 /// L10: vocabulary (the API of VocabManager).

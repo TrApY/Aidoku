@@ -2,7 +2,7 @@
 //  LibraryRepository.swift
 //  Aidoku
 //
-//  SUWA-13 F4 L3: whether manga are in the library (L3), the library query, its reads and its writes (L7).
+//  SUWA-13 F4 L3: whether manga are in the library (L3), the library query, its reads and its writes (L7), the refresh (L8).
 //
 
 import AidokuRunner
@@ -48,4 +48,19 @@ protocol LibraryRepository: Sendable {
     /// Entries whose «chapters updated» date is the old default take their «updated» date. As today, it is never
     /// saved: nothing stored changes.
     func resetLastUpdatedChapters() async
+    /// The library refresh of one manga (§1.3 nº 10): details if `updateMetadata`, chapters (setChapters, §1.5
+    /// nº 11) and an update entry for each new chapter that passes the stored filters (§1.5 nº 12), saved only if
+    /// something changed. nil if it is not in the library, or if the manga comes without chapters: then nothing is
+    /// saved, not even the details.
+    @discardableResult func refresh(_ id: MangaIdentifier, with manga: AidokuRunner.Manga, updateMetadata: Bool) async -> RefreshOutcome?
+    /// The refresh from the manga's screen (§1.3 nº 11, not the same as `refresh`): always the details and a save,
+    /// updates by the filters the screen shows, and «last opened» just after now unless `incognito`. nil if it is
+    /// not in the library.
+    func refreshOpened(
+        _ id: MangaIdentifier,
+        with manga: AidokuRunner.Manga,
+        languageFilter: String?,
+        scanlatorFilter: [String],
+        incognito: Bool
+    ) async -> OpenedRefresh?
 }

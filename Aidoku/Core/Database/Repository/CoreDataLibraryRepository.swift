@@ -350,6 +350,27 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         }
     }
 
+    func refresh(_ id: MangaIdentifier, with manga: AidokuRunner.Manga, updateMetadata: Bool) async -> RefreshOutcome? {
+        nil
+    }
+
+    func refreshOpened(
+        _ id: MangaIdentifier,
+        with manga: AidokuRunner.Manga,
+        languageFilter: String?,
+        scanlatorFilter: [String],
+        incognito: Bool
+    ) async -> OpenedRefresh? {
+        nil
+    }
+
+    /// Whether a new chapter makes an update entry, with the condition both refreshes had, written the same way:
+    /// by the precedence of `?:`, with a language filter the scanlator filter is not looked at (§1.5 nº 12).
+    private static func makesUpdate(_ chapter: ChapterObject, language: String?, scanlators: [String]) -> Bool {
+        language != nil ? chapter.lang == language : true
+            && !scanlators.isEmpty ? scanlators.contains(chapter.scanlator ?? "") : true
+    }
+
     func contained(in ids: [MangaIdentifier]) async -> Set<MangaIdentifier> {
         var seen: Set<MangaIdentifier> = []
         let unique = ids.filter { seen.insert($0).inserted }
