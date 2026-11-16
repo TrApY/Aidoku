@@ -36,6 +36,16 @@ import UIKit
         return (reader, manga)
     }
 
+    /// Whether the chapter is completed, waiting up to 5 s for the history to be saved (other suites run at
+    /// the same time).
+    private func completed(_ chapter: ChapterIdentifier) async -> Bool {
+        for _ in 0..<20 {
+            if await storedProgress(chapter).completed { return true }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return false
+    }
+
     private func id(_ manga: AidokuRunner.Manga, _ chapter: AidokuRunner.Chapter) -> ChapterIdentifier {
         ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
     }
@@ -77,8 +87,7 @@ import UIKit
         try await Task.sleep(for: .seconds(1))
         #expect(await storedProgress(chapterId).completed == false)
         reader.setCurrentPage(39, position: nil)
-        try await Task.sleep(for: .seconds(1))
-        #expect(await storedProgress(chapterId).completed == true)
+        #expect(await completed(chapterId) == true)
         // back to the last page and into the transition again
         reader.setCurrentPage(38, position: nil)
         reader.setCurrentPage(39, position: nil)
@@ -95,8 +104,7 @@ import UIKit
         reader.setCurrentPage(37, position: nil)
         reader.setCurrentPage(38, position: nil)
         reader.setChapter(second)
-        try await Task.sleep(for: .seconds(1))
-        #expect(await storedProgress(id(manga, first)).completed == true)
+        #expect(await completed(id(manga, first)) == true)
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 

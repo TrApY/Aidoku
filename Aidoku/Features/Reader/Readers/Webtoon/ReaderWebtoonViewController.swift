@@ -659,10 +659,9 @@ extension ReaderWebtoonViewController {
             let chapterPages = pages[safe: chapterIndex],
             case let end = chapterEndOnScreen(chapterIndex: chapterIndex, chapterPages: chapterPages, bottomPath: bottomPath),
             ReaderCompletion.webtoonReachedEnd(
-                bottomEdgePage: end.bottomEdgePage,
-                maxVisiblePage: end.maxVisiblePage,
                 totalPages: end.totalPages,
-                transitionVisible: end.transitionVisible,
+                transitionFullyVisible: end.transitionFullyVisible,
+                nextChapterLoaded: chapterIndex < chapters.count - 1,
                 inForeground: UIApplication.shared.applicationState != .background
             )
         {
@@ -670,11 +669,11 @@ extension ReaderWebtoonViewController {
                 journaledEnds.insert(chapter.key)
                 CompletionJournal.record(
                     .init(sourceKey: viewModel.manga.sourceKey, mangaKey: viewModel.manga.key, chapterKey: chapter.key),
-                    reason: "webtoon: final visto",
+                    reason: "webtoon: transición final",
                     detail: "abajo \(bottomPath.map { "\($0.section)/\($0.item)" } ?? "fuera"), capítulo \(chapterIndex) de \(pages.count) "
                         + "con \(chapterPages.count), desplazamiento \(Int(collectionNode.contentOffset.y)), alto \(Int(collectionNode.bounds.height)), "
                         + "contenido \(Int(collectionNode.view.contentSize.height)), zoom \(scrollView.zoomScale), "
-                        + "página visible \(end.maxVisiblePage ?? 0) de \(end.totalPages), transición \(end.transitionVisible)"
+                        + "página visible \(end.maxVisiblePage ?? 0) de \(end.totalPages), transición entera \(end.transitionFullyVisible)"
                 )
             }
             delegate?.setCompleted()
@@ -699,21 +698,25 @@ extension ReaderWebtoonViewController {
     }
 
     /// What of the chapter is on screen: the page under the bottom edge, the last page visible and whether
-    /// the transition after its last page is visible (SUWA-12 H1).
+    /// the transition after its last page is entirely on screen (SUWA-17).
     private func chapterEndOnScreen(
         chapterIndex: Int,
         chapterPages: [Page],
         bottomPath: IndexPath?
-    ) -> (bottomEdgePage: Int?, maxVisiblePage: Int?, totalPages: Int, transitionVisible: Bool) {
+    ) -> (bottomEdgePage: Int?, maxVisiblePage: Int?, totalPages: Int, transitionFullyVisible: Bool) {
         let hasStartInfo = chapterPages.first?.type != .imagePage
         let hasEndInfo = chapterPages.last?.type != .imagePage
         let offset = hasStartInfo ? 0 : 1
         let totalPages = chapterPages.filter { $0.type == .imagePage }.count
         let visible = collectionNode.indexPathsForVisibleItems.filter { $0.section == chapterIndex }.map(\.item)
         let maxVisiblePage = visible.filter { chapterPages[safe: $0]?.type == .imagePage }.max().map { $0 + offset }
-        let transitionVisible = hasEndInfo && visible.contains(chapterPages.count - 1)
+        let viewport = CGRect(origin: collectionNode.contentOffset, size: collectionNode.bounds.size)
+        let transitionFrame = collectionNode.collectionViewLayout
+            .layoutAttributesForItem(at: IndexPath(item: chapterPages.count - 1, section: chapterIndex))?.frame
+        let transitionFullyVisible = hasEndInfo && visible.contains(chapterPages.count - 1)
+            && transitionFrame.map { $0.height > 0 && $0.minY >= viewport.minY - 1 && $0.maxY <= viewport.maxY + 1 } ?? false
         let bottomEdgePage = bottomPath.map { $0.section == chapterIndex ? $0.item + offset : 0 }
-        return (bottomEdgePage, maxVisiblePage, totalPages, transitionVisible)
+        return (bottomEdgePage, maxVisiblePage, totalPages, transitionFullyVisible)
     }
 
     /// Prepend the previous chapter's pages

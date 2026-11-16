@@ -11,28 +11,48 @@ import Foundation
 import UIKit
 
 enum ReaderCompletion {
-    /// Webtoon / continuous, when the scroll stops: the last page of the chapter on screen, or the
-    /// transition after it. Not a gap under the bottom edge (between pages or while sizes change).
-    /// `bottomEdgePage`: the page under the bottom edge (nil: none), only for the old rule.
+    // SUWA-17 (JoTa, 16-nov): a chapter is completed when the user, with the app in front, goes from its last
+    // page to what comes after it: the transition, or the first page of the next chapter (or the «no more
+    // chapters» transition if it is the last). Seeing the last page alone does not complete it (it is saved as
+    // the current page, so the chapter opens there again). It replaces SUWA-12 H/I «complete on seeing the last
+    // page»; the rest stays: nothing with the app out of front, nor a big jump without seeing the last page.
+
+    /// Webtoon / continuous, when the scroll stops, at the end of what is loaded: the transition after the last
+    /// page fully on screen and no chapter after it (the middle of the screen, the page reported, cannot get
+    /// into a short transition at the very end). With the next chapter loaded below, it is the page reported
+    /// that passes into the transition (`pageReportCompletes`).
     static func webtoonReachedEnd(
-        bottomEdgePage: Int?,
-        maxVisiblePage: Int?,
         totalPages: Int,
-        transitionVisible: Bool,
+        transitionFullyVisible: Bool,
+        nextChapterLoaded: Bool,
         inForeground: Bool
     ) -> Bool {
-        guard inForeground, totalPages > 0 else { return false }
-        if transitionVisible {
-            return true
-        }
-        guard let maxVisiblePage else { return false }
-        return maxVisiblePage >= totalPages
+        guard inForeground, totalPages > 0, !nextChapterLoaded else { return false }
+        return transitionFullyVisible
     }
 
-    /// A page change completes the chapter at the last page (or past it, the transition) only if the last
-    /// page was seen: in this change or before in this reading session. The paged reader reports it.
+    /// A page change completes the chapter when it goes past the last page (the transition is reported as the
+    /// page after the last one) and the last page was seen before in this reading session.
     /// `previousPage`: the page before this change (with the app in front).
     static func pageReportCompletes(
+        pages: ClosedRange<Int>,
+        totalPages: Int?,
+        seenPages: Set<Int>,
+        previousPage: Int? = nil,
+        inForeground: Bool
+    ) -> Bool {
+        guard inForeground, let totalPages, totalPages > 0, pages.lowerBound > totalPages else { return false }
+        if seenPages.contains(totalPages) {
+            return true
+        }
+        // past the last page in one go (37 → 39), as before and as upstream: the transition only comes after
+        // it. A jump from further back (18 → 39, the iPad's) doesn't count. SUWA-12 I2
+        return (previousPage ?? 0) >= totalPages - 2
+    }
+
+    /// The text readers have no transition: they keep the rule of SUWA-12 (the last page reached, seen in this
+    /// change or before), and the scrolling one completes at the end of the text on its own.
+    static func textPageReportCompletes(
         pages: ClosedRange<Int>,
         totalPages: Int?,
         seenPages: Set<Int>,
@@ -43,28 +63,13 @@ enum ReaderCompletion {
         if pages.contains(totalPages) || seenPages.contains(totalPages) {
             return true
         }
-        // past the last page in one go (37 → 39), as before and as upstream: the transition only comes after
-        // it. A jump from further back (18 → 39, the iPad's) doesn't count. SUWA-12 I2
         return pages.lowerBound > totalPages && (previousPage ?? 0) >= totalPages - 2
     }
 
-    // SUWA-17 (rojo): the functions of the new rule, not yet applied
-    static func webtoonReachedEnd(totalPages: Int, transitionFullyVisible: Bool, nextChapterLoaded: Bool, inForeground: Bool) -> Bool {
-        false
-    }
-
-    static func textPageReportCompletes(
-        pages: ClosedRange<Int>,
-        totalPages: Int?,
-        seenPages: Set<Int>,
-        previousPage: Int? = nil,
-        inForeground: Bool
-    ) -> Bool {
-        pageReportCompletes(pages: pages, totalPages: totalPages, seenPages: seenPages, previousPage: previousPage, inForeground: inForeground)
-    }
-
+    /// Going to the next chapter (the paged reader turning past the transition, the webtoon past it in one go, the
+    /// next chapter button) completes the one left if its last page was seen.
     static func chapterChangeCompletes(forward: Bool, lastPageSeen: Bool, inForeground: Bool) -> Bool {
-        false
+        inForeground && forward && lastPageSeen
     }
 }
 

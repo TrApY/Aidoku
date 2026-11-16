@@ -1169,6 +1169,31 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     func setChapter(_ chapter: AidokuRunner.Chapter) {
         guard chapter != self.chapter else { return }
 
+        // to the next chapter from the last page: the chapter left is completed (SUWA-17), right after its page
+        // is saved below (two saves of the same history row at once: one of them failed). The list is the
+        // source's, newest first
+        var leftCompleted: (chapters: [AidokuRunner.Chapter], reason: String)?
+        if
+            let oldIndex = chapterList.firstIndex(of: self.chapter),
+            let newIndex = chapterList.firstIndex(of: chapter),
+            let totalPages = toolbarView.totalPages, totalPages > 0,
+            ReaderCompletion.chapterChangeCompletes(
+                forward: newIndex < oldIndex,
+                lastPageSeen: sessionReadPages.contains(totalPages) || currentPage >= totalPages,
+                inForeground: appActivity.isActive
+            ),
+            !AppSettings.general.incognitoMode.get()
+        {
+            let readerType = String(describing: type(of: reader as Any))
+            leftCompleted = (
+                chaptersToMark,
+                "lector: al capítulo siguiente desde la última página (\(readerType), página \(currentPage) de \(totalPages))"
+            )
+            if AppSettings.downloads.deleteDownloadAfterReading.get() {
+                chaptersToRemoveDownload.append(self.chapter)
+            }
+        }
+
         // the old chapter is saved right away below; nothing delayed may write it later
         readPositionSaver.cancel()
 
@@ -1176,8 +1201,11 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         let currentPage = currentPage
         let totalPages = toolbarView.totalPages
         let oldChapter = self.chapter
-        Task {
+        Task { [manga, leftCompleted] in
             await updateReadPosition(currentPage: currentPage, totalPages: totalPages, chapter: oldChapter)
+            if let leftCompleted {
+                await HistoryManager.shared.addHistory(mangaId: manga.identifier, chapters: leftCompleted.chapters, reason: leftCompleted.reason)
+            }
             sessionReadPages = [self.currentPage]
             sessionStartDate = Date.now
             sessionLastInteraction = nil
@@ -1228,13 +1256,14 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             && self.pages.first?.isTextPage == true
             && !(reader is ReaderPagedTextViewController && (reader as? ReaderPagedTextViewController)?.hasPaginated == true)
         // the last page seen (now or before in this session), with the app in the foreground (SUWA-12 H1)
-        let completes = ReaderCompletion.pageReportCompletes(
-            pages: pages,
-            totalPages: totalPages,
-            seenPages: sessionReadPages,
-            previousPage: previousPage,
-            inForeground: appActivity.isActive
-        )
+        let isTextReader = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
+        let completes = isTextReader
+            ? ReaderCompletion.textPageReportCompletes(
+                pages: pages, totalPages: totalPages, seenPages: sessionReadPages, previousPage: previousPage, inForeground: appActivity.isActive
+            )
+            : ReaderCompletion.pageReportCompletes(
+                pages: pages, totalPages: totalPages, seenPages: sessionReadPages, previousPage: previousPage, inForeground: appActivity.isActive
+            )
         if completes && !isPrePaginationPlaceholder {
             completionTrigger = "lector: página \(pages.lowerBound)...\(pages.upperBound) de \(totalPages)"
             setCompleted()
