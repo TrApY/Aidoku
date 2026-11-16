@@ -36,6 +36,8 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
     private var currentAttributes: [IndexPath: UICollectionViewLayoutAttributes] = [:]
     private var itemIdentifiers: [IndexPath: AnyHashable] = [:]
+    /// The number of items of each section in the last layout.
+    private var itemCounts: [Int] = []
 
     private struct ViewportAnchor {
         let indexPath: IndexPath
@@ -102,8 +104,10 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         let anchor = isChangingCellsAbove || sameGeometry ? middleCell ?? currentAttributes.values
             .filter { $0.frame.maxY > collectionView.contentOffset.y }
             .min { $0.frame.minY < $1.frame.minY } : nil
-        let anchorIdentifier = anchor.flatMap { itemIdentifiers[$0.indexPath] }
+        let anchorPath = anchor?.indexPath
+        let anchorIdentifier = anchorPath.flatMap { itemIdentifiers[$0] }
         let oldAnchorY = anchor?.frame.minY
+        let oldItemCounts = itemCounts
         isChangingCellsAbove = false
 
         // calculate collection view size
@@ -159,12 +163,17 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
         lastWidth = width
         lastScale = scale
+        itemCounts = (0..<collectionView.numberOfSections).map { collectionView.numberOfItems(inSection: $0) }
 
         // Only movement of the anchor counts, not resizing of cells; and the scroll view is left alone when
         // there is nothing to make up for (every pass set its offset and content size, also while pinching)
+        // The anchor is found by its node; a reloaded row (refreshInfoPages reloads the transitions) gets a new
+        // node, so then by its place, as long as no row came or went (SUWA-17 C4)
         if
-            let anchorIdentifier, let oldAnchorY,
-            let newIndexPath = itemIdentifiers.first(where: { $0.value == anchorIdentifier })?.key,
+            let anchorPath, let oldAnchorY,
+            let newIndexPath = anchorIdentifier.flatMap({ identifier in
+                itemIdentifiers.first(where: { $0.value == identifier })?.key
+            }) ?? (oldItemCounts == itemCounts ? anchorPath : nil),
             let newAnchorY = currentAttributes[newIndexPath]?.frame.minY,
             abs(newAnchorY - oldAnchorY) > 0.01
         {
