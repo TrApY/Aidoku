@@ -215,10 +215,7 @@ extension SettingsView {
                     message: NSLocalizedString("CLEAR_READ_HISTORY_TEXT")
                 ) {
                     Task {
-                        await CoreDataManager.shared.container.performBackgroundTask { context in
-                            CoreDataManager.shared.clearHistory(context: context)
-                            try? context.save()
-                        }
+                        await DataRepositories.shared.history.clear(excludingLibrary: false)
                         NotificationCenter.default.post(name: .updateHistory, object: nil)
                     }
                 }
@@ -228,10 +225,7 @@ extension SettingsView {
                     message: NSLocalizedString("CLEAR_EXCLUDING_LIBRARY_TEXT")
                 ) {
                     Task {
-                        await CoreDataManager.shared.container.performBackgroundTask { context in
-                            CoreDataManager.shared.clearHistoryExcludingLibrary(context: context)
-                            try? context.save()
-                        }
+                        await DataRepositories.shared.history.clear(excludingLibrary: true)
                         NotificationCenter.default.post(name: .updateHistory, object: nil)
                     }
                 }
@@ -268,10 +262,14 @@ extension SettingsView {
                     Task {
                         resetSettings()
                         await clearNetworkCache()
+                        // each clear is a batch delete that runs at once (spec §1.3 nº 18): same order, history by
+                        // its repository
                         await CoreDataManager.shared.container.performBackgroundTask { context in
                             CoreDataManager.shared.clearLibrary(context: context)
                             CoreDataManager.shared.clearManga(context: context)
-                            CoreDataManager.shared.clearHistory(context: context)
+                        }
+                        await DataRepositories.shared.history.clear(excludingLibrary: false)
+                        await CoreDataManager.shared.container.performBackgroundTask { context in
                             CoreDataManager.shared.clearChapters(context: context)
                             CoreDataManager.shared.clearCategories(context: context)
                             CoreDataManager.shared.clearTracks(context: context)

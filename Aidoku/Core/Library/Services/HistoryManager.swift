@@ -6,7 +6,7 @@
 //
 
 import AidokuRunner
-import CoreData
+import Foundation
 
 final class HistoryManager: Sendable {
     static let shared = HistoryManager()
@@ -23,21 +23,10 @@ extension HistoryManager {
         updateTrackers: Bool = true
     ) async {
         let mangaId = chapterId.mangaIdentifier
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.setRead(mangaId: mangaId, context: context)
-            CoreDataManager.shared.setProgress(
-                progress,
-                chapterId: chapterId,
-                totalPages: totalPages,
-                scrollPosition: scrollPosition,
-                context: context
-            )
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("HistoryManager.setProgress: \(error)")
-            }
-        }
+        // the manga's last read date and the chapter's page, in one save (SUWA-7)
+        await DataRepositories.shared.history.savePage(
+            PageSave(chapter: chapterId, page: progress, totalPages: totalPages, scrollPosition: scrollPosition)
+        )
         NotificationCenter.default.post(name: .historySet, object: (chapterId, progress))
         if !completed && updateTrackers {
             Task {
@@ -58,18 +47,7 @@ extension HistoryManager {
     }
 
     func addSession(chapterId: ChapterIdentifier, data: ReadingSessionData) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.createSession(
-                chapterId: chapterId,
-                data: data,
-                context: context
-            )
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("HistoryManager.addSession: \(error)")
-            }
-        }
+        await DataRepositories.shared.sessions.add(data, chapter: chapterId)
     }
 
     func addHistory(
@@ -79,38 +57,23 @@ extension HistoryManager {
         skipTracker: Tracker? = nil,
         reason: String = "?"
     ) async {
-        // mark each manga as read
-        let success = await CoreDataManager.shared.container.performBackgroundTask { context in
-            // mark chapters as read
-            let success = CoreDataManager.shared.setCompleted(
-                chapterIds: chapters.map {
-                    .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0.key)
-                },
-                date: date,
-                context: context
-            )
-            if success {
-                CoreDataManager.shared.setRead(
-                    mangaId: mangaId,
-                    date: date,
-                    context: context
+        // mark the chapters and the manga as read
+        let saved = await DataRepositories.shared.history.markCompleted(
+            chapters.map { .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0.key) },
+            date: date
+        )
+        // only what was saved goes in the journal (SUWA-12 H3): every chapter received, as before
+        if saved == true {
+            for chapter in chapters {
+                CompletionJournal.record(
+                    .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key),
+                    reason: reason
                 )
-                do {
-                    try context.save()
-                    // only what was saved goes in the journal (SUWA-12 H3)
-                    for chapter in chapters {
-                        CompletionJournal.record(
-                            .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapter.key),
-                            reason: reason
-                        )
-                    }
-                } catch {
-                    LogManager.logger.error("HistoryManager.addHistory: \(error.localizedDescription)")
-                }
             }
-            return success
         }
-        guard success else { return }
+        // nothing new: nothing else happens. A failed save (nil) still notifies and updates the trackers, as it did
+        // before (the result of marking was what counted, not the save)
+        guard saved != false else { return }
         NotificationCenter.default.post(
             name: .historyAdded,
             object: chapters.map {
@@ -143,7 +106,7 @@ extension HistoryManager {
 
     func removeHistory(chapterIds: [ChapterIdentifier]) async {
         guard !chapterIds.isEmpty else { return }
-        await CoreDataManager.shared.removeHistory(chapterIds: chapterIds)
+        await DataRepositories.shared.history.remove(chapters: chapterIds)
         NotificationCenter.default.post(name: .historyRemoved, object: chapterIds)
         Task {
             await TrackerManager.shared.setProgress(
@@ -155,16 +118,13 @@ extension HistoryManager {
     }
 
     func removeHistory(mangaId: MangaIdentifier) async {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.removeHistory(mangaId: mangaId, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.history.removeAll(of: mangaId)
         NotificationCenter.default.post(name: .historyRemoved, object: mangaId)
         Task {
-            let chapters = await CoreDataManager.shared.getChapters(mangaId: mangaId)
+            let chapters = await DataRepositories.shared.chapters.chapters(of: mangaId)
             await TrackerManager.shared.setProgress(
                 mangaId: mangaId,
-                chapters: chapters.map { $0.toNew() },
+                chapters: chapters,
                 progress: .init(completed: false, page: 0)
             )
         }

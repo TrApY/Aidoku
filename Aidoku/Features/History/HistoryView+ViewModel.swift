@@ -239,10 +239,7 @@ extension HistoryView.ViewModel {
     // removes all history
     func clearHistory() {
         Task {
-            await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.clearHistory(context: context)
-                try? context.save()
-            }
+            await DataRepositories.shared.history.clear(excludingLibrary: false)
             filteredHistory = [:]
             historyData = [:]
             offset = 0
