@@ -41,6 +41,10 @@ class ReaderTextViewController: BaseViewController {
     private var loadingNext = false
     private var loadingPrevious = false
     private var hasReachedEnd = false
+    /// The current section was entered from the one below it: the user went up into the transition that ends
+    /// it, so its end is on screen without having read it. Nothing is reported or completed for it until the
+    /// user goes up into its text (SUWA-17 C1: it completed the previous chapter, never opened).
+    private var enteredFromBelow = false
 
     private var isSliding = false
     private var estimatedPageCount = 1
@@ -431,6 +435,7 @@ extension ReaderTextViewController {
     func loadInitialChapter(_ chapter: AidokuRunner.Chapter, restorePosition: Bool = true) async {
         isLoadingChapter = true
         hasReachedEnd = false
+        enteredFromBelow = false
         self.chapter = chapter
 
         await viewModel.loadPages(chapter: chapter)
@@ -680,6 +685,8 @@ extension ReaderTextViewController {
         let sectionChapter = sections[index].chapter
         guard sectionChapter != chapter else { return }
 
+        let oldIndex = sections.firstIndex { $0.chapter == chapter }
+        enteredFromBelow = oldIndex.map { index < $0 } ?? false
         chapter = sectionChapter
         delegate?.setChapter(sectionChapter)
 
@@ -798,6 +805,12 @@ extension ReaderTextViewController: UIScrollViewDelegate {
         let height = sectionContentHeight(at: index)
         let screenHeight = scrollView.frame.size.height
         guard height > 0, screenHeight > 0 else { return }
+
+        if enteredFromBelow {
+            // up into the section's text (its end off the bottom half of the screen): from here on as always
+            guard scrollView.contentOffset.y + screenHeight < startY + height - screenHeight / 2 else { return }
+            enteredFromBelow = false
+        }
 
         let offsetInSection = scrollView.contentOffset.y - startY
         let scrollableHeight = max(1, height - screenHeight)

@@ -43,6 +43,9 @@ class ReaderViewController: BaseObservingViewController {
             }
         }
     }
+    /// The chapters whose last page the user reached in this reader, with the app in front: changing chapter
+    /// completes only the chapter being read, and only if it is one of these (SUWA-17 C1).
+    private var lastPageSeenChapters: Set<String> = []
     private var forceStartPage: Int?
     private(set) var currentPage = 1
     /// The app in front (page changes and completions only then). Replaced in tests. SUWA-12 I1
@@ -1171,15 +1174,19 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
 
         // to the next chapter from the last page: the chapter left is completed (SUWA-17), right after its page
         // is saved below (two saves of the same history row at once: one of them failed). The list is the
-        // source's, newest first
+        // source's, newest first. Only in the webtoon and paged readers: the text readers keep the SUWA-12 rule
+        // (the scrolling one tells «previous chapter» and «this chapter» again when it puts the previous one in
+        // above). And only the chapter being read, if its own last page was seen: never another one (C1)
+        let isTextReader = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
         var leftCompleted: (chapters: [AidokuRunner.Chapter], reason: String)?
         if
+            !isTextReader,
             let oldIndex = chapterList.firstIndex(of: self.chapter),
             let newIndex = chapterList.firstIndex(of: chapter),
             let totalPages = toolbarView.totalPages, totalPages > 0,
             ReaderCompletion.chapterChangeCompletes(
                 forward: newIndex < oldIndex,
-                lastPageSeen: sessionReadPages.contains(totalPages) || currentPage >= totalPages,
+                lastPageSeen: lastPageSeenChapters.contains(self.chapter.key),
                 inForeground: appActivity.isActive
             ),
             !AppSettings.general.incognitoMode.get()
@@ -1240,6 +1247,9 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         for page in pages {
             guard page >= 1 && page <= totalPages else { continue }
             sessionReadPages.insert(page)
+        }
+        if pages.upperBound >= totalPages {
+            lastPageSeenChapters.insert(chapter.key)
         }
 
         let page = max(1, min(pages.lowerBound, totalPages))
