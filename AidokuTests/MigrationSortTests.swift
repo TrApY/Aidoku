@@ -54,9 +54,7 @@ import Testing
         let options = MigrationOptions(readChapters: true, categories: true, tracking: false, keepOriginal: keepOriginal, deleteDownloads: false)
         _ = await MangaManager.migrate(options: options, from: old, to: new, withChapters: chapters, environment: environment)
         let newId = new.identifier
-        let flags = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getMangaChapterFilters(mangaId: newId, context: context).flags
-        }
+        let flags = await DataRepositories.shared.manga.chapterFilters(newId).flags
         await cleanUp()
         return ChapterSortMemory.chosen(inFlags: flags)
     }

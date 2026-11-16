@@ -64,11 +64,10 @@ import Testing
         }
         ChapterSortMemory.record(ascending, for: id)
         await MangaManager.shared.addToLibrary(manga: manga, chapters: [.init(key: "c1", chapterNumber: 1)], bindTrackers: false)
-        let flags = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let flags = CoreDataManager.shared.getMangaChapterFilters(mangaId: id, context: context).flags
+        let flags = await DataRepositories.shared.manga.chapterFilters(id).flags
+        await CoreDataManager.shared.container.performBackgroundTask { context in
             CoreDataManager.shared.removeManga(mangaId: id, context: context)
             try? context.save()
-            return flags
         }
         #expect(ChapterSortMemory.chosen(inFlags: flags) == ascending)
         #expect(ChapterSortMemory.local(for: id) == nil)
