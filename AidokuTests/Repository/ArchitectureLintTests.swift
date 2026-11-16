@@ -32,7 +32,6 @@ import Testing
         "Aidoku/Core/Backup/Models/BackupVocabEntry.swift",
         "Aidoku/Core/Dictionary/Vocab/VocabManager.swift",
         "Aidoku/Core/Downloads/DownloadManager.swift",
-        "Aidoku/Core/Library/Models/Insights/InsightsData.swift",
         "Aidoku/Core/Library/Services/MangaManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Local/LocalFileDataManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Local/LocalFileManager.swift",
