@@ -11,6 +11,8 @@ protocol ChapterRepository: Sendable {
     /// The manga's stored chapters in source order (as the source lists them: newest first).
     func chapters(of manga: MangaIdentifier) async -> [AidokuRunner.Chapter]
     func chapter(_ id: ChapterIdentifier) async -> AidokuRunner.Chapter?
+    /// The chapter and its manga in one read (the history list and the vocabulary entries show both).
+    func chapterWithManga(_ id: ChapterIdentifier) async -> ChapterWithManga
     /// The manga's stored chapters in source order as they were read before the repositories (through the old
     /// `Chapter`): an empty title or scanlator comes back as nil (`chapters(of:)` keeps "" and [""]).
     func chaptersBlankAsNil(of manga: MangaIdentifier) async -> [AidokuRunner.Chapter]
