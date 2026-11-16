@@ -223,31 +223,131 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         defaultCategory: String?,
         adoptChapterFlags: (@Sendable (Int) -> Int?)?
     ) async -> Bool {
-        false
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.addToLibrary(manga: manga, chapters: chapters, context: context)
+            if
+                let adoptChapterFlags,
+                let object = CoreDataManager.shared.getManga(mangaId: manga.identifier, context: context),
+                let flags = adoptChapterFlags(Int(object.chapterFlags))
+            {
+                object.chapterFlags = Int16(flags)
+            }
+            if let defaultCategory, CoreDataManager.shared.hasCategory(title: defaultCategory, context: context) {
+                CoreDataManager.shared.addCategoriesToManga(mangaId: manga.identifier, categories: [defaultCategory], context: context)
+            }
+            return context.saveLogging("MangaManager.addToLibrary")
+        }
     }
 
     func remove(_ id: MangaIdentifier) async -> LibraryRemovalResult {
-        LibraryRemovalResult(chapterFlagsBefore: [:], saved: false)
+        await container.performBackgroundTask { context in
+            var flags: [MangaIdentifier: Int] = [:]
+            if let object = CoreDataManager.shared.getManga(mangaId: id, context: context) {
+                flags[id] = Int(object.chapterFlags)
+            }
+            CoreDataManager.shared.removeManga(mangaId: id, context: context)
+            CoreDataManager.shared.removeChapters(mangaId: id, context: context)
+            CoreDataManager.shared.removeTracks(mangaId: id, context: context)
+            return LibraryRemovalResult(chapterFlagsBefore: flags, saved: context.saveLogging("Failed to remove manga"))
+        }
     }
 
     func remove(_ ids: [MangaIdentifier]) async -> LibraryRemovalResult {
-        LibraryRemovalResult(chapterFlagsBefore: [:], saved: false)
+        await container.performBackgroundTask { context in
+            var flags: [MangaIdentifier: Int] = [:]
+            for id in ids {
+                if let object = CoreDataManager.shared.getManga(mangaId: id, context: context) {
+                    flags[id] = Int(object.chapterFlags)
+                }
+            }
+            CoreDataManager.shared.removeFromLibrary(ids: ids, context: context)
+            return LibraryRemovalResult(chapterFlagsBefore: flags, saved: context.saveLogging("Failed to remove multiple manga"))
+        }
     }
 
     func snapshot(_ ids: [MangaIdentifier]) async -> [LibrarySnapshot] {
-        []
+        await container.performBackgroundTask { context in
+            ids.compactMap { id -> LibrarySnapshot? in
+                guard let manga = CoreDataManager.shared.getManga(mangaId: id, context: context)?.toManga() else {
+                    return nil
+                }
+                var dates: LibraryDates?
+                if
+                    let lastOpened = manga.lastOpened,
+                    let lastUpdated = manga.lastUpdated,
+                    let lastUpdatedChapters = manga.lastUpdatedChapters,
+                    let dateAdded = manga.dateAdded
+                {
+                    dates = LibraryDates(
+                        dateAdded: dateAdded,
+                        lastOpened: lastOpened,
+                        lastUpdated: lastUpdated,
+                        lastUpdatedChapters: lastUpdatedChapters,
+                        lastChapter: manga.lastChapter,
+                        lastRead: manga.lastRead
+                    )
+                }
+                return LibrarySnapshot(
+                    manga: manga.toNew(),
+                    chapters: CoreDataManager.shared.getChapters(mangaId: id, context: context).map { $0.toChapter().toNew() },
+                    dates: dates,
+                    tracks: CoreDataManager.shared.getTracks(mangaId: id, context: context).map { $0.toItem() },
+                    categories: CoreDataManager.shared.getCategories(mangaId: id, context: context).compactMap { $0.title }
+                )
+            }
+        }
     }
 
     func restore(_ snapshot: LibrarySnapshot) async -> Bool {
-        false
+        await container.performBackgroundTask { context in
+            let manga = snapshot.manga
+            CoreDataManager.shared.addToLibrary(manga: manga, chapters: snapshot.chapters, context: context)
+            if
+                let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: manga.identifier, context: context),
+                let dates = snapshot.dates
+            {
+                libraryObject.lastOpened = dates.lastOpened
+                libraryObject.lastUpdated = dates.lastUpdated
+                libraryObject.lastUpdatedChapters = dates.lastUpdatedChapters
+                libraryObject.lastChapter = dates.lastChapter
+                libraryObject.lastRead = dates.lastRead
+                libraryObject.dateAdded = dates.dateAdded
+            }
+            for item in snapshot.tracks {
+                CoreDataManager.shared.createTrack(
+                    id: item.id,
+                    trackerId: item.trackerId,
+                    mangaId: item.mangaId,
+                    title: item.title,
+                    context: context
+                )
+            }
+            for category in snapshot.categories where !CoreDataManager.shared.hasCategory(title: category, context: context) {
+                CoreDataManager.shared.createCategory(title: category, context: context)
+            }
+            CoreDataManager.shared.addCategoriesToManga(mangaId: manga.identifier, categories: snapshot.categories, context: context)
+            return context.saveLogging("MangaManager.restoreToLibrary")
+        }
     }
 
     func markOpened(_ id: MangaIdentifier) async -> Bool {
-        false
+        await container.performBackgroundTask { context in
+            guard let object = CoreDataManager.shared.getLibraryManga(mangaId: id, context: context) else {
+                return true
+            }
+            object.lastOpened = Date()
+            return context.saveLogging("setOpened")
+        }
     }
 
     func resetLastUpdatedChapters() async {
-        ()
+        await container.performBackgroundTask { context in
+            let items = CoreDataManager.shared.getLibraryManga(context: context)
+            // if lastUpdatedChapters is set to the default value, update default to lastUpdated (never saved)
+            for item in items where item.lastUpdatedChapters.timeIntervalSince1970 == 21600 {
+                item.lastUpdatedChapters = item.lastUpdated
+            }
+        }
     }
 
     func contained(in ids: [MangaIdentifier]) async -> Set<MangaIdentifier> {
