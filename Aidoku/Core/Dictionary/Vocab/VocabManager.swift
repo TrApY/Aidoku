@@ -8,7 +8,7 @@
 import CoreData
 import Foundation
 
-final actor VocabManager {
+final actor VocabManager: VocabRepository {
     static let shared = VocabManager()
 
     private let context: NSManagedObjectContext

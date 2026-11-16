@@ -20,4 +20,8 @@ final class CoreDataReadingSessionRepository: ReadingSessionRepository, @uncheck
             return context.saveLogging("HistoryManager.addSession")
         }
     }
+
+    func insights() async -> InsightsSnapshot {
+        InsightsSnapshot(currentStreak: 0, longestStreak: 0, heatmap: .empty(), chart: [], pagesTotal: 0, pagesMonth: 0, pagesYear: 0, seriesTotal: 0, seriesMonth: 0, seriesYear: 0, hoursTotal: 0, hoursMonth: 0, hoursYear: 0)
+    }
 }
