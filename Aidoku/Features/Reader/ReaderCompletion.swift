@@ -47,6 +47,25 @@ enum ReaderCompletion {
         // it. A jump from further back (18 → 39, the iPad's) doesn't count. SUWA-12 I2
         return pages.lowerBound > totalPages && (previousPage ?? 0) >= totalPages - 2
     }
+
+    // SUWA-17 (rojo): the functions of the new rule, not yet applied
+    static func webtoonReachedEnd(totalPages: Int, transitionFullyVisible: Bool, nextChapterLoaded: Bool, inForeground: Bool) -> Bool {
+        false
+    }
+
+    static func textPageReportCompletes(
+        pages: ClosedRange<Int>,
+        totalPages: Int?,
+        seenPages: Set<Int>,
+        previousPage: Int? = nil,
+        inForeground: Bool
+    ) -> Bool {
+        pageReportCompletes(pages: pages, totalPages: totalPages, seenPages: seenPages, previousPage: previousPage, inForeground: inForeground)
+    }
+
+    static func chapterChangeCompletes(forward: Bool, lastPageSeen: Bool, inForeground: Bool) -> Bool {
+        false
+    }
 }
 
 /// Whether the app is in front for the reader: not from «will resign active» or «did enter background»
