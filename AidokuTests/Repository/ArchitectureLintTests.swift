@@ -34,7 +34,6 @@ import Testing
         "Aidoku/Core/Downloads/DownloadManager.swift",
         "Aidoku/Core/Library/Models/Insights/InsightsData.swift",
         "Aidoku/Core/Library/Services/MangaManager.swift",
-        "Aidoku/Core/Library/Services/MangaUpdateManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Local/LocalFileDataManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Local/LocalFileManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiServerSourceSync.swift",
@@ -49,7 +48,6 @@ import Testing
         "Aidoku/Features/Settings/SettingsView.swift",
         "Aidoku/Features/Source/Legacy/SourceViewController.swift",
         "Aidoku/Features/Source/Legacy/SourceViewModel.swift",
-        "Aidoku/Features/Updates/MangaUpdatesView.swift",
     ]
 
     static let patterns = ["CoreDataManager.shared", "import CoreData", "NSManagedObject", "NSPredicate", "NSSortDescriptor"]
