@@ -215,6 +215,7 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
     }
 
     /// The positions seen, one per frame; the backward steps among them (with a 1 pt allowance).
+    @MainActor
     private final class Track {
         var positions: [Position] = []
         var backwards: [String] = []
