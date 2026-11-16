@@ -12,7 +12,5 @@ protocol MangaRepository: Sendable {}
 protocol MangaUpdateRepository: Sendable {}
 /// L9: installed sources.
 protocol SourceRepository: Sendable {}
-/// L10: reading sessions and insights.
-protocol ReadingSessionRepository: Sendable {}
 /// L10: vocabulary (the API of VocabManager).
 protocol VocabRepository: Sendable {}

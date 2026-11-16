@@ -70,4 +70,11 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
             CoreDataManager.shared.getHighestReadNumber(mangaId: manga, mode: mode, context: context)
         }
     }
+
+    // STUB (rojo de L5): las escrituras aún no tienen implementación
+    func savePage(_ save: PageSave) async -> Bool { false }
+    func markCompleted(_ chapters: [ChapterIdentifier], date: Date) async -> Bool? { false }
+    func remove(chapters: [ChapterIdentifier]) async -> Bool { false }
+    func removeAll(of manga: MangaIdentifier) async -> Bool { false }
+    func clear(excludingLibrary: Bool) async -> Bool { false }
 }

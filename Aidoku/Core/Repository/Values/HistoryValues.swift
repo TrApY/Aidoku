@@ -2,7 +2,7 @@
 //  HistoryValues.swift
 //  Aidoku
 //
-//  SUWA-13 F4 L4: what the history repository gives (no Core Data objects).
+//  SUWA-13 F4 L4-L5: what the history repository gives and takes (no Core Data objects).
 //
 
 import Foundation
@@ -36,4 +36,12 @@ extension Dictionary where Value == ReadingHistoryEntry {
     var pagesAndDates: [Key: (page: Int, date: Int)] {
         mapValues { (page: $0.page, date: $0.date) }
     }
+}
+
+/// A page saved by the reader (SUWA-7). `totalPages`/`scrollPosition` nil keep what was stored.
+struct PageSave: Sendable, Hashable {
+    var chapter: ChapterIdentifier
+    var page: Int
+    var totalPages: Int?
+    var scrollPosition: Double?
 }

@@ -22,6 +22,9 @@ struct FixtureStore: Sendable {
     /// Puts stored chapters and history rows in the store, as they can be found there, until history has its
     /// writes (L5) and chapters theirs (L6).
     let seed: any FixtureSeeder
+    /// The same store opened read-only: every save of these repositories fails (to check that a failed write
+    /// leaves nothing half done).
+    let failingRepos: DataRepositories
     let tearDown: @Sendable () async -> Void
 }
 
@@ -52,6 +55,11 @@ protocol FixtureSeeder: Sendable {
     func addHistory(_ seed: HistorySeed) async
     func historyRows(of chapter: ChapterIdentifier) async -> Int
     func isLinked(_ chapter: ChapterIdentifier) async -> Bool
+    /// The library entry's last read date (nil: not in the library). A new entry starts with «now».
+    func lastRead(of manga: MangaIdentifier) async -> Date?
+    func setLastRead(_ date: Date, of manga: MangaIdentifier) async
+    /// Reading sessions of the chapter's history rows.
+    func sessions(of chapter: ChapterIdentifier) async -> [HistoryManager.ReadingSessionData]
 }
 
 struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
@@ -109,6 +117,28 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
     func isLinked(_ chapter: ChapterIdentifier) async -> Bool {
         await container.performBackgroundTask { context in rows(chapter, context).contains { $0.chapter != nil } }
     }
+
+    func lastRead(of manga: MangaIdentifier) async -> Date? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getLibraryManga(mangaId: manga, context: context)?.lastRead
+        }
+    }
+
+    func setLastRead(_ date: Date, of manga: MangaIdentifier) async {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getLibraryManga(mangaId: manga, context: context)?.lastRead = date
+            try? context.save()
+        }
+    }
+
+    func sessions(of chapter: ChapterIdentifier) async -> [HistoryManager.ReadingSessionData] {
+        await container.performBackgroundTask { context in
+            rows(chapter, context)
+                .flatMap { ($0.sessions as? Set<ReadingSessionObject>) ?? [] }
+                .map { .init(startDate: $0.startDate ?? .distantPast, endDate: $0.endDate ?? .distantPast, pagesRead: Int($0.pagesRead)) }
+                .sorted { $0.startDate < $1.startDate }
+        }
+    }
 }
 
 /// Every fixture the contract tests run against.
@@ -125,6 +155,7 @@ struct CoreDataFixture: RepositoryFixture {
         let store = try Self.container()
         let repos = DataRepositories(container: store.container)
         let container = store.container
+        let readOnly = try Self.container(in: store.directory, readOnly: true)
         return FixtureStore(
             repos: repos,
             addToLibrary: { ids in
@@ -143,12 +174,16 @@ struct CoreDataFixture: RepositoryFixture {
                 }
             },
             seed: CoreDataSeeder(container: container),
-            tearDown: { Self.remove(store.container, directory: store.directory) }
+            failingRepos: DataRepositories(container: readOnly.container),
+            tearDown: {
+                Self.remove(readOnly.container, directory: nil)
+                Self.remove(store.container, directory: store.directory)
+            }
         )
     }
 
-    static func container() throws -> (container: NSPersistentContainer, directory: URL) {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("repo-\(UUID().uuidString)", isDirectory: true)
+    static func container(in existing: URL? = nil, readOnly: Bool = false) throws -> (container: NSPersistentContainer, directory: URL) {
+        let directory = existing ?? FileManager.default.temporaryDirectory.appendingPathComponent("repo-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let container = NSPersistentContainer(name: "Aidoku", managedObjectModel: CoreDataManager.shared.container.managedObjectModel)
         let cloud = NSPersistentStoreDescription(url: directory.appendingPathComponent("Aidoku.sqlite"))
@@ -158,6 +193,8 @@ struct CoreDataFixture: RepositoryFixture {
         let local = NSPersistentStoreDescription(url: directory.appendingPathComponent("Local.sqlite"))
         local.configuration = "Local"
         local.shouldAddStoreAsynchronously = false
+        cloud.isReadOnly = readOnly
+        local.isReadOnly = readOnly
         container.persistentStoreDescriptions = [cloud, local]
         var loadError: Error?
         container.loadPersistentStores { _, error in
@@ -167,11 +204,13 @@ struct CoreDataFixture: RepositoryFixture {
         return (container, directory)
     }
 
-    static func remove(_ container: NSPersistentContainer, directory: URL) {
+    static func remove(_ container: NSPersistentContainer, directory: URL?) {
         for store in container.persistentStoreCoordinator.persistentStores {
             try? container.persistentStoreCoordinator.remove(store)
         }
-        try? FileManager.default.removeItem(at: directory)
+        if let directory {
+            try? FileManager.default.removeItem(at: directory)
+        }
     }
 }
 
