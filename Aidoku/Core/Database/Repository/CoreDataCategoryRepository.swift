@@ -44,6 +44,10 @@ final class CoreDataCategoryRepository: CategoryRepository, @unchecked Sendable 
         }
     }
 
+    func snapshot(of manga: MangaIdentifier?, filterGroup title: String?) async -> CategorySnapshot {
+        CategorySnapshot()
+    }
+
     func categories(of manga: MangaIdentifier) async -> [String] {
         await container.performBackgroundTask { context in
             CoreDataManager.shared.getCategories(mangaId: manga, context: context).compactMap { $0.title }

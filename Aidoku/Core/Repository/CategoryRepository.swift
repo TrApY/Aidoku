@@ -16,6 +16,9 @@ protocol CategoryRepository: Sendable {
     func filterGroups() async -> [FilterGroup]
     /// The category with that title and its filters; nil if there is none or its filters cannot be read.
     func filterGroup(title: String) async -> FilterGroup?
+    /// The titles, the filter groups and, when asked, a manga's categories and one group, in one read: for the
+    /// screens that show several of them together.
+    func snapshot(of manga: MangaIdentifier?, filterGroup title: String?) async -> CategorySnapshot
     /// The categories of a manga in the library, in no particular order ([] if it is not in the library).
     func categories(of manga: MangaIdentifier) async -> [String]
     func contains(title: String) async -> Bool
