@@ -24,6 +24,10 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
     }
 
     private var scale: CGFloat = 1
+    /// The width and zoom of the last layout: the top visible cell is only kept in place between two layouts of
+    /// the same geometry (a rotation or a zoom moves everything on purpose).
+    private var lastWidth: CGFloat = 0
+    private var lastScale: CGFloat = 1
 
     private var contentSize = CGSize.zero
     override var collectionViewContentSize: CGSize {
@@ -87,8 +91,15 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
     override func prepare() {
         guard let collectionView else { return }
 
-        // Anchor the top visible cell using the previous layout
-        let anchor = isChangingCellsAbove ? currentAttributes.values
+        // Anchor the cell in the middle of the screen (the one being read) using the previous layout, and not only
+        // when asked: whatever changed above it (a chapter put in, cells grown as their images load, several at
+        // once, the top cell itself) must not move what is being read. The old anchor was the top visible cell:
+        // when only its bottom showed and it grew, everything under it slid down by its growth (into the previous
+        // chapter, SUWA-17); and a growing cell asked after the pass that applied its growth (SUWA-16)
+        let sameGeometry = !currentAttributes.isEmpty && lastWidth == collectionView.bounds.size.width && lastScale == scale
+        let middleY = collectionView.contentOffset.y + collectionView.bounds.size.height / 2
+        let middleCell = currentAttributes.values.first { $0.frame.minY <= middleY && $0.frame.maxY > middleY }
+        let anchor = isChangingCellsAbove || sameGeometry ? middleCell ?? currentAttributes.values
             .filter { $0.frame.maxY > collectionView.contentOffset.y }
             .min { $0.frame.minY < $1.frame.minY } : nil
         let anchorIdentifier = anchor.flatMap { itemIdentifiers[$0.indexPath] }
@@ -145,6 +156,9 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
                 }
             }
         }
+
+        lastWidth = width
+        lastScale = scale
 
         // Only movement of the anchor counts, not resizing of cells
         if
