@@ -523,7 +523,9 @@ extension ReaderViewController {
 
     /// Saves the position now (local + page trackers, awaited), even if the app goes to the background.
     /// Deactivating and then going to the background save once: the second notice finds the page saved.
-    private func saveReadPositionNow() {
+    /// Returns the task that saves inside the background task (nil if there was nothing to save).
+    @discardableResult
+    func saveReadPositionNow() -> Task<Void, Never>? {
         let page = currentPage
         let chapter = chapter
         let needsSave = readPositionSaver.claimImmediateSave(
@@ -531,13 +533,13 @@ extension ReaderViewController {
             trackerKey: ReadPosition.pageKey(chapter: chapter, page: page, position: nil)
         )
         let needsSession = sessionStartDate != nil && !AppSettings.general.incognitoMode.get()
-        guard needsSave || needsSession else { return }
+        guard needsSave || needsSession else { return nil }
         var backgroundTask = UIBackgroundTaskIdentifier.invalid
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Reader.saveReadPosition") {
             UIApplication.shared.endBackgroundTask(backgroundTask)
             backgroundTask = .invalid
         }
-        Task {
+        return Task {
             if needsSave {
                 await updateReadPosition(currentPage: page, chapter: chapter, updateTrackers: false)
                 await updateTrackerProgress(page: page, chapter: chapter)
