@@ -412,13 +412,9 @@ extension HistoryView.ViewModel {
                 to: endDate
             ).day ?? 0
 
-            let manga = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getManga(
-                    mangaId: obj.chapterId.mangaIdentifier,
-                    context: context
-                )?.toNewManga()
-            }
-            let chapter = await DataRepositories.shared.chapters.chapter(obj.chapterId)
+            // the manga and the chapter in one read
+            let stored = await DataRepositories.shared.chapters.chapterWithManga(obj.chapterId)
+            let (manga, chapter) = (stored.manga, stored.chapter)
 
             let chapterId = obj.chapterId
             let mangaId = chapterId.mangaIdentifier

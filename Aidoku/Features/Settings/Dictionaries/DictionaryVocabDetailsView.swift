@@ -205,17 +205,8 @@ struct DictionaryVocabDetailsView: View {
     }
 
     private func loadSource() async {
-        var (manga, chapter) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable [entry] context in
-            let manga = CoreDataManager.shared.getManga(
-                mangaId: entry.chapterId.mangaIdentifier,
-                context: context
-            )
-            let chapter = CoreDataManager.shared.getChapter(
-                chapterId: entry.chapterId,
-                context: context
-            )
-            return (manga?.toNewManga(), chapter?.toNewChapter())
-        }
+        let stored = await DataRepositories.shared.chapters.chapterWithManga(entry.chapterId)
+        var (manga, chapter) = (stored.manga, stored.chapter)
 
         if manga == nil || chapter == nil {
             let source = await SourceManager.shared.source(for: entry.chapterId.sourceKey)
