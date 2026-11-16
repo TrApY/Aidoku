@@ -31,29 +31,9 @@ extension SourceObject {
             customSource: customSource as? Data
         )
     }
-
-    func toData() -> SourceObjectData {
-        .init(
-            objectID: objectID,
-            id: id ?? "",
-            apiVersion: apiVersion,
-            path: path,
-            listing: listing,
-            customSource: customSource as? Data
-        )
-    }
 }
 
-struct SourceObjectData: Sendable {
-    let objectID: NSManagedObjectID
-    let id: String
-    let apiVersion: String?
-    let path: String?
-    let listing: Int16
-    let customSource: Data?
-}
-
-extension SourceObjectData {
+extension SourceRecord {
     func toSource() -> Source? {
         if apiVersion == "0.6", let path {
             return try? Source(from: FileManager.default.applicationSupportDirectory.appendingPathComponent(path))

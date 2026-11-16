@@ -15,7 +15,8 @@ struct AddSourceView: View {
     @State private var externalSources: [SourceInfo] = []
     @State private var allSourcesInstalled: Bool = false
 
-    @State private var hasLocalSourceInstalled: Bool
+    /// nil until it is read (§2.5): the «Local» row waits for it, so it never shows and then goes.
+    @State private var hasLocalSourceInstalled: Bool?
     @State private var loadedInitial = false
     @State private var importing = false
     @State private var searching = false
@@ -32,9 +33,6 @@ struct AddSourceView: View {
 
     init(externalSources: [ExternalSourceInfo]) {
         allExternalSources = externalSources
-        _hasLocalSourceInstalled = State(
-            initialValue: CoreDataManager.shared.hasSource(key: LocalSourceRunner.sourceKey, context: CoreDataManager.shared.context)
-        )
     }
 
     var body: some View {
@@ -192,6 +190,11 @@ struct AddSourceView: View {
             }
         }
         .interactiveDismissDisabled(searching)
+        .task {
+            if hasLocalSourceInstalled == nil {
+                hasLocalSourceInstalled = await DataRepositories.shared.sources.contains(key: LocalSourceRunner.sourceKey)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .sourceLoaded)) { output in
             if let key = output.object as? String, key == LocalSourceRunner.sourceKey {
                 hasLocalSourceInstalled = true
@@ -214,7 +217,7 @@ struct AddSourceView: View {
 
     var builtInSources: some View {
         Section(NSLocalizedString("BUILT_IN_SOURCES")) {
-//            if !CoreDataManager.shared.hasSource(key: "demo", context: CoreDataManager.shared.context) {
+//            if await !DataRepositories.shared.sources.contains(key: "demo") {
 //                ExternalSourceTableCell(
 //                    source: .init(
 //                        sourceId: "demo",
@@ -231,7 +234,7 @@ struct AddSourceView: View {
 //                )
 //            }
 
-            if !hasLocalSourceInstalled {
+            if hasLocalSourceInstalled == false {
                 ExternalSourceTableCell(
                     source: .init(
                         sourceId: LocalSourceRunner.sourceKey,

@@ -463,7 +463,7 @@ extension SourceViewController: MangaListSelectionHeaderDelegate {
             if await index == viewModel.listings.count { // "all" listing
                 await viewModel.setCurrentListing(nil)
                 Task {
-                    await CoreDataManager.shared.setListing(sourceKey: source.id, listing: 0)
+                    await DataRepositories.shared.sources.setListing(0, of: source.id)
                 }
             } else {
                 // remove search query when switching to listing
@@ -471,7 +471,7 @@ extension SourceViewController: MangaListSelectionHeaderDelegate {
                 await viewModel.setTitleQuery(nil)
                 await viewModel.setCurrentListing(index)
                 Task {
-                    await CoreDataManager.shared.setListing(sourceKey: source.id, listing: index + 1)
+                    await DataRepositories.shared.sources.setListing(index + 1, of: source.id)
                 }
             }
             await viewModel.setCurrentPage(nil)

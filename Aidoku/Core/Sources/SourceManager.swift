@@ -82,9 +82,7 @@ extension SourceManager {
     }
 
     private func getInstalledSources() async -> [String: AidokuRunner.Source] {
-        let objects: [SourceObjectData] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getSources(context: context).map { $0.toData() }
-        }
+        let objects = await DataRepositories.shared.sources.all()
         var sourcesByKey: [String: AidokuRunner.Source] = [:]
         // a disabled server source isn't loaded, but its manga and tracks still need its connection
         for dbSource in objects where disabledSourceKeys.contains(dbSource.id) {
@@ -96,7 +94,7 @@ extension SourceManager {
             if let source = await dbSource.toNewSource() {
                 if sourcesByKey[source.key] != nil {
                     // remove duplicate coredata sources
-                    CoreDataManager.shared.remove(dbSource.objectID)
+                    await DataRepositories.shared.sources.removeDuplicate(dbSource)
                 } else {
                     sourcesByKey[source.key] = source
                 }
@@ -302,9 +300,7 @@ extension SourceManager {
             }
         }
 
-        let objects: [SourceObjectData] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getSources(context: context).map { $0.toData() }
-        }
+        let objects = await DataRepositories.shared.sources.all()
         var infos: [SourceInfo] = objects
             .compactMap { source in
                 guard var info = source.toInfo() else { return nil }
@@ -403,9 +399,7 @@ extension SourceManager {
 // MARK: - Source Management
 extension SourceManager {
     func missingExternalSourceKeys(in keys: Set<String>) async -> Set<String> {
-        let installedKeys: Set<String> = await CoreDataManager.shared.container.performBackgroundTask { context in
-            Set(CoreDataManager.shared.getSources(context: context).compactMap(\.id))
-        }
+        let installedKeys = Set(await DataRepositories.shared.sources.all().map(\.id))
         return keys.subtracting(installedKeys)
     }
 
@@ -562,11 +556,7 @@ extension SourceManager {
         // remove old source version (on update) and add new version to coredata
         let installedSource = sourcesByKey.removeValue(forKey: sourceKey)
 
-        await CoreDataManager.shared.container.performBackgroundTask { [result] context in
-            CoreDataManager.shared.removeSource(key: sourceKey, context: context)
-            CoreDataManager.shared.createSource(source: result, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.sources.replace(with: result)
 
         // if there was a breaking change, prompt for migration
         if
@@ -666,11 +656,7 @@ extension SourceManager {
         let source = config.toSource()
 
         // add to coredata
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            let result = CoreDataManager.shared.createSource(source: source, context: context)
-            result.customSource = config.encode() as NSObject
-            try? context.save()
-        }
+        await DataRepositories.shared.sources.add(source, customSource: config.encode())
 
         sourcesByKey[source.key] = source
 
@@ -686,18 +672,7 @@ extension SourceManager {
     func addOrUpdateCustomSource(config: CustomSourceConfig) async -> Bool {
         let source = config.toSource()
         let key = source.key
-        let saved: Bool = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let object = CoreDataManager.shared.getSource(key: key, context: context)
-                ?? CoreDataManager.shared.createSource(source: source, context: context)
-            object.customSource = config.encode() as NSObject
-            do {
-                try context.save()
-                return true
-            } catch {
-                LogManager.logger.error("Failed to save source \(key): \(error)")
-                return false
-            }
-        }
+        let saved = await DataRepositories.shared.sources.save(source, customSource: config.encode())
         guard saved else { return false }
         if !disabledSourceKeys.contains(key) {
             sourcesByKey[key] = source
@@ -708,9 +683,7 @@ extension SourceManager {
 
     /// The configs of every custom source saved (also the disabled ones).
     func customSourceConfigs() async -> [CustomSourceConfig] {
-        let objects: [SourceObjectData] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getSources(context: context).map { $0.toData() }
-        }
+        let objects = await DataRepositories.shared.sources.all()
         return objects.compactMap { object in
             object.customSource.flatMap { try? CustomSourceConfig(from: $0) }
         }
@@ -723,12 +696,7 @@ extension SourceManager {
     }
 
     func updateCustomSource(key: String, config: CustomSourceConfig, updateSourceList: Bool = false) async {
-        let newDbSource = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let source = CoreDataManager.shared.getSource(key: key, context: context)
-            source?.customSource = config.encode() as NSObject
-            try? context.save()
-            return source?.toData()
-        }
+        let newDbSource = await DataRepositories.shared.sources.setCustomSource(key: key, data: config.encode())
         if updateSourceList, let newSource = await newDbSource?.toNewSource() {
             sourcesByKey[newSource.key] = newSource
             await publishSourceState()
@@ -737,14 +705,7 @@ extension SourceManager {
     }
 
     func clearSources() async {
-        let objects: [SourceObjectData] = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let objects = CoreDataManager.shared.getSources(context: context).map { $0.toData() }
-
-            CoreDataManager.shared.clearSources(context: context)
-            try? context.save()
-
-            return objects
-        }
+        let objects = await DataRepositories.shared.sources.clear()
 
         var sourceKeys: [String] = []
         sourceKeys.reserveCapacity(objects.count)
@@ -773,14 +734,7 @@ extension SourceManager {
     }
 
     func remove(sourceKey: String, skipUpdateNotification: Bool = false) async {
-        let data: SourceObjectData? = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let data = CoreDataManager.shared.getSource(key: sourceKey, context: context)?.toData()
-            if data != nil {
-                CoreDataManager.shared.removeSource(key: sourceKey, context: context)
-                try? context.save()
-            }
-            return data
-        }
+        let data = await DataRepositories.shared.sources.remove(key: sourceKey)
         guard let data else { return }
 
         if let path = data.path {
@@ -872,9 +826,7 @@ extension SourceManager {
         let removed = disabledSourceKeys.remove(sourceKey) != nil
         if removed {
             AppSettings.browse.disabledSources.set(disabledSourceKeys)
-            let object: SourceObjectData? = await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getSource(key: sourceKey, context: context)?.toData()
-            }
+            let object = await DataRepositories.shared.sources.record(key: sourceKey)
             guard let object, let source = await object.toNewSource() else {
                 LogManager.logger.error("Failed to load source \(sourceKey)")
                 return
