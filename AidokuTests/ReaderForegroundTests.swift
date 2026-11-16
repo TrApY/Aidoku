@@ -32,10 +32,7 @@ func storedProgress(_ chapterId: ChapterIdentifier) async -> (completed: Bool, p
 }
 
 func removeTestHistory(_ chapterId: ChapterIdentifier) async {
-    await CoreDataManager.shared.container.performBackgroundTask { context in
-        CoreDataManager.shared.removeHistory(mangaId: chapterId.mangaIdentifier, context: context)
-        try? context.save()
-    }
+    await DataRepositories.shared.history.removeAll(of: chapterId.mangaIdentifier)
 }
 
 @MainActor

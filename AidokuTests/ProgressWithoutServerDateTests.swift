@@ -72,10 +72,7 @@ private final class DatelessTracker: PageTracker, @unchecked Sendable {
         let stored1 = await DataRepositories.shared.history.progress(of: c1)
         let stored2 = await DataRepositories.shared.history.progress(of: c2)
         let (first, second) = ((stored1.completed, stored1.progress), (stored2.completed, stored2.progress))
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.removeHistory(mangaId: manga.identifier, context: context)
-            try? context.save()
-        }
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
         await DataRepositories.shared.tracks.remove(trackerId: tracker.id, manga: manga.identifier)
         #expect(first.0 == false) // still half read
         #expect(first.1 == 12)
