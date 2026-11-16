@@ -160,11 +160,13 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         lastWidth = width
         lastScale = scale
 
-        // Only movement of the anchor counts, not resizing of cells
+        // Only movement of the anchor counts, not resizing of cells; and the scroll view is left alone when
+        // there is nothing to make up for (every pass set its offset and content size, also while pinching)
         if
             let anchorIdentifier, let oldAnchorY,
             let newIndexPath = itemIdentifiers.first(where: { $0.value == anchorIdentifier })?.key,
-            let newAnchorY = currentAttributes[newIndexPath]?.frame.minY
+            let newAnchorY = currentAttributes[newIndexPath]?.frame.minY,
+            abs(newAnchorY - oldAnchorY) > 0.01
         {
             UIView.performWithoutAnimation {
                 let offset = CGPoint(
