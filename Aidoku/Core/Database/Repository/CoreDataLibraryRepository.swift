@@ -46,6 +46,9 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
             guard let libraryObjects = try? context.fetch(request) else {
                 return nil
             }
+            // tracked and started manga, each in one query (not one per manga)
+            let tracked = filters.contains { $0.type == .tracking } ? Self.mangaIds(entity: "Track", context: context) : []
+            let started = filters.contains { $0.type == .started } ? Self.mangaIds(entity: "History", context: context) : []
 
             var ids = Set<MangaIdentifier>()
 
@@ -81,18 +84,12 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
                             unappliedFilters.append(filter)
                             continue
                         case .tracking:
-                            condition = CoreDataManager.shared.hasTrack(
-                                mangaId: info.id,
-                                context: context
-                            )
+                            condition = tracked.contains(info.id)
                         case .hasUnread:
                             unappliedFilters.append(filter)
                             continue
                         case .started:
-                            condition = CoreDataManager.shared.hasHistory(
-                                mangaId: info.id,
-                                context: context
-                            )
+                            condition = started.contains(info.id)
                         case .completed:
                             condition = mangaObject.status == AidokuRunner.PublishingStatus.completed.rawValue
                         case .source:
@@ -168,6 +165,19 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
             case .unreadChapters: nil
             case .totalChapters: "manga.chapterCount"
         }
+    }
+
+    /// The manga (source and key) with any row of that entity: what hasTrack/hasHistory ask one by one.
+    private static func mangaIds(entity: String, context: NSManagedObjectContext) -> Set<MangaIdentifier> {
+        let request = NSFetchRequest<NSDictionary>(entityName: entity)
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = ["sourceId", "mangaId"]
+        request.returnsDistinctResults = true
+        let rows = (try? context.fetch(request)) ?? []
+        return Set(rows.compactMap { row in
+            guard let sourceKey = row["sourceId"] as? String, let mangaKey = row["mangaId"] as? String else { return nil }
+            return MangaIdentifier(sourceKey: sourceKey, mangaKey: mangaKey)
+        })
     }
 
     func entries(sourceKey: String) async -> [AidokuRunner.Manga] {
