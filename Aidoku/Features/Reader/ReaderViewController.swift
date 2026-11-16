@@ -46,6 +46,9 @@ class ReaderViewController: BaseObservingViewController {
     /// The chapters whose last page the user reached in this reader, with the app in front: changing chapter
     /// completes only the chapter being read, and only if it is one of these (SUWA-17 C1).
     private var lastPageSeenChapters: Set<String> = []
+    /// The chapters this reader already tried to complete: once each (entering the transition and then going
+    /// on to the next chapter is one completion, not two; SUWA-17 C2).
+    private var completionAttempted: Set<String> = []
     private var forceStartPage: Int?
     private(set) var currentPage = 1
     /// The app in front (page changes and completions only then). Replaced in tests. SUWA-12 I1
@@ -1181,6 +1184,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         var leftCompleted: (chapters: [AidokuRunner.Chapter], reason: String)?
         if
             !isTextReader,
+            !completionAttempted.contains(self.chapter.key),
             let oldIndex = chapterList.firstIndex(of: self.chapter),
             let newIndex = chapterList.firstIndex(of: chapter),
             let totalPages = toolbarView.totalPages, totalPages > 0,
@@ -1191,6 +1195,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             ),
             !AppSettings.general.incognitoMode.get()
         {
+            completionAttempted.insert(self.chapter.key)
             let readerType = String(describing: type(of: reader as Any))
             leftCompleted = (
                 chaptersToMark,
@@ -1357,6 +1362,8 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     func setCompleted() -> Bool {
         guard appActivity.isActive else { return false } // every reader, also the text one (SUWA-12 I1)
         guard !AppSettings.general.incognitoMode.get() else { return false }
+        // once per chapter in this reader (it counted already)
+        guard completionAttempted.insert(chapter.key).inserted else { return true }
 
         let reason = "\(completionTrigger) (\(String(describing: type(of: reader as Any))), página \(currentPage) de \(toolbarView.totalPages ?? 0))"
         completionTrigger = "lector"
