@@ -59,27 +59,22 @@ struct InsightsData {
     }
 
     static func get() async -> InsightsData {
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            let (currentStreak, longestStreak) = CoreDataManager.shared.getStreakLengths(context: context)
-            let basicStats = CoreDataManager.shared.getBasicStats(context: context)
-            let chartData = CoreDataManager.shared.getChapterYearlyReadingData(context: context)
-            let heatmapData = CoreDataManager.shared.getReadingHeatmapData(context: context)
-            return InsightsData(
-                currentStreak: currentStreak,
-                longestStreak: longestStreak,
-                heatmapData: heatmapData,
-                chartData: chartData,
-                pagesTotal: basicStats.pagesTotal,
-                pagesMonth: basicStats.pagesMonth,
-                pagesYear: basicStats.pagesYear,
-                seriesTotal: basicStats.seriesTotal,
-                seriesMonth: basicStats.seriesMonth,
-                seriesYear: basicStats.seriesYear,
-                hoursTotal: basicStats.hoursTotal,
-                hoursMonth: basicStats.hoursMonth,
-                hoursYear: basicStats.hoursYear
-            )
-        }
+        let insights = await DataRepositories.shared.sessions.insights()
+        return InsightsData(
+            currentStreak: insights.currentStreak,
+            longestStreak: insights.longestStreak,
+            heatmapData: insights.heatmap,
+            chartData: insights.chart,
+            pagesTotal: insights.pagesTotal,
+            pagesMonth: insights.pagesMonth,
+            pagesYear: insights.pagesYear,
+            seriesTotal: insights.seriesTotal,
+            seriesMonth: insights.seriesMonth,
+            seriesYear: insights.seriesYear,
+            hoursTotal: insights.hoursTotal,
+            hoursMonth: insights.hoursMonth,
+            hoursYear: insights.hoursYear
+        )
     }
 
     static let demoData: InsightsData = .init(
