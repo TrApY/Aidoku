@@ -351,7 +351,44 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
     }
 
     func refresh(_ id: MangaIdentifier, with manga: AidokuRunner.Manga, updateMetadata: Bool) async -> RefreshOutcome? {
-        nil
+        await container.performBackgroundTask { context in
+            guard
+                let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: id, context: context),
+                let mangaObject = libraryObject.manga
+            else {
+                return nil
+            }
+
+            // update details
+            if updateMetadata {
+                mangaObject.load(from: manga)
+            }
+
+            // update chapters
+            guard let chapters = manga.chapters, !chapters.isEmpty else { return nil }
+
+            let newChapters = CoreDataManager.shared.setChapters(chapters, mangaId: id, context: context)
+            var notifiableCount = 0
+            if !newChapters.isEmpty {
+                // add manga updates
+                let scanlatorFilter = mangaObject.scanlatorFilter ?? []
+                for chapter in newChapters where Self.makesUpdate(chapter, language: mangaObject.langFilter, scanlators: scanlatorFilter) {
+                    CoreDataManager.shared.createMangaUpdate(mangaId: id, chapterObject: chapter, context: context)
+                    notifiableCount += 1
+                }
+                libraryObject.lastChapter = chapters.compactMap { $0.dateUploaded }.max()
+                libraryObject.lastUpdatedChapters = Date.now
+            }
+
+            if updateMetadata || !newChapters.isEmpty {
+                libraryObject.lastUpdated = Date.now
+            }
+
+            if context.hasChanges {
+                try? context.save()
+            }
+            return RefreshOutcome(newChapterCount: newChapters.count, notifiableCount: notifiableCount, title: mangaObject.title)
+        }
     }
 
     func refreshOpened(
@@ -361,7 +398,41 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         scanlatorFilter: [String],
         incognito: Bool
     ) async -> OpenedRefresh? {
-        nil
+        await container.performBackgroundTask { context in
+            guard
+                let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: id, context: context),
+                let mangaObject = libraryObject.manga
+            else {
+                return nil
+            }
+
+            // update details
+            mangaObject.load(from: manga)
+
+            var foundNewChapters = false
+            if let chapters = manga.chapters {
+                let newChapters = CoreDataManager.shared.setChapters(chapters, mangaId: id, context: context)
+                if !newChapters.isEmpty {
+                    foundNewChapters = true
+                    // add manga updates
+                    for chapter in newChapters where Self.makesUpdate(chapter, language: languageFilter, scanlators: scanlatorFilter) {
+                        CoreDataManager.shared.createMangaUpdate(mangaId: id, chapterObject: chapter, context: context)
+                    }
+                    libraryObject.lastChapter = chapters.compactMap { $0.dateUploaded }.max()
+                    libraryObject.lastUpdatedChapters = Date.now
+                }
+            }
+
+            let now = Date.now
+            libraryObject.lastUpdated = now
+            if !incognito {
+                libraryObject.lastOpened = now.addingTimeInterval(1) // ensure item isn't re-pinned, since it's already open
+            }
+
+            try? context.save()
+
+            return OpenedRefresh(manga: mangaObject.toNewManga(), foundNewChapters: foundNewChapters)
+        }
     }
 
     /// Whether a new chapter makes an update entry, with the condition both refreshes had, written the same way:
