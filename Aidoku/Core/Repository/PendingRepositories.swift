@@ -7,7 +7,6 @@
 //
 
 /// L6: stored manga.
-protocol MangaRepository: Sendable {}
 /// L8: chapter updates.
 protocol MangaUpdateRepository: Sendable {}
 /// L9: installed sources.

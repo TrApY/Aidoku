@@ -47,6 +47,15 @@ struct HistorySeed: Sendable {
     var linked = true
 }
 
+/// Fields of a stored manga (not in the library).
+struct MangaSeed: Sendable {
+    var flags = 0
+    var language: String?
+    var scanlators: [String]?
+    var viewer = 0
+    var cover: String?
+}
+
 protocol FixtureSeeder: Sendable {
     /// Stores these chapters of the manga in this order (source order 0, 1…), creating the manga (not in the
     /// library) if it is not stored.
@@ -60,6 +69,8 @@ protocol FixtureSeeder: Sendable {
     func setLastRead(_ date: Date, of manga: MangaIdentifier) async
     /// Reading sessions of the chapter's history rows.
     func sessions(of chapter: ChapterIdentifier) async -> [HistoryManager.ReadingSessionData]
+    /// Stores the manga (not in the library) if it is not stored, and sets these fields.
+    func setManga(_ manga: MangaIdentifier, _ fields: MangaSeed) async
 }
 
 struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
@@ -137,6 +148,26 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
                 .flatMap { ($0.sessions as? Set<ReadingSessionObject>) ?? [] }
                 .map { .init(startDate: $0.startDate ?? .distantPast, endDate: $0.endDate ?? .distantPast, pagesRead: Int($0.pagesRead)) }
                 .sorted { $0.startDate < $1.startDate }
+        }
+    }
+
+    func setManga(_ manga: MangaIdentifier, _ fields: MangaSeed) async {
+        await container.performBackgroundTask { context in
+            let object = CoreDataManager.shared.getOrCreateManga(
+                AidokuRunner.Manga(sourceKey: manga.sourceKey, key: manga.mangaKey, title: manga.mangaKey),
+                context: context
+            )
+            object.chapterFlags = Int16(fields.flags)
+            object.langFilter = fields.language
+            object.scanlatorFilter = fields.scanlators
+            object.viewer = Int16(fields.viewer)
+            object.cover = fields.cover
+            do {
+                try context.save()
+            } catch {
+                Issue.record("the seed was not saved: \(error)")
+                context.rollback()
+            }
         }
     }
 }

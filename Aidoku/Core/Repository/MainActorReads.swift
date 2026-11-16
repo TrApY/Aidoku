@@ -14,4 +14,8 @@ protocol MainActorReads: Sendable {
     func progress(of chapter: ChapterIdentifier) -> ChapterProgress
     /// The stored scroll position of the page it opens at (ReaderViewController.openingPageKey).
     func record(of chapter: ChapterIdentifier) -> HistoryRecord?
+    /// Whether the manga is stored (the reader's reading mode «auto»).
+    func manga(contains id: MangaIdentifier) -> Bool
+    /// The reading mode the manga stores; -1 if it is not stored.
+    func readingMode(of id: MangaIdentifier) -> Int
 }

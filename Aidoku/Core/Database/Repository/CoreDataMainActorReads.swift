@@ -25,4 +25,12 @@ final class CoreDataMainActorReads: MainActorReads {
     func record(of chapter: ChapterIdentifier) -> HistoryRecord? {
         CoreDataManager.shared.getHistory(chapterId: chapter, context: container.viewContext).map(CoreDataHistoryRepository.record)
     }
+
+    func manga(contains id: MangaIdentifier) -> Bool {
+        false
+    }
+
+    func readingMode(of id: MangaIdentifier) -> Int {
+        0
+    }
 }

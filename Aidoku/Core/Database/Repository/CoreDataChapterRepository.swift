@@ -25,4 +25,21 @@ final class CoreDataChapterRepository: ChapterRepository, @unchecked Sendable {
             CoreDataManager.shared.getChapter(chapterId: id, context: context)?.toNewChapter()
         }
     }
+
+    func unreadCount(of manga: MangaIdentifier) async -> Int {
+        0
+    }
+
+    /// In parallel, a context per manga, as the library did (D5).
+    func unreadCounts(of mangas: [MangaIdentifier]) async -> [MangaIdentifier: Int] {
+        [:]
+    }
+
+    func unreadCount(of manga: MangaIdentifier, language: String?, scanlators: [String]?) async -> Int {
+        0
+    }
+
+    func readCount(of manga: MangaIdentifier, language: String?, scanlators: [String]?) async -> Int {
+        0
+    }
 }
