@@ -109,10 +109,28 @@ import UIKit
         webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
     }
 
+    /// Waits until the previous chapter is in and its images have loaded, then a little more for the layout to
+    /// settle. The reader puts it in only once the scroll has stopped, and any offset change (an image loading
+    /// below) counts as scrolling again until the next time the user lets go: if it is not in after 4 s, the
+    /// user touches the screen and lets go without moving, as one does.
+    private func waitForThePreviousChapter(_ opened: Opened) async throws {
+        try await Task.sleep(for: .seconds(4))
+        if opened.lastSection != 1 {
+            opened.webtoon.scrollViewWillBeginDragging(opened.webtoon.scrollView)
+            opened.webtoon.scrollViewDidEndDragging(opened.webtoon.scrollView, willDecelerate: false)
+        }
+        for _ in 0..<24 where opened.lastSection != 1 {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        try await Task.sleep(for: .seconds(2))
+    }
+
     @Test func scrollingUpInsideTheChapterStaysInItAndOnThePage() async throws {
         let opened = try await open(mangaKey: "subir", startPage: 8)
         #expect(opened.chapterKey == "c2")
-        for page in stride(from: 7, through: 1, by: -1) {
+        // down to page 2: from page 1 the top of the screen may already be at the start, which puts the previous
+        // chapter in (checked below, once it is done)
+        for page in stride(from: 7, through: 2, by: -1) {
             try userScrolls(opened, toRow: page, section: opened.lastSection)
             // the images above load and grow; near the start the previous chapter goes in above
             try await Task.sleep(for: .seconds(2))
@@ -123,7 +141,7 @@ import UIKit
         // up to the start of the chapter (its transition, above page 1): the previous chapter goes in above, its
         // images load and grow, and the user is still at the start of N
         try userScrolls(opened, toRow: 0, section: opened.lastSection)
-        try await Task.sleep(for: .seconds(4))
+        try await waitForThePreviousChapter(opened)
         #expect(opened.lastSection == 1, "the previous chapter was not put in")
         #expect(opened.chapterKey == "c2")
         #expect(opened.middle == IndexPath(row: 0, section: opened.lastSection))
@@ -134,7 +152,7 @@ import UIKit
     @Test func goingUpPastTheFirstPageChangesToThePreviousChapter() async throws {
         let opened = try await open(mangaKey: "subirycambiar", startPage: 2)
         try userScrolls(opened, toRow: 0, section: opened.lastSection)
-        try await Task.sleep(for: .seconds(4))
+        try await waitForThePreviousChapter(opened)
         #expect(opened.chapterKey == "c2")
         try #require(opened.lastSection == 1, "the previous chapter was not put in")
         // the user goes on up, into the previous chapter's last page
