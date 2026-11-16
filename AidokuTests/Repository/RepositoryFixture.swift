@@ -93,6 +93,10 @@ protocol FixtureSeeder: Sendable {
     func addDuplicateLibraryEntry(_ manga: MangaIdentifier) async
     /// A library entry without a manga.
     func addLibraryEntryWithoutManga() async
+    /// The dates of the manga's library entry (the first one); nil if it is not in the library.
+    func libraryDates(of manga: MangaIdentifier) async -> LibraryDatesSeed?
+    /// The manga's update rows (chapter key and whether it was viewed), in no particular order.
+    func updates(of manga: MangaIdentifier) async -> [String: Bool]
 }
 
 struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
@@ -207,6 +211,33 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
             let entry = LibraryMangaObject(context: context)
             entry.manga = object
             saveSeed(context)
+        }
+    }
+
+    func libraryDates(of manga: MangaIdentifier) async -> LibraryDatesSeed? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getLibraryManga(mangaId: manga, context: context).map {
+                LibraryDatesSeed(
+                    dateAdded: $0.dateAdded,
+                    lastOpened: $0.lastOpened,
+                    lastUpdated: $0.lastUpdated,
+                    lastUpdatedChapters: $0.lastUpdatedChapters,
+                    lastChapter: $0.lastChapter,
+                    lastRead: $0.lastRead
+                )
+            }
+        }
+    }
+
+    func updates(of manga: MangaIdentifier) async -> [String: Bool] {
+        await container.performBackgroundTask { context in
+            let request = MangaUpdateObject.fetchRequest()
+            request.predicate = NSPredicate(format: "sourceId == %@ AND mangaId == %@", manga.sourceKey, manga.mangaKey)
+            var rows: [String: Bool] = [:]
+            for row in (try? context.fetch(request)) ?? [] {
+                rows[row.chapterId ?? ""] = row.viewed
+            }
+            return rows
         }
     }
 

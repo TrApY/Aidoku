@@ -217,6 +217,39 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         }
     }
 
+    func add(
+        _ manga: AidokuRunner.Manga,
+        chapters: [AidokuRunner.Chapter],
+        defaultCategory: String?,
+        adoptChapterFlags: (@Sendable (Int) -> Int?)?
+    ) async -> Bool {
+        false
+    }
+
+    func remove(_ id: MangaIdentifier) async -> LibraryRemovalResult {
+        LibraryRemovalResult(chapterFlagsBefore: [:], saved: false)
+    }
+
+    func remove(_ ids: [MangaIdentifier]) async -> LibraryRemovalResult {
+        LibraryRemovalResult(chapterFlagsBefore: [:], saved: false)
+    }
+
+    func snapshot(_ ids: [MangaIdentifier]) async -> [LibrarySnapshot] {
+        []
+    }
+
+    func restore(_ snapshot: LibrarySnapshot) async -> Bool {
+        false
+    }
+
+    func markOpened(_ id: MangaIdentifier) async -> Bool {
+        false
+    }
+
+    func resetLastUpdatedChapters() async {
+        ()
+    }
+
     func contained(in ids: [MangaIdentifier]) async -> Set<MangaIdentifier> {
         var seen: Set<MangaIdentifier> = []
         let unique = ids.filter { seen.insert($0).inserted }
