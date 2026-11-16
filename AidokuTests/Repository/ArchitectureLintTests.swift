@@ -39,15 +39,11 @@ import Testing
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiServerSourceSync.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiSourceConversion.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiStartup.swift",
-        "Aidoku/Core/Sources/SourceManager.swift",
         "Aidoku/Core/Tracking/TrackerManager.swift",
         "Aidoku/Core/Utilities/Concurrency/ObjectActorSerialExecutor.swift",
         "Aidoku/Extensions/CoreData/NSPersistentContainer.swift",
-        "Aidoku/Features/Browse/AddSource/AddSourceView.swift",
         "Aidoku/Features/Manga/MangaView+ViewModel.swift",
         "Aidoku/Features/Settings/SettingsView.swift",
-        "Aidoku/Features/Source/Legacy/SourceViewController.swift",
-        "Aidoku/Features/Source/Legacy/SourceViewModel.swift",
     ]
 
     static let patterns = ["CoreDataManager.shared", "import CoreData", "NSManagedObject", "NSPredicate", "NSSortDescriptor"]
