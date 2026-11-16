@@ -351,3 +351,67 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
         await opened.close()
     }
 }
+
+// MARK: - The anchor of the layout (SUWA-17 C3, C4)
+extension ReaderWebtoonScrollDownTests {
+    private var layoutOf: (Opened) -> VerticalContentOffsetPreservingLayout? {
+        { $0.webtoon.collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout }
+    }
+
+    /// Where the top of `row` is on screen.
+    private func topOnScreen(_ opened: Opened, row: Int) -> CGFloat? {
+        opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: row, section: 0))
+            .map { $0.frame.minY - opened.webtoon.collectionNode.contentOffset.y }
+    }
+
+    /// The user drags until the middle of the screen is in `row`, and lets go.
+    private func userScrolls(_ opened: Opened, toRow row: Int) throws {
+        let webtoon = opened.webtoon
+        let frame = try #require(webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: row, section: 0))?.frame)
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: frame.midY - webtoon.collectionNode.bounds.height / 2), animated: false)
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+    }
+
+    /// C3: a layout pass in which nothing moved leaves the scroll view alone (no offset, no content size set:
+    /// every pass did it, also while pinching).
+    @Test func aLayoutPassWithNothingChangedLeavesTheScrollViewAlone() async throws {
+        let opened = try await open(mangaKey: "nada")
+        try userScrolls(opened, toRow: 3)
+        try await Task.sleep(for: .seconds(4))
+        let layout = try #require(layoutOf(opened))
+        let original = layout.onOffsetPreserved
+        var calls = 0
+        layout.onOffsetPreserved = { offset in
+            calls += 1
+            original?(offset)
+        }
+        for _ in 0..<3 {
+            layout.invalidateLayout()
+            opened.webtoon.collectionNode.view.layoutIfNeeded()
+        }
+        #expect(calls == 0, "the scroll view was set \(calls) times with nothing to make up for")
+        layout.onOffsetPreserved = original
+        await opened.close()
+    }
+
+    /// C3: zoomed in, the page in the middle and the one above it arrive (still loading when the user got there)
+    /// and grow: the top of the page being read stays where it is on screen.
+    @Test func zoomedInPagesGrowingAboveAndInTheMiddleDoNotMoveIt() async throws {
+        let opened = try await open(mangaKey: "zoom", heldFrom: 3)
+        opened.webtoon.scrollView.setZoomScale(2, animated: false)
+        try await Task.sleep(for: .seconds(1))
+        try #require(layoutOf(opened)?.getScale() == 2, "not zoomed in")
+        try userScrolls(opened, toRow: 5)
+        try await Task.sleep(for: .seconds(2))
+        let before = try #require(topOnScreen(opened, row: 5))
+        let heightBefore = opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 5, section: 0))?.frame.height ?? 0
+        opened.loader.release()
+        try await Task.sleep(for: .seconds(5))
+        let heightAfter = opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 5, section: 0))?.frame.height ?? 0
+        try #require(heightAfter > heightBefore + 100, "the page in the middle did not grow: \(heightBefore) → \(heightAfter)")
+        let after = try #require(topOnScreen(opened, row: 5))
+        #expect(abs(after - before) < 1, "the page being read moved \(after - before) pt on screen")
+        await opened.close()
+    }
+}
