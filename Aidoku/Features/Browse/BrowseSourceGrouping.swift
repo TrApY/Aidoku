@@ -7,7 +7,6 @@
 //  active languages are the same setting for Explorar, Añadir fuente, Extensiones and the global search.
 //
 
-import CoreData
 import Foundation
 
 /// The active languages (Browse.languages), shared by every screen that filters by language.
@@ -165,15 +164,8 @@ struct BrowseSourceGroups: Equatable {
 
 /// Source keys with manga in the library (SUWA-12 D M2).
 enum LibrarySourceKeys {
-    static func load(container: NSPersistentContainer = CoreDataManager.shared.container) async -> Set<String> {
-        await container.performBackgroundTask { context in
-            let request = NSFetchRequest<NSDictionary>(entityName: "Manga")
-            request.predicate = NSPredicate(format: "libraryObject != nil")
-            request.resultType = .dictionaryResultType
-            request.propertiesToFetch = ["sourceId"]
-            request.returnsDistinctResults = true
-            return Set(((try? context.fetch(request)) ?? []).compactMap { $0["sourceId"] as? String })
-        }
+    static func load(repos: DataRepositories = .shared) async -> Set<String> {
+        await repos.library.sourceKeysInLibrary()
     }
 }
 

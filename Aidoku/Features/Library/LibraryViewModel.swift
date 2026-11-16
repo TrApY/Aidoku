@@ -6,7 +6,6 @@
 //
 
 import AidokuRunner
-import CoreData
 import UIKit
 
 @MainActor
@@ -91,16 +90,17 @@ class LibraryViewModel {
             }
         }
 
-        var sortStringValue: String {
+        /// The order the library query asks for.
+        var querySort: LibraryQuery.Sort {
             switch self {
-                case .alphabetical: "manga.title"
-                case .lastRead: "lastRead"
-                case .lastOpened: "lastOpened"
-                case .lastUpdated: "lastUpdated"
-                case .dateAdded: "dateAdded"
-                case .lastChapter: "lastChapter"
-                case .unreadChapters: ""
-                case .totalChapters: "manga.chapterCount"
+                case .alphabetical: .title
+                case .lastRead: .lastRead
+                case .lastOpened: .lastOpened
+                case .lastUpdated: .lastUpdated
+                case .dateAdded: .dateAdded
+                case .lastChapter: .lastChapter
+                case .unreadChapters: .unreadChapters
+                case .totalChapters: .totalChapters
             }
         }
     }
@@ -219,154 +219,18 @@ extension LibraryViewModel {
         let filters = self.activeFilters
         let currentCategory = (isInUncategorizedCategory || isInRealCategory) ? self.currentCategory : nil
 
-        let (
-            success,
-            actuallyEmpty,
-            pinnedManga,
-            manga,
-            sourceKeys,
-            unappliedFilters
-        ) = await CoreDataManager.shared.container.performBackgroundTask { @Sendable [sortMethod, sortAscending, pinType] context in
-            var pinnedManga: [MangaInfo] = []
-            var manga: [MangaInfo] = []
-            var sourceKeys: Set<String> = []
-            var unappliedFilters: [LibraryFilter] = []
-
-            let request = LibraryMangaObject.fetchRequest()
-            if let currentCategory {
-                if currentCategory.isEmpty {
-                    request.predicate = NSPredicate(format: "manga != nil AND categories.@count == 0")
-                } else {
-                    request.predicate = NSPredicate(format: "manga != nil AND ANY categories.title == %@", currentCategory)
-                }
-            } else {
-                request.predicate = NSPredicate(format: "manga != nil")
-            }
-            if sortMethod != .unreadChapters {
-                request.sortDescriptors = [
-                    NSSortDescriptor(
-                        key: sortMethod.sortStringValue,
-                        ascending: sortMethod == .alphabetical ? !sortAscending : sortAscending
-                    )
-                ]
-            }
-            guard let libraryObjects = try? context.fetch(request) else {
-                return (false, true, pinnedManga, manga, sourceKeys, unappliedFilters)
-            }
-
-            let actuallyEmpty = libraryObjects.isEmpty
-
-            var ids = Set<MangaIdentifier>()
-
-            main: for libraryObject in libraryObjects {
-                guard
-                    let mangaObject = libraryObject.manga,
-                    // ensure the manga hasn't already been accounted for
-                    ids.insert(mangaObject.identifier).inserted
-                else {
-                    continue
-                }
-
-                let categories = (libraryObject.categories?.allObjects as? [CategoryObject])?.map { $0.title } ?? []
-
-                let info = MangaInfo(
-                    id: mangaObject.identifier,
-                    coverUrl: mangaObject.cover.flatMap { URL(string: $0) },
-                    title: mangaObject.title,
-                    author: mangaObject.author,
-                    url: mangaObject.url.flatMap { URL(string: $0) }
-                )
-
-                sourceKeys.insert(mangaObject.sourceId)
-
-                // process filters
-                var filteredSourceKeys: Set<String> = []
-                var filteredContentRatings: Set<Int16> = []
-                var filteredCategories: Set<String> = []
-                for filter in filters {
-                    let condition: Bool
-                    switch filter.type {
-                        case .downloaded:
-                            unappliedFilters.append(filter)
-                            continue
-                        case .tracking:
-                            condition = CoreDataManager.shared.hasTrack(
-                                mangaId: info.id,
-                                context: context
-                            )
-                        case .hasUnread:
-                            unappliedFilters.append(filter)
-                            continue
-                        case .started:
-                            condition = CoreDataManager.shared.hasHistory(
-                                mangaId: info.id,
-                                context: context
-                            )
-                        case .completed:
-                            condition = mangaObject.status == AidokuRunner.PublishingStatus.completed.rawValue
-                        case .source:
-                            guard let sourceId = filter.value else { continue }
-                            if filter.exclude {
-                                condition = info.id.sourceKey == sourceId
-                            } else {
-                                // handle included source filters as OR
-                                filteredSourceKeys.insert(sourceId)
-                                continue
-                            }
-                        case .contentRating:
-                            guard let contentRating = filter.value.flatMap(MangaContentRating.init) else { continue }
-                            if filter.exclude {
-                                condition = mangaObject.nsfw == contentRating.rawValue
-                            } else {
-                                // handle included content rating filters as OR
-                                filteredContentRatings.insert(Int16(contentRating.rawValue))
-                                continue
-                            }
-                        case .category:
-                            guard let category = filter.value else { continue }
-                            if filter.exclude {
-                                condition = categories.contains(category)
-                            } else {
-                                // handle included category filters as OR
-                                filteredCategories.insert(category)
-                                continue
-                            }
-
-                    }
-                    let shouldSkip = filter.exclude ? condition : !condition
-                    if shouldSkip {
-                        continue main
-                    }
-                }
-                if !filteredSourceKeys.isEmpty && !filteredSourceKeys.contains(info.id.sourceKey) {
-                    continue main
-                }
-                if !filteredContentRatings.isEmpty && !filteredContentRatings.contains(mangaObject.nsfw) {
-                    continue main
-                }
-                if !filteredCategories.isEmpty && !filteredCategories.contains(where: { categories.contains($0) }) {
-                    continue main
-                }
-
-                switch pinType {
-                    case .none:
-                        manga.append(info)
-                    case .unread:
-                        // don't have unread info to sort yet
-                        manga.append(info)
-                    case .updatedChapters:
-                        if libraryObject.lastUpdatedChapters > libraryObject.lastOpened {
-                            pinnedManga.append(info)
-                        } else {
-                            manga.append(info)
-                        }
-                }
-            }
-
-            return (true, actuallyEmpty, pinnedManga, manga, sourceKeys, unappliedFilters)
-        }
-
-        guard success else { return }
+        let query = LibraryQuery(
+            scope: currentCategory.map { $0.isEmpty ? .uncategorized : .category($0) } ?? .all,
+            sort: sortMethod.querySort,
+            // the title order is shown the other way round
+            ascending: sortMethod == .alphabetical ? !sortAscending : sortAscending,
+            filters: filters,
+            pinUpdatedChapters: pinType == .updatedChapters
+        )
+        guard let page = await DataRepositories.shared.library.page(query) else { return }
+        let (actuallyEmpty, pinnedManga, manga, sourceKeys, unappliedFilters) = (
+            page.isEmpty, page.pinned, page.manga, page.sourceKeys, page.unappliedFilters
+        )
 
         self.pinnedManga = pinnedManga
         self.manga = manga

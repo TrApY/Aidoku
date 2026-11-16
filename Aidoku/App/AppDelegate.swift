@@ -776,10 +776,7 @@ extension AppDelegate {
                     } else {
                         // otherwise, we just show the migration view and let the user do it
                         Task {
-                            let sourceManga = await CoreDataManager.shared.container.performBackgroundTask { context in
-                                let objects = CoreDataManager.shared.getLibraryManga(sourceKey: source.id, context: context)
-                                return objects.compactMap { $0.manga?.toNewManga() }
-                            }
+                            let sourceManga = await DataRepositories.shared.library.entries(sourceKey: source.id)
                             if !sourceManga.isEmpty {
                                 let migrateView = MigrateResultsView(targetSources: [source], selectedSeries: sourceManga, forceMigrate: true)
                                 let viewController = SwiftUINavigationViewController(rootView: migrateView, addDismissButton: false)

@@ -273,9 +273,7 @@ extension DownloadManager {
     @discardableResult
     func ensureAheadDownloaded(mangaId: MangaIdentifier, onlyOnWifi: Bool? = nil) async -> [AidokuRunner.Chapter] {
         guard DownloadAheadSetting.get(for: mangaId) > 0 else { return [] }
-        let manga = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getLibraryManga(mangaId: mangaId, context: context)?.manga?.toManga().toNew()
-        }
+        let manga = await DataRepositories.shared.library.entry(mangaId)
         guard let manga else { return [] }
         return await ensureAheadDownloaded(manga: manga, onlyOnWifi: onlyOnWifi)
     }

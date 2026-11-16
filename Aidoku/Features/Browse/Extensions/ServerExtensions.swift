@@ -7,7 +7,6 @@
 //  (D4) so it appears or goes in Fuentes without restarting.
 //
 
-import CoreData
 import Foundation
 
 struct ServerExtension: Decodable, Equatable, Identifiable, Sendable {
@@ -280,21 +279,20 @@ struct ServerExtensionUninstallCheck: Equatable, Sendable {
 extension ServerExtensionsModel {
     /// The library manga of `serverSourceIds` of `connection`, and those still under the connection.
     nonisolated static func countLibrary(
-        container: NSPersistentContainer,
+        repos: DataRepositories = .shared,
         connection: String,
         serverSourceIds: [String]
     ) async throws -> ServerExtensionLibraryCount {
         let keys = serverSourceIds.map { "\(connection).\($0)" }
-        let inSources = try await countIn(container, NSPredicate(format: "manga.sourceId IN %@", keys))
-        let pending = try await countIn(container, NSPredicate(format: "manga.sourceId == %@", connection))
+        guard
+            let inSources = await repos.library.countInLibrary(sourceKeys: keys),
+            let pending = await repos.library.countInLibrary(sourceKeys: [connection])
+        else {
+            throw LibraryCountFailed()
+        }
         return ServerExtensionLibraryCount(inSources: inSources, pendingUnderConnection: pending)
     }
 
-    private nonisolated static func countIn(_ container: NSPersistentContainer, _ predicate: NSPredicate) async throws -> Int {
-        try await container.performBackgroundTask { context in
-            let request = NSFetchRequest<NSManagedObject>(entityName: "LibraryManga")
-            request.predicate = predicate
-            return try context.count(for: request)
-        }
-    }
+    /// The library could not be counted.
+    struct LibraryCountFailed: Error {}
 }

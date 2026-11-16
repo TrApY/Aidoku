@@ -5,7 +5,6 @@
 //  SUWA-12 B3: Explorar › Extensiones (the Suwayomi server's extensions).
 //
 
-import CoreData
 import SwiftUI
 
 /// The server's GraphQL API for extensions, with the connection's login.
@@ -90,7 +89,6 @@ extension ServerExtensionsModel {
             libraryCount: { serverSourceIds in
                 guard let connection else { return ServerExtensionLibraryCount() }
                 return try await ServerExtensionsModel.countLibrary(
-                    container: CoreDataManager.shared.container,
                     connection: connection,
                     serverSourceIds: serverSourceIds
                 )

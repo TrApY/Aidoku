@@ -53,7 +53,7 @@ struct BrowseLanguageScopeTests {
             }
             try context.save()
         }
-        #expect(await LibrarySourceKeys.load(container: store.container) == ["suwa.olympus"])
+        #expect(await LibrarySourceKeys.load(repos: DataRepositories(container: store.container)) == ["suwa.olympus"])
     }
 
     @Test func emptyBecauseOfTheLanguagesSaysSo() {

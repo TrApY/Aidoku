@@ -96,10 +96,7 @@ extension MigrateSourcesView {
 
 extension MigrateSourcesView {
     func loadSources() async {
-        manga = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let objects = CoreDataManager.shared.getLibraryManga(context: context)
-            return Self.group(objects.compactMap { $0.manga?.toNewManga() })
-        }
+        manga = Self.group(await DataRepositories.shared.library.entries(category: nil))
         sources = manga.keys
             .map { id in
                 let source = SourceManager.shared.store.source(for: id)

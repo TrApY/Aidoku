@@ -71,12 +71,12 @@ struct ExtensionUninstallConfirmationTests {
             try context.save()
         }
         let count = try await ServerExtensionsModel.countLibrary(
-            container: store.container, connection: connection, serverSourceIds: ["1596411039134168890"]
+            repos: DataRepositories(container: store.container), connection: connection, serverSourceIds: ["1596411039134168890"]
         )
         #expect(count == .init(inSources: 1, pendingUnderConnection: 1))
-        let container = store.container
+        let repos = DataRepositories(container: store.container)
         let result = try await check { ids in
-            try await ServerExtensionsModel.countLibrary(container: container, connection: connection, serverSourceIds: ids)
+            try await ServerExtensionsModel.countLibrary(repos: repos, connection: connection, serverSourceIds: ids)
         }
         #expect(result == .init(confirmations: 2, count: nil))
     }
