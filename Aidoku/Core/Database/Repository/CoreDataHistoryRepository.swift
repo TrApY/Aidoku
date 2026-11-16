@@ -71,10 +71,65 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
         }
     }
 
-    // STUB (rojo de L5): las escrituras aún no tienen implementación
-    func savePage(_ save: PageSave) async -> Bool { false }
-    func markCompleted(_ chapters: [ChapterIdentifier], date: Date) async -> Bool? { false }
-    func remove(chapters: [ChapterIdentifier]) async -> Bool { false }
-    func removeAll(of manga: MangaIdentifier) async -> Bool { false }
-    func clear(excludingLibrary: Bool) async -> Bool { false }
+    // MARK: writes
+
+    @discardableResult
+    func savePage(_ save: PageSave) async -> Bool {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.setRead(mangaId: save.chapter.mangaIdentifier, context: context)
+            CoreDataManager.shared.setProgress(
+                save.page,
+                chapterId: save.chapter,
+                totalPages: save.totalPages,
+                scrollPosition: save.scrollPosition,
+                context: context
+            )
+            return context.saveLogging("HistoryManager.setProgress")
+        }
+    }
+
+    @discardableResult
+    func markCompleted(_ chapters: [ChapterIdentifier], date: Date) async -> Bool? {
+        await container.performBackgroundTask { context in
+            guard CoreDataManager.shared.setCompleted(chapterIds: chapters, date: date, context: context) else {
+                return false
+            }
+            if let mangaId = chapters.first?.mangaIdentifier {
+                CoreDataManager.shared.setRead(mangaId: mangaId, date: date, context: context)
+            }
+            return context.saveLogging("HistoryManager.addHistory") ? true : nil
+        }
+    }
+
+    @discardableResult
+    func remove(chapters: [ChapterIdentifier]) async -> Bool {
+        await container.performBackgroundTask { context in
+            for chapter in chapters {
+                if let object = CoreDataManager.shared.getHistory(chapterId: chapter, context: context) {
+                    context.delete(object)
+                }
+            }
+            return context.saveLogging("CoreDataManager.removeHistory(sourceId:mangaId:chapterIds:)")
+        }
+    }
+
+    @discardableResult
+    func removeAll(of manga: MangaIdentifier) async -> Bool {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.removeHistory(mangaId: manga, context: context)
+            return context.saveLogging("HistoryRepository.removeAll")
+        }
+    }
+
+    @discardableResult
+    func clear(excludingLibrary: Bool) async -> Bool {
+        await container.performBackgroundTask { context in
+            if excludingLibrary {
+                CoreDataManager.shared.clearHistoryExcludingLibrary(context: context)
+            } else {
+                CoreDataManager.shared.clearHistory(context: context)
+            }
+            return context.saveLogging("HistoryRepository.clear")
+        }
+    }
 }

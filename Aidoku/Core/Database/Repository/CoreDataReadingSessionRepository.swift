@@ -13,6 +13,11 @@ final class CoreDataReadingSessionRepository: ReadingSessionRepository, @uncheck
         self.container = container
     }
 
-    // STUB (rojo de L5)
-    func add(_ data: HistoryManager.ReadingSessionData, chapter: ChapterIdentifier) async -> Bool { false }
+    @discardableResult
+    func add(_ data: HistoryManager.ReadingSessionData, chapter: ChapterIdentifier) async -> Bool {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.createSession(chapterId: chapter, data: data, context: context)
+            return context.saveLogging("HistoryManager.addSession")
+        }
+    }
 }
