@@ -22,6 +22,16 @@ extension SourceObject {
         }
     }
 
+    func toRecord() -> SourceRecord {
+        .init(
+            id: id ?? "",
+            apiVersion: apiVersion,
+            path: path,
+            listing: Int(listing),
+            customSource: customSource as? Data
+        )
+    }
+
     func toData() -> SourceObjectData {
         .init(
             objectID: objectID,

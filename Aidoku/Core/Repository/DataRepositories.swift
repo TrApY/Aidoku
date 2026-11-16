@@ -18,6 +18,7 @@ struct DataRepositories: Sendable {
     var manga: any MangaRepository
     var mangaUpdates: any MangaUpdateRepository
     var sessions: any ReadingSessionRepository
+    var sources: any SourceRepository
     /// The few synchronous main-thread reads the reader and the tracker still need (D8; gone in F9/F11).
     var mainActorReads: any MainActorReads
 
@@ -30,6 +31,7 @@ struct DataRepositories: Sendable {
         manga: any MangaRepository,
         mangaUpdates: any MangaUpdateRepository,
         sessions: any ReadingSessionRepository,
+        sources: any SourceRepository,
         mainActorReads: any MainActorReads
     ) {
         self.tracks = tracks
@@ -40,6 +42,7 @@ struct DataRepositories: Sendable {
         self.manga = manga
         self.mangaUpdates = mangaUpdates
         self.sessions = sessions
+        self.sources = sources
         self.mainActorReads = mainActorReads
     }
 }

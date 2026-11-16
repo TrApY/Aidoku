@@ -97,6 +97,8 @@ protocol FixtureSeeder: Sendable {
     func libraryDates(of manga: MangaIdentifier) async -> LibraryDatesSeed?
     /// The manga's update rows (chapter key and whether it was viewed), in no particular order.
     func updates(of manga: MangaIdentifier) async -> [String: Bool]
+    /// The store the sources are saved in (their entity is in the local configuration).
+    func sourceStore(key: String) async -> String?
 }
 
 struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
@@ -238,6 +240,12 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
                 rows[row.chapterId ?? ""] = row.viewed
             }
             return rows
+        }
+    }
+
+    func sourceStore(key: String) async -> String? {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getSource(key: key, context: context)?.objectID.persistentStore?.configurationName
         }
     }
 

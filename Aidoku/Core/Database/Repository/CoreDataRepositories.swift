@@ -22,6 +22,7 @@ extension DataRepositories {
             manga: CoreDataMangaRepository(container: container),
             mangaUpdates: CoreDataMangaUpdateRepository(container: container),
             sessions: CoreDataReadingSessionRepository(container: container),
+            sources: CoreDataSourceRepository(container: container),
             mainActorReads: CoreDataMainActorReads(container: container)
         )
     }
