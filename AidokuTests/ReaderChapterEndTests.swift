@@ -147,4 +147,25 @@ import UIKit
         UserDefaults.standard.removeObject(forKey: modeKey)
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
+
+    /// SUWA-17 C2: into the transition (completed) and then on to the next chapter: one completion, not a
+    /// second one when the chapter changes (the download to delete after reading is queued once).
+    @Test func intoTheTransitionAndOnToTheNextChapterCompletesOnce() async throws {
+        let deleteKey = "Library.deleteDownloadAfterReading"
+        let queueKey = "Data.chaptersToBeDeleted"
+        UserDefaults.standard.set(true, forKey: deleteKey)
+        let (reader, manga) = await reader(mangaKey: "unavez", chapter: first)
+        reader.setCurrentPage(37, position: nil)
+        reader.setCurrentPage(38, position: nil)
+        reader.setCurrentPage(39, position: nil)
+        #expect(await completed(id(manga, first)) == true)
+        reader.setChapter(second)
+        try await Task.sleep(for: .seconds(1))
+        let queued = (UserDefaults.standard.data(forKey: queueKey))
+            .flatMap { try? JSONDecoder().decode([ChapterIdentifier].self, from: $0) } ?? []
+        #expect(queued.filter { $0 == id(manga, first) }.count == 1, "queued for deletion \(queued.count) times")
+        UserDefaults.standard.removeObject(forKey: deleteKey)
+        UserDefaults.standard.removeObject(forKey: queueKey)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
 }
