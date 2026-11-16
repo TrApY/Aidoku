@@ -34,7 +34,6 @@ import Testing
         "Aidoku/Core/Downloads/DownloadAhead.swift",
         "Aidoku/Core/Downloads/DownloadManager.swift",
         "Aidoku/Core/Library/Models/Insights/InsightsData.swift",
-        "Aidoku/Core/Library/Services/HistoryManager.swift",
         "Aidoku/Core/Library/Services/MangaManager.swift",
         "Aidoku/Core/Library/Services/MangaUpdateManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Local/LocalFileDataManager.swift",
