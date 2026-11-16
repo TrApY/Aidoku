@@ -136,8 +136,10 @@ extension SettingsView {
 
 extension SettingsView {
     func updateCategories() async {
-        let categoriesOnly = await DataRepositories.shared.categories.titles(includeFilterGroups: false)
-        let categoriesAndGroups = await DataRepositories.shared.categories.titles(includeFilterGroups: true)
+        // both lists in one read
+        let snapshot = await DataRepositories.shared.categories.snapshot(of: nil, filterGroup: nil)
+        let categoriesOnly = snapshot.titles
+        let categoriesAndGroups = snapshot.titlesAndGroups
 
         self.categoriesOnly = categoriesOnly
         self.categoriesAndGroups = categoriesAndGroups

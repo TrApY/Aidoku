@@ -196,8 +196,9 @@ extension LibraryViewModel {
     }
 
     func refreshCategories(skipDataLoad: Bool = false) async {
-        let loadedCategories = await DataRepositories.shared.categories.titles(includeFilterGroups: false)
-        let loadedGroups = await DataRepositories.shared.categories.filterGroups()
+        // the categories and the filter groups in one read
+        let snapshot = await DataRepositories.shared.categories.snapshot(of: nil, filterGroup: nil)
+        let (loadedCategories, loadedGroups) = (snapshot.titles, snapshot.filterGroups)
         (categories, filterGroups) = (loadedCategories, loadedGroups)
         if !skipDataLoad {
             let isInFilterGroup = filterGroups.contains(where: { $0.title == currentCategory })

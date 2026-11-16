@@ -33,19 +33,35 @@ final class CoreDataCategoryRepository: CategoryRepository, @unchecked Sendable 
 
     func filterGroup(title: String) async -> FilterGroup? {
         await container.performBackgroundTask { context in
-            guard
-                let category = CoreDataManager.shared.getCategory(title: title, context: context),
-                let data = category.data as? Data,
-                let filters = try? JSONDecoder().decode([LibraryFilter].self, from: data)
-            else {
-                return nil
-            }
-            return FilterGroup(title: title, filters: filters)
+            Self.filterGroup(title: title, context: context)
         }
     }
 
+    private static func filterGroup(title: String, context: NSManagedObjectContext) -> FilterGroup? {
+        guard
+            let category = CoreDataManager.shared.getCategory(title: title, context: context),
+            let data = category.data as? Data,
+            let filters = try? JSONDecoder().decode([LibraryFilter].self, from: data)
+        else {
+            return nil
+        }
+        return FilterGroup(title: title, filters: filters)
+    }
+
     func snapshot(of manga: MangaIdentifier?, filterGroup title: String?) async -> CategorySnapshot {
-        CategorySnapshot()
+        await container.performBackgroundTask { context in
+            let manager = CoreDataManager.shared
+            let mangaCategories = manga.map { id in
+                manager.getCategories(mangaId: id, context: context).compactMap { category in category.title }
+            }
+            return CategorySnapshot(
+                titles: manager.getCategoryTitles(excludeFilterGroups: true, context: context),
+                titlesAndGroups: manager.getCategoryTitles(excludeFilterGroups: false, context: context),
+                filterGroups: manager.getFilterGroups(context: context),
+                categoriesOfManga: mangaCategories ?? [],
+                filterGroup: title.flatMap { groupTitle in Self.filterGroup(title: groupTitle, context: context) }
+            )
+        }
     }
 
     func categories(of manga: MangaIdentifier) async -> [String] {

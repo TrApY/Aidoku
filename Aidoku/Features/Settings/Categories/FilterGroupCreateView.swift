@@ -190,15 +190,13 @@ struct FilterGroupCreateView: View {
 
 extension FilterGroupCreateView {
     func loadData() async {
-        let repo = DataRepositories.shared.categories
-        let loadedCategories = await repo.titles(includeFilterGroups: false)
-        let loadedTitles = await repo.titles(includeFilterGroups: true)
+        // the categories, all the titles and the group being edited in one read
+        let snapshot = await DataRepositories.shared.categories.snapshot(of: nil, filterGroup: editingGroupTitle)
+        let loadedCategories = snapshot.titles
+        let loadedTitles = snapshot.titlesAndGroups
         // the sources of the manga in the library
         let loadedSourceKeys = await LibrarySourceKeys.load().sorted()
-        var loadedFilters: [LibraryFilter] = []
-        if let editingGroupTitle, let group = await repo.filterGroup(title: editingGroupTitle) {
-            loadedFilters = group.filters
-        }
+        let loadedFilters: [LibraryFilter] = snapshot.filterGroup?.filters ?? []
         (
             categories,
             allCategoryAndGroupTitles,

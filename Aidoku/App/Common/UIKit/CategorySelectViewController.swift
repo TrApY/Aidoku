@@ -34,10 +34,9 @@ class CategorySelectViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "UITableViewCell")
 
         Task {
-            let repo = DataRepositories.shared.categories
-            let loadedCategories = await repo.titles(includeFilterGroups: false)
-            // [] if the manga is not in the library
-            let loadedSelected = await repo.categories(of: manga.identifier)
+            // the titles and the manga's categories in one read ([] if it is not in the library)
+            let snapshot = await DataRepositories.shared.categories.snapshot(of: manga.identifier, filterGroup: nil)
+            let (loadedCategories, loadedSelected) = (snapshot.titles, snapshot.categoriesOfManga)
             (categories, selectedCategories) = (loadedCategories, loadedSelected)
             tableView.reloadData()
         }
