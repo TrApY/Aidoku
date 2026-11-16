@@ -421,13 +421,7 @@ extension AppDelegate {
         }
 
         // handle lastUpdatedChapters addition
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            let items = CoreDataManager.shared.getLibraryManga(context: context)
-            // if lastUpdatedChapters is set to the default value, update default to lastUpdated
-            for item in items where item.lastUpdatedChapters.timeIntervalSince1970 == 21600 {
-                item.lastUpdatedChapters = item.lastUpdated
-            }
-        }
+        await DataRepositories.shared.library.resetLastUpdatedChapters()
 
         // move all sources in old sources directory to the new one
         FileManager.default.moveFiles(in: SourceManager.oldDirectory, to: SourceManager.directory)

@@ -147,38 +147,18 @@ extension MangaManager {
                 chapters = manga.chapters ?? chapters
             }
         }
-        await CoreDataManager.shared.container.performBackgroundTask { [manga, chapters] context in
-            CoreDataManager.shared.addToLibrary(
-                manga: manga,
-                chapters: chapters,
-                context: context
-            )
-            // the order chosen out of the library goes to its flags (synced). SUWA-12 H5
-            if
-                let local = ChapterSortMemory.local(for: manga.identifier),
-                let object = CoreDataManager.shared.getManga(mangaId: manga.identifier, context: context),
-                ChapterSortMemory.chosen(inFlags: Int(object.chapterFlags)) == nil
-            {
-                object.chapterFlags = Int16(ChapterSortMemory.flags(local, into: Int(object.chapterFlags)))
-            }
-            // add to default category
-            let defaultCategory = AppSettings.library.defaultCategory.get()
-            if let defaultCategory {
-                let hasCategory = CoreDataManager.shared.hasCategory(title: defaultCategory, context: context)
-                if hasCategory {
-                    CoreDataManager.shared.addCategoriesToManga(
-                        mangaId: manga.identifier,
-                        categories: [defaultCategory],
-                        context: context
-                    )
-                }
-            }
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("MangaManager.addToLibrary: \(error.localizedDescription)")
-            }
+        // the order chosen out of the library goes to its flags (synced), if they have none. SUWA-12 H5
+        let local = ChapterSortMemory.local(for: manga.identifier)
+        let adoptChapterFlags: (@Sendable (Int) -> Int?)? = local.map { local in
+            { @Sendable flags in ChapterSortMemory.chosen(inFlags: flags) == nil ? ChapterSortMemory.flags(local, into: flags) : nil }
         }
+        // added to the default category if it exists
+        await DataRepositories.shared.library.add(
+            manga,
+            chapters: chapters,
+            defaultCategory: AppSettings.library.defaultCategory.get(),
+            adoptChapterFlags: adoptChapterFlags
+        )
         ChapterSortMemory.forgetLocal(manga.identifier)
         // add enhanced trackers
         if bindTrackers {
@@ -193,20 +173,8 @@ extension MangaManager {
     }
 
     func removeFromLibrary(mangaId: MangaIdentifier) async {
-        let sortInFlags = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let sortInFlags = CoreDataManager.shared.getManga(mangaId: mangaId, context: context)
-                .map { ChapterSortMemory.chosen(inFlags: Int($0.chapterFlags)) != nil } ?? false
-            CoreDataManager.shared.removeManga(mangaId: mangaId, context: context)
-            CoreDataManager.shared.removeChapters(mangaId: mangaId, context: context)
-            CoreDataManager.shared.removeTracks(mangaId: mangaId, context: context)
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("Failed to remove manga: \(error)")
-            }
-            return sortInFlags
-        }
-        if sortInFlags {
+        let removed = await DataRepositories.shared.library.remove(mangaId)
+        if let flags = removed.chapterFlagsBefore[mangaId], ChapterSortMemory.chosen(inFlags: flags) != nil {
             ChapterSortMemory.forgetLocal(mangaId) // the order was in the library flags (SUWA-12 H6)
         }
         DownloadAheadSetting.set(0, for: mangaId)
@@ -221,20 +189,8 @@ extension MangaManager {
         if mangaIds.count > 100 {
             await UIApplication.shared.appDelegate?.showLoadingIndicator()
         }
-        let sortInFlags = await CoreDataManager.shared.container.performBackgroundTask { context in
-            let sortInFlags = mangaIds.filter { mangaId in
-                CoreDataManager.shared.getManga(mangaId: mangaId, context: context)
-                    .map { ChapterSortMemory.chosen(inFlags: Int($0.chapterFlags)) != nil } ?? false
-            }
-            CoreDataManager.shared.removeFromLibrary(ids: mangaIds, context: context)
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("Failed to remove multiple manga: \(error)")
-            }
-            return sortInFlags
-        }
-        for mangaId in sortInFlags {
+        let removed = await DataRepositories.shared.library.remove(mangaIds)
+        for (mangaId, flags) in removed.chapterFlagsBefore where ChapterSortMemory.chosen(inFlags: flags) != nil {
             ChapterSortMemory.forgetLocal(mangaId) // SUWA-12 H6
         }
         for mangaId in mangaIds {
@@ -251,79 +207,10 @@ extension MangaManager {
     }
 
     /// - downloadAhead: the manga's «descarga adelantada» setting when it was removed (undo).
-    func restoreToLibrary(
-        manga: Manga,
-        chapters: [Chapter],
-        trackItems: [TrackItem],
-        categories: [String],
-        downloadAhead: Int = 0
-    ) async {
-        let newManga = manga.toNew()
-        let newChapters = chapters.map { $0.toNew() }
-        let lastOpened = manga.lastOpened
-        let lastUpdated = manga.lastUpdated
-        let lastUpdatedChapters = manga.lastUpdatedChapters
-        let lastChapter = manga.lastChapter
-        let lastRead = manga.lastRead
-        let dateAdded = manga.dateAdded
-
-        await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.addToLibrary(
-                manga: newManga,
-                chapters: newChapters,
-                context: context
-            )
-
-            if let libraryObject = CoreDataManager.shared.getLibraryManga(
-                mangaId: newManga.identifier,
-                context: context
-            ) {
-                if
-                    let lastOpened,
-                    let lastUpdated,
-                    let lastUpdatedChapters,
-                    let dateAdded
-                {
-                    libraryObject.lastOpened = lastOpened
-                    libraryObject.lastUpdated = lastUpdated
-                    libraryObject.lastUpdatedChapters = lastUpdatedChapters
-                    libraryObject.lastChapter = lastChapter
-                    libraryObject.lastRead = lastRead
-                    libraryObject.dateAdded = dateAdded
-                }
-            }
-
-            for item in trackItems {
-                CoreDataManager.shared.createTrack(
-                    id: item.id,
-                    trackerId: item.trackerId,
-                    mangaId: item.mangaId,
-                    title: item.title,
-                    context: context
-                )
-            }
-
-            for category in categories {
-                let hasCategory = CoreDataManager.shared.hasCategory(title: category, context: context)
-                if !hasCategory {
-                    CoreDataManager.shared.createCategory(title: category, context: context)
-                }
-            }
-            CoreDataManager.shared.addCategoriesToManga(
-                mangaId: newManga.identifier,
-                categories: categories,
-                context: context
-            )
-
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error(
-                    "MangaManager.restoreToLibrary: \(error.localizedDescription)")
-            }
-        }
+    func restoreToLibrary(_ snapshot: LibrarySnapshot, downloadAhead: Int = 0) async {
+        await DataRepositories.shared.library.restore(snapshot)
         if downloadAhead > 0 {
-            DownloadAheadSetting.set(downloadAhead, for: newManga.identifier)
+            DownloadAheadSetting.set(downloadAhead, for: snapshot.manga.identifier)
         }
     }
 

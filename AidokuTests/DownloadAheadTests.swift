@@ -441,22 +441,14 @@ import Testing
         }
         let first = mangas[0].identifier
         // what LibraryViewController keeps for undo, read before removing
-        let snapshot = await CoreDataManager.shared.container.performBackgroundTask { context in
-            LibraryViewController.LibraryRemovalSnapshot.make(mangaId: first, context: context)
-        }
+        let snapshot = await LibraryViewController.LibraryRemovalSnapshot.read([first]).first
         await MangaManager.shared.removeFromLibrary(mangaIds: mangas.map(\.identifier))
         #expect(DownloadAheadSetting.get(for: mangas[0].identifier) == 0)
         #expect(DownloadAheadSetting.get(for: mangas[1].identifier) == 0)
 
         let removed = try #require(snapshot)
         #expect(removed.downloadAhead == 3)
-        await MangaManager.shared.restoreToLibrary(
-            manga: removed.manga,
-            chapters: removed.chapters,
-            trackItems: removed.trackItems,
-            categories: removed.categories,
-            downloadAhead: removed.downloadAhead
-        )
+        await MangaManager.shared.restoreToLibrary(removed.snapshot, downloadAhead: removed.downloadAhead)
         #expect(DownloadAheadSetting.get(for: first) == 3)
         await MangaManager.shared.removeFromLibrary(mangaId: first)
     }

@@ -382,7 +382,7 @@ extension MangaView.ViewModel {
         if getNextChapter() == .allRead {
             markedOpened = true
             Task {
-                await CoreDataManager.shared.setOpened(mangaId: manga.identifier)
+                await DataRepositories.shared.library.markOpened(manga.identifier)
                 NotificationCenter.default.post(name: .openedManga, object: manga.identifier)
             }
         }

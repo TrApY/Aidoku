@@ -9,7 +9,6 @@ import UIKit
 import LocalAuthentication
 import SwiftUI
 import AidokuRunner
-import CoreData
 
 class LibraryViewController: OldMangaCollectionViewController {
     let viewModel = LibraryViewModel()
@@ -1360,7 +1359,7 @@ extension LibraryViewController {
 
         if !AppSettings.general.incognitoMode.get() {
             Task {
-                await CoreDataManager.shared.setOpened(mangaId: info.id)
+                await DataRepositories.shared.library.markOpened(info.id)
                 await self.viewModel.mangaOpened(mangaId: info.id)
                 self.updateDataSource()
             }
@@ -1486,11 +1485,11 @@ extension LibraryViewController {
                     Task {
                         for manga in mangaInfo {
                             let manga = manga.toManga()
-                            let chapters = await CoreDataManager.shared.getChapters(mangaId: manga.identifier)
+                            let chapters = await DataRepositories.shared.chapters.chaptersBlankAsNil(of: manga.identifier)
 
                             await HistoryManager.shared.addHistory(
                                 mangaId: manga.identifier,
-                                chapters: chapters.map { $0.toNew() },
+                                chapters: chapters,
                                 reason: "biblioteca: marcar como leído"
                             )
                         }
@@ -1504,9 +1503,9 @@ extension LibraryViewController {
 
                     Task {
                         for manga in mangaInfo {
-                            let chapters = await CoreDataManager.shared.getChapters(mangaId: manga.id)
+                            let chapters = await DataRepositories.shared.chapters.chaptersBlankAsNil(of: manga.id)
                             await HistoryManager.shared.removeHistory(
-                                chapterIds: chapters.map { $0.identifier }
+                                chapterIds: chapters.map { ChapterIdentifier(sourceKey: manga.id.sourceKey, mangaKey: manga.id.mangaKey, chapterKey: $0.key) }
                             )
                         }
 
@@ -1606,25 +1605,15 @@ extension LibraryViewController: UISearchResultsUpdating {
 // MARK: - Undoable Methods
 extension LibraryViewController {
     struct LibraryRemovalSnapshot {
-        let manga: Manga
-        let chapters: [Chapter]
-        let trackItems: [TrackItem]
-        let categories: [String]
+        let snapshot: LibrarySnapshot
         /// «Descarga adelantada» setting, removed with the manga.
         let downloadAhead: Int
 
         /// What undoing the removal needs, read before removing.
-        nonisolated static func make(mangaId: MangaIdentifier, context: NSManagedObjectContext) -> Self? {
-            guard let manga = CoreDataManager.shared.getManga(mangaId: mangaId, context: context)?.toManga() else {
-                return nil
+        nonisolated static func read(_ ids: [MangaIdentifier]) async -> [Self] {
+            await DataRepositories.shared.library.snapshot(ids).map {
+                Self(snapshot: $0, downloadAhead: DownloadAheadSetting.get(for: $0.manga.identifier))
             }
-            return .init(
-                manga: manga,
-                chapters: CoreDataManager.shared.getChapters(mangaId: mangaId, context: context).map { $0.toChapter() },
-                trackItems: CoreDataManager.shared.getTracks(mangaId: mangaId, context: context).map { $0.toItem() },
-                categories: CoreDataManager.shared.getCategories(mangaId: mangaId, context: context).compactMap { $0.title },
-                downloadAhead: DownloadAheadSetting.get(for: mangaId)
-            )
         }
     }
 
@@ -1642,9 +1631,7 @@ extension LibraryViewController {
         return Task { [weak self] in
             guard let self else { return }
 
-            let removedManga: [LibraryRemovalSnapshot] = await CoreDataManager.shared.container.performBackgroundTask { context in
-                ids.compactMap { LibraryRemovalSnapshot.make(mangaId: $0, context: context) }
-            }
+            let removedManga = await LibraryRemovalSnapshot.read(ids)
 
             guard !Task.isCancelled else { return }
 
@@ -1656,13 +1643,7 @@ extension LibraryViewController {
 
                 Task {
                     for snapshot in removedManga {
-                        await MangaManager.shared.restoreToLibrary(
-                            manga: snapshot.manga,
-                            chapters: snapshot.chapters,
-                            trackItems: snapshot.trackItems,
-                            categories: snapshot.categories,
-                            downloadAhead: snapshot.downloadAhead
-                        )
+                        await MangaManager.shared.restoreToLibrary(snapshot.snapshot, downloadAhead: snapshot.downloadAhead)
                     }
 
                     NotificationCenter.default.post(name: .updateLibrary, object: nil)
