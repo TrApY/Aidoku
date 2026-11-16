@@ -414,4 +414,30 @@ extension ReaderWebtoonScrollDownTests {
         #expect(abs(after - before) < 1, "the page being read moved \(after - before) pt on screen")
         await opened.close()
     }
+
+    /// C4: rows reloaded (as refreshInfoPages reloads the transitions) get new nodes; when the row in the middle
+    /// is one of them, the row above changing in the same pass (reloaded, back to its provisional height) must
+    /// still be made up for.
+    @Test func aRowReloadedTogetherWithTheMiddleOneKeepsTheScreen() async throws {
+        let opened = try await open(mangaKey: "recargar")
+        try userScrolls(opened, toRow: 6)
+        try await Task.sleep(for: .seconds(5))
+        let before = try #require(topOnScreen(opened, row: 6))
+        let node = opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: 6, section: 0))
+        await withCheckedContinuation { continuation in
+            opened.webtoon.collectionNode.performBatchUpdates {
+                opened.webtoon.collectionNode.reloadItems(at: [IndexPath(row: 5, section: 0), IndexPath(row: 6, section: 0)])
+            } completion: { _ in
+                continuation.resume()
+            }
+        }
+        #expect(opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: 6, section: 0)) !== node, "the reload kept the node")
+        try await Task.sleep(for: .milliseconds(300))
+        let during = try #require(topOnScreen(opened, row: 6))
+        #expect(abs(during - before) < 1, "right after the reload the page being read moved \(during - before) pt")
+        try await Task.sleep(for: .seconds(4))
+        let after = try #require(topOnScreen(opened, row: 6))
+        #expect(abs(after - before) < 1, "once loaded again the page being read moved \(after - before) pt")
+        await opened.close()
+    }
 }
