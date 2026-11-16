@@ -240,7 +240,7 @@ extension DownloadManager {
             guard canQueue() else { continue }
             let target = DownloadAheadSetting.get(for: mangaId)
             // stored in source order (newest first): reversed is the reading order downloadUnread uses
-            let chapters = Array(await DataRepositories.shared.chapters.chapters(of: mangaId).reversed())
+            let chapters = Array(await DataRepositories.shared.chapters.chaptersBlankAsNil(of: mangaId).reversed())
             guard target > 0, !chapters.isEmpty else { continue }
             let readingHistory = await DataRepositories.shared.history.readingHistory(of: mangaId).pagesAndDates
             let filters = await DataRepositories.shared.manga.chapterFilters(mangaId)

@@ -27,7 +27,9 @@ final class CoreDataChapterRepository: ChapterRepository, @unchecked Sendable {
     }
 
     func chaptersBlankAsNil(of manga: MangaIdentifier) async -> [AidokuRunner.Chapter] {
-        await chapters(of: manga)
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getChapters(mangaId: manga, context: context).map { $0.toChapter().toNew() }
+        }
     }
 
     func unreadCount(of manga: MangaIdentifier) async -> Int {

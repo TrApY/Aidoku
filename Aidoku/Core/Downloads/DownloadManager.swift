@@ -195,7 +195,7 @@ actor DownloadManager {
 extension DownloadManager {
     /// Download all chapters for a manga.
     func downloadAll(manga: AidokuRunner.Manga) async {
-        let allChapters = await DataRepositories.shared.chapters.chapters(of: manga.identifier)
+        let allChapters = await DataRepositories.shared.chapters.chaptersBlankAsNil(of: manga.identifier)
 
         var chaptersToDownload: [AidokuRunner.Chapter] = []
 
@@ -214,7 +214,7 @@ extension DownloadManager {
     /// Download unread chapters for a manga.
     func downloadUnread(manga: AidokuRunner.Manga) async {
         let readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.identifier)
-        let allChapters = await DataRepositories.shared.chapters.chapters(of: manga.identifier)
+        let allChapters = await DataRepositories.shared.chapters.chaptersBlankAsNil(of: manga.identifier)
 
         var chaptersToDownload: [AidokuRunner.Chapter] = []
 

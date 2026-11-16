@@ -121,7 +121,7 @@ extension HistoryManager {
         await DataRepositories.shared.history.removeAll(of: mangaId)
         NotificationCenter.default.post(name: .historyRemoved, object: mangaId)
         Task {
-            let chapters = await DataRepositories.shared.chapters.chapters(of: mangaId)
+            let chapters = await DataRepositories.shared.chapters.chaptersBlankAsNil(of: mangaId)
             await TrackerManager.shared.setProgress(
                 mangaId: mangaId,
                 chapters: chapters,
