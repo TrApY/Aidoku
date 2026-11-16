@@ -59,6 +59,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     // Stores the last calculated page number
     /// Reports only real page changes, and the first page of each chapter.
     private var pageReports = PageReportFilter()
+    /// The page the chapter opened at, reported as the current page until the user moves (drag, slider, tap or
+    /// key navigation, auto scroll, zoom). Opening puts that page at the top; the pages above it then grow as
+    /// their images load and move the content, and the page in the middle of the screen becomes the one
+    /// before: that is not the user reading, so it is neither reported nor saved. SUWA-16
+    private var openingPageHold: Int?
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -276,6 +281,7 @@ extension ReaderWebtoonViewController {
 
     private func startAutoScroll() {
         guard !isAutoScrolling else { return }
+        openingPageHold = nil
 
         isAutoScrolling = true
         resumeAutoScroll()
@@ -353,6 +359,7 @@ extension ReaderWebtoonViewController {
 // MARK: - Scroll View Delegate
 extension ReaderWebtoonViewController {
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        openingPageHold = nil
         super.scrollViewWillBeginDragging(scrollView)
         restorePreloadRange()
         pauseAutoScroll()
@@ -392,8 +399,8 @@ extension ReaderWebtoonViewController {
             }
         }
 
-        // update page number
-        let page = getCurrentPage()
+        // update page number (the opening page until the user moves)
+        let page = openingPageHold ?? getCurrentPage()
         if pageReports.shouldReport(page) {
             delegate?.setCurrentPage(page, position: nil)
         }
@@ -402,6 +409,7 @@ extension ReaderWebtoonViewController {
     // disable slider movement while zooming
     // zooming sometimes causes page count to jitter between two pages
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
+        openingPageHold = nil
         isZooming = true
         stopAutoScroll()
     }
@@ -888,6 +896,7 @@ extension ReaderWebtoonViewController {
 // MARK: - Reader Delegate
 extension ReaderWebtoonViewController: ReaderReaderDelegate {
     func moveLeft() {
+        openingPageHold = nil
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: max(
@@ -902,6 +911,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func moveRight() {
+        openingPageHold = nil
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: min(
@@ -916,6 +926,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func sliderMoved(value: CGFloat) {
+        openingPageHold = nil
         isSliding = true
 
         // get slider area
@@ -964,6 +975,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         self.chapter = chapter
         // a new chapter: its first page is reported even if it has the number the last one had
         pageReports.reset()
+        openingPageHold = nil
         updateDoubleTapZoomSetting()
         chapters = [chapter]
 
@@ -999,6 +1011,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 startPage = viewModel.pages.count
             }
 
+            openingPageHold = startPage
             await collectionNode.reloadData()
             zoomView.adjustContentSize()
 
