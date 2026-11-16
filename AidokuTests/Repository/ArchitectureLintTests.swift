@@ -45,7 +45,6 @@ import Testing
         "Aidoku/Core/Utilities/Concurrency/ObjectActorSerialExecutor.swift",
         "Aidoku/Extensions/CoreData/NSPersistentContainer.swift",
         "Aidoku/Features/Browse/AddSource/AddSourceView.swift",
-        "Aidoku/Features/Library/LibraryViewController.swift",
         "Aidoku/Features/Manga/MangaView+ViewModel.swift",
         "Aidoku/Features/Settings/SettingsView.swift",
         "Aidoku/Features/Source/Legacy/SourceViewController.swift",
