@@ -125,4 +125,26 @@ import UIKit
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
         await DataRepositories.shared.history.removeAll(of: other.identifier)
     }
+
+    /// SUWA-17 C1: a reader putting the previous chapter in tells «previous chapter» and then «this chapter»
+    /// again (the scrolling text reader does). After the last page of this chapter, that pair completes nothing:
+    /// not the previous chapter (never opened), not this one. In the webtoon reader.
+    @Test func thePreviousAndBackPairCompletesNothing() async throws {
+        let manga = AidokuRunner.Manga(sourceKey: "lectorfinal", key: "par", title: "Final", chapters: [second, first])
+        let modeKey = "Reader.readingMode.\(manga.identifier)"
+        UserDefaults.standard.set("webtoon", forKey: modeKey)
+        let (reader, _) = await reader(mangaKey: "par", chapter: second)
+        #expect(reader.reader is ReaderWebtoonViewController)
+        let before = journaled(id(manga, first))
+        reader.setCurrentPage(37, position: nil)
+        reader.setCurrentPage(38, position: nil)
+        reader.setChapter(first)
+        reader.setChapter(second)
+        try await Task.sleep(for: .seconds(2))
+        #expect(await storedProgress(id(manga, first)).completed == false, "the previous chapter, never opened, completed")
+        #expect(journaled(id(manga, first)) - before == 0)
+        #expect(await storedProgress(id(manga, second)).completed == false)
+        UserDefaults.standard.removeObject(forKey: modeKey)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
 }
