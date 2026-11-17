@@ -737,6 +737,9 @@ extension ReaderWebtoonViewController {
         let offset = scrollView.contentOffset
         scrollView.setContentOffset(offset, animated: false)
         collectionNode.contentOffset = offset
+        // the deceleration is cut without scrollViewDidEndDecelerating: the user is not scrolling any more, or what
+        // UIKit moves after the size change would be taken as the user's (hallazgo 8)
+        userIsScrolling = false
 
         super.viewWillTransition(to: size, with: coordinator)
 
