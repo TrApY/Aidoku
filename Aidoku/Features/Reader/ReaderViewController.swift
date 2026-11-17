@@ -684,6 +684,17 @@ extension ReaderViewController {
     /// history or when completed) and, for text readers, the stored scroll position.
     private func openingPageKey() -> String {
         let isTextReader = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
+        return ReadPositionKey.opening(
+            chapterKey: chapter.key,
+            startPage: currentPage,
+            isTextReader: isTextReader,
+            storedPosition: openingPosition()
+        )
+    }
+
+    /// The position a text reader opens the chapter at: the one stored for the page it opens at; nil otherwise.
+    private func openingPosition() -> Double? {
+        let isTextReader = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
         var storedPosition: Double?
         if isTextReader, currentPage >= 1 {
             let history = DataRepositories.shared.mainActorReads.record(
@@ -695,12 +706,7 @@ extension ReaderViewController {
                 storedPosition = history.scrollPosition
             }
         }
-        return ReadPositionKey.opening(
-            chapterKey: chapter.key,
-            startPage: currentPage,
-            isTextReader: isTextReader,
-            storedPosition: storedPosition
-        )
+        return storedPosition
     }
 
     /// A completed chapter with a page before its last but one that was opened again after its completion (SUWA-17
@@ -750,6 +756,9 @@ extension ReaderViewController {
                 currentPage = -1
             }
         }
+        // the position is the one it opens at, not the last chapter's: leaving before the reader tells anything
+        // is not a change either (SUWA-17 F4)
+        currentPosition = openingPosition()
         // the page it opens at is not a change: nothing is saved until the user turns a page
         readPositionSaver.chapterOpened(
             pageKey: openingPageKey(),
