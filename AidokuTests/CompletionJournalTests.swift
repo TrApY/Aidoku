@@ -63,3 +63,25 @@ extension CompletionJournalTests {
         #expect((try? Data(contentsOf: real)) == before, "written in the app's journal")
     }
 }
+
+// MARK: - SUWA-17 G3b: many completions in a row keep the one of a chapter being read again
+extension CompletionJournalTests {
+    /// A chapter completed, then more completions than the journal keeps (marking many as read, a sync): its
+    /// completion is still known, so it is still being read again.
+    @Test func manyCompletionsAfterwardsKeepAChaptersCompletion() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("muchos-\(UUID().uuidString).log")
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: CompletionJournal.latestUrl(for: url))
+        }
+        let chapter = ChapterIdentifier(sourceKey: "muchos", mangaKey: "m", chapterKey: "releido")
+        let completedAt = Date().addingTimeInterval(-600)
+        CompletionJournal.record(chapter, reason: "lector: test", date: completedAt, fileUrl: url)
+        for index in 1...(CompletionJournal.maxLines + 1) {
+            CompletionJournal.record(.init(sourceKey: "muchos", mangaKey: "m", chapterKey: "n\(index)"), reason: "sincronización test", fileUrl: url)
+        }
+        let completions = CompletionJournal.latestCompletions(fileUrl: url)
+        #expect(RereadRule.isRereading(chapter: chapter, sessionStart: Date().addingTimeInterval(-60), completions: completions),
+                "its completion was pushed out of the journal")
+    }
+}

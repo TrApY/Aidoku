@@ -69,6 +69,48 @@ enum CompletionJournal {
         return last
     }
 
+    /// Latest completion of each chapter kept apart, at most (SUWA-17 G3b).
+    static let maxLatest = 2000
+
+    /// The file of the latest completion of each chapter, next to the journal (SUWA-17 G3b).
+    static func latestUrl(for url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(url.deletingPathExtension().lastPathComponent + "-ultimos.log")
+    }
+
+    /// The key of a chapter in `Completions`.
+    static func key(_ chapter: ChapterIdentifier) -> String {
+        [chapter.sourceKey, chapter.mangaKey, chapter.chapterKey].joined(separator: "\t")
+    }
+
+    /// The completions recorded on this device of each chapter, not the readers' own «webtoon:» notes: their dates
+    /// as written, read only for the chapters asked about (SUWA-17 F2, G3b, G3d).
+    struct Completions: Sendable {
+        fileprivate(set) var dates: [String: [String]] = [:]
+
+        func last(of chapter: ChapterIdentifier) -> Date? {
+            CompletionJournal.lastDate(dates[CompletionJournal.key(chapter)] ?? [])
+        }
+
+        fileprivate mutating func add(_ lines: [String]) {
+            for line in lines {
+                let fields = line.split(separator: "\t", maxSplits: 5, omittingEmptySubsequences: false)
+                guard fields.count >= 5, !fields[4].hasPrefix("webtoon:") else { continue }
+                dates[fields[1...3].joined(separator: "\t"), default: []].append(String(fields[0]))
+            }
+        }
+    }
+
+    fileprivate static func lastDate(_ dates: [String]) -> Date? {
+        lock.withLock { dates.compactMap { formatter.date(from: $0) }.max() }
+    }
+
+    /// The completions of each chapter recorded on this device.
+    static func latestCompletions(fileUrl: URL? = nil) -> Completions {
+        var completions = Completions()
+        completions.add(lines(fileUrl: fileUrl))
+        return completions
+    }
+
     static func lines(fileUrl: URL? = nil) -> [String] {
         guard let text = try? String(contentsOf: fileUrl ?? defaultUrl, encoding: .utf8) else { return [] }
         return text.split(separator: "\n").map(String.init)

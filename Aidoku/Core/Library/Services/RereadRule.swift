@@ -23,6 +23,12 @@ enum RereadRule {
         return sessionStart > completed
     }
 
+    /// The same with the completions (`CompletionJournal.latestCompletions`; SUWA-17 G3b).
+    static func isRereading(chapter: ChapterIdentifier, sessionStart: Date?, completions: CompletionJournal.Completions) -> Bool {
+        guard let sessionStart, let completed = completions.last(of: chapter) else { return false }
+        return sessionStart > completed
+    }
+
     /// [chapter key: page] of a manga's completed chapters being read again.
     static func rereadPages(_ entries: [String: ReadingHistoryEntry], manga: MangaIdentifier) -> [String: Int] {
         let candidates = entries.filter { $0.value.rereadPage != nil }
