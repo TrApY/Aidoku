@@ -29,6 +29,10 @@ protocol HistoryRepository: Sendable {
     /// The reader's page (SUWA-7, spec §1.3 nº 1): the manga's last read date (if it is in the library) and the
     /// chapter's page, read date now, total and scroll position (if given) in one save. It never un-completes.
     @discardableResult func savePage(_ save: PageSave) async -> Bool
+    /// Only where in the page the reader is (SUWA-19 revisión, hallazgo 2): the chapter's scroll position, if its history
+    /// is at `save.page`. Not the read date, nor the manga's last read date: moving inside the page a chapter opened at
+    /// is not reading. false: nothing written (no history, another page, or the save failed).
+    @discardableResult func savePosition(_ save: PageSave) async -> Bool
     /// Completes the chapters not completed yet (read date `date`) and, if any, sets the manga's last read date to
     /// `date`, in one save (§1.3 nº 3). nil: it did not save; false: nothing new (nothing is saved); true: saved.
     @discardableResult func markCompleted(_ chapters: [ChapterIdentifier], date: Date) async -> Bool?
