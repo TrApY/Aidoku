@@ -165,3 +165,92 @@ extension ImagePipelineSwappingTests {
     }
 }
 }
+
+// MARK: - SUWA-17 F3: a chapter of one tall page entered from below
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// Chapter N ("c2") open, with chapter N-1 ("c1") a single page much taller than the screen.
+    private func openWithATallPreviousChapter(mangaKey: String) async throws -> Opened {
+        let opened = try await open(mangaKey: mangaKey, startPage: 3)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let size = CGSize(width: 300, height: 3000)
+        let data = UIGraphicsImageRenderer(size: size, format: format).pngData { context in
+            for band in 0..<30 {
+                UIColor(hue: CGFloat(band) / 30, saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
+                context.fill(CGRect(x: 0, y: CGFloat(band) * 100, width: 300, height: 100))
+            }
+        }
+        let url = opened.directory.appendingPathComponent("c1-alta.png")
+        try data.write(to: url)
+        opened.webtoon.viewModel.preloadedPages = [Aidoku.Page(sourceId: "lectorsubir", chapterId: "c1", index: 0, imageURL: url.absoluteString)]
+        // up to the start of chapter N (its transition, above page 1): chapter N-1 goes in above
+        try userScrolls(opened, toRow: 0, section: opened.lastSection)
+        try await waitForThePreviousChapter(opened)
+        try #require(opened.lastSection == 1, "chapter 1 did not go in above")
+        return opened
+    }
+
+    /// The user drags until the middle of the screen is at `y` of the content, and lets go.
+    private func drag(_ opened: Opened, middleAt y: CGFloat) {
+        let webtoon = opened.webtoon
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: y - webtoon.collectionNode.bounds.height / 2), animated: false)
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+    }
+
+    private func pageFrame(_ opened: Opened) throws -> CGRect {
+        try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 1, section: 0))?.frame)
+    }
+
+    /// Up into the end of the tall page from below, further up inside it, and read down to its end and on into
+    /// chapter N: chapter N-1 is completed (it was read going down).
+    @Test func aOnePageChapterEnteredFromBelowAndReadDownIsCompleted() async throws {
+        let opened = try await openWithATallPreviousChapter(mangaKey: "unapagina")
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        await removeTestHistory(previousId)
+        var frame = try pageFrame(opened)
+        try #require(frame.height > 2 * opened.webtoon.collectionNode.bounds.height, "the page is \(frame.height) high")
+        drag(opened, middleAt: frame.maxY - 150)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.chapterKey == "c1", "not in chapter 1")
+        // further up inside it, then down through it
+        frame = try pageFrame(opened)
+        var y = frame.maxY - 150 - opened.webtoon.collectionNode.bounds.height
+        drag(opened, middleAt: y)
+        try await Task.sleep(for: .milliseconds(500))
+        let firstOfN = try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 1, section: 1))?.frame)
+        while y < firstOfN.midY {
+            y = min(y + 300, firstOfN.midY)
+            drag(opened, middleAt: y)
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        try await Task.sleep(for: .seconds(2))
+        #expect(opened.chapterKey == "c2")
+        #expect(await storedProgress(previousId).completed == true, "chapter 1 read down to its end")
+        await removeTestHistory(previousId)
+        await opened.close()
+    }
+
+    /// Up into the end of the tall page from below and straight back down: not completed (SUWA-17 D5).
+    @Test func aOnePageChapterOnlyPeekedAtFromBelowIsNotCompleted() async throws {
+        let opened = try await openWithATallPreviousChapter(mangaKey: "unapaginaasomar")
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        await removeTestHistory(previousId)
+        let frame = try pageFrame(opened)
+        drag(opened, middleAt: frame.maxY - 150)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.chapterKey == "c1", "not in chapter 1")
+        let firstOfN = try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 1, section: 1))?.frame)
+        var y = frame.maxY - 150
+        while y < firstOfN.midY {
+            y = min(y + 300, firstOfN.midY)
+            drag(opened, middleAt: y)
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        try await Task.sleep(for: .seconds(2))
+        #expect(opened.chapterKey == "c2")
+        #expect(await storedProgress(previousId).completed == false, "chapter 1 only peeked at")
+        await removeTestHistory(previousId)
+        await opened.close()
+    }
+}
