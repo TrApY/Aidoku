@@ -528,3 +528,31 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-18 U2 (upstream #1116): the rotation anchor follows its page
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// The anchor of a size transition is taken in chapter 2's page 3; before the transition ends, chapter 1 goes
+    /// in above: the anchor is still chapter 2's page 3 (now in the second section), not page 3 of chapter 1.
+    @Test func theTransitionAnchorFollowsItsPageWhenAChapterGoesInAbove() async throws {
+        let opened = try await open(mangaKey: "anclanodo", startPage: 2)
+        let webtoon = opened.webtoon
+        let layout = try #require(webtoon.collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)
+        try userScrolls(opened, toRow: 3, section: 0)
+        try await Task.sleep(for: .seconds(2))
+        try #require(opened.lastSection == 0 && opened.middle == IndexPath(row: 3, section: 0),
+                     "not at chapter 2's page 3: \(String(describing: opened.middle))")
+        layout.preserveVisiblePosition()
+        try userScrolls(opened, toRow: 0, section: 0)
+        try await waitForThePreviousChapter(opened)
+        try #require(opened.lastSection == 1, "chapter 1 did not go in above")
+        let offset = layout.preservedContentOffset()
+        layout.clearPreservedPosition()
+        let middle = offset.map { $0.y + webtoon.collectionNode.bounds.height / 2 }
+        let path = middle.flatMap { y in
+            layout.layoutAttributesForElements(in: CGRect(x: 0, y: y, width: 1, height: 1))?
+                .first { $0.representedElementCategory == .cell }?.indexPath
+        }
+        #expect(path == IndexPath(row: 3, section: 1), "the anchor points at \(String(describing: path))")
+        await opened.close()
+    }
+}

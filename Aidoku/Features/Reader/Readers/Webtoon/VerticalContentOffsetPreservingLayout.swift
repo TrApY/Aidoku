@@ -313,13 +313,15 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         if let offset = widthChangeOffset {
             return offset
         }
-        guard
-            let collectionView,
-            let anchor = preservedViewportAnchor,
-            let attributes = layoutAttributesForItem(at: anchor.indexPath)
-        else {
-            return proposedContentOffset
-        }
+        return preservedContentOffset() ?? proposedContentOffset
+    }
+
+    /// The content offset that puts the preserved anchor back at the center of the current bounds
+    /// (upstream #1116; also what a size transition restores when it completes).
+    func preservedContentOffset() -> CGPoint? {
+        guard let collectionView, let anchor = preservedViewportAnchor else { return nil }
+        let indexPath: IndexPath? = anchor.indexPath
+        guard let indexPath, let attributes = layoutAttributesForItem(at: indexPath) else { return nil }
 
         let frame = attributes.frame
         let size = collectionView.bounds.size
