@@ -229,6 +229,28 @@ extension DownloadManager {
 
         let readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.identifier)
         let allChapters = await chapters(for: manga)
+
+        // «next N unread»: the same chapters «descarga adelantada» counts (the next N after the last read one,
+        // with the series' chapter filters; the ones downloaded or queued count), so the two never queue a
+        // chapter twice nor download chapters the user skipped or filtered out (SUWA-18 D1)
+        if let limit {
+            let filters = await DataRepositories.shared.manga.chapterFilters(manga.identifier)
+            let toQueue = DownloadAheadPlanner.chaptersToQueue(
+                chapters: allChapters.reversed(),
+                readingHistory: readingHistory.pagesAndDates,
+                target: limit,
+                retried: [],
+                language: filters.language,
+                scanlators: filters.scanlators ?? []
+            ) {
+                getDownloadStatus(for: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: $0))
+            }
+            if !toQueue.isEmpty {
+                await download(manga: manga, chapters: toQueue, start: start)
+            }
+            return
+        }
+
         let queuedDownloads = await queue.queue[manga.sourceKey] ?? []
         let queuedChapters = Set(queuedDownloads.map(\.chapterIdentifier))
 
@@ -243,7 +265,6 @@ extension DownloadManager {
             let downloaded = await isChapterDownloaded(chapter: identifier)
             if !downloaded {
                 chaptersToDownload.append(chapter)
-                if let limit, chaptersToDownload.count >= limit { break }
             }
         }
 
