@@ -35,6 +35,28 @@ extension ImagePipelineSwappingTests {
         await DataRepositories.shared.history.markCompleted([chapter], date: Date())
     }
 
+    /// A completed chapter read again for real: completed (and journaled on this device) two minutes ago, opened
+    /// again a minute ago in a session with pages read, and left at `page` (SUWA-17 F2).
+    func reread(_ chapter: ChapterIdentifier, page: Int, total: Int) async {
+        let completedAt = Date().addingTimeInterval(-120)
+        await seed(chapter, page: total, total: total)
+        await DataRepositories.shared.history.markCompleted([chapter], date: completedAt)
+        CompletionJournal.record(chapter, reason: "test: completado", date: completedAt)
+        await DataRepositories.shared.sessions.add(
+            .init(startDate: Date().addingTimeInterval(-60), endDate: Date().addingTimeInterval(-30), pagesRead: 3),
+            chapter: chapter
+        )
+        await seed(chapter, page: page, total: total)
+    }
+
+    /// A chapter completed with a page before its last one that was not read again: completed (not on this
+    /// device: a sync, the other device) and its page saved after (SUWA-17 F2).
+    func oldPartialCompletion(_ chapter: ChapterIdentifier, page: Int, total: Int) async {
+        await seed(chapter, page: total, total: total)
+        await complete(chapter)
+        await seed(chapter, page: page, total: total)
+    }
+
     func stored(_ chapter: ChapterIdentifier) async -> HistoryRecord? {
         await DataRepositories.shared.history.record(of: chapter)
     }
@@ -180,8 +202,7 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     @Test func continueGoesToTheChapterBeingReadAgain() async throws {
         let again = manga("releer", [c2, c1])
         await DataRepositories.shared.history.removeAll(of: again.identifier)
-        await complete(id(again, c1))
-        await seed(id(again, c1), page: 5, total: Self.pageCount)
+        await reread(id(again, c1), page: 5, total: Self.pageCount)
         let (_, rereading) = await MangaManager.shared.getNextChapter(mangaId: again.identifier, fallbackChapters: [c2, c1])
         #expect(rereading?.key == c1.key, "a completed chapter read again at page 5: \(String(describing: rereading?.key))")
 
@@ -224,8 +245,7 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     @Test func theReaderOpensAChapterBeingReadAgainAtItsPage() async throws {
         let manga = manga("reabrir", [c2, c1])
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
-        await complete(id(manga, c1))
-        await seed(id(manga, c1), page: 5, total: Self.pageCount)
+        await reread(id(manga, c1), page: 5, total: Self.pageCount)
         let opened = try await webtoon(manga, on: c1)
         #expect(opened.reader.currentPage == 5, "opened at \(opened.reader.currentPage)")
         opened.reader.setCurrentPage(6, position: nil)
@@ -348,6 +368,25 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
         reader.setChapter(c3)
         try await Task.sleep(for: .seconds(2))
         #expect(await storedProgress(id(manga, c2)).completed == false)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
+
+// MARK: - SUWA-17 F1: «Continuar» takes up a chapter read again only if it is the last one read
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
+    /// Chapter 1 (completed) read again up to page 10; then chapter 3 read to its end and chapter 4 opened and
+    /// left at its first page (nothing saved): «Continuar» opens chapter 4, not chapter 1.
+    @Test func continueGoesToTheLastChapterReadNotToAnOlderReread() async throws {
+        let c4 = AidokuRunner.Chapter(key: "c4", chapterNumber: 4)
+        let manga = manga("f1", [c4, c3, c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await complete(id(manga, c2))
+        await reread(id(manga, c1), page: 10, total: Self.pageCount)
+        try await Task.sleep(for: .milliseconds(1100))
+        await seed(id(manga, c3), page: Self.pageCount, total: Self.pageCount)
+        await complete(id(manga, c3))
+        let (_, next) = await MangaManager.shared.getNextChapter(mangaId: manga.identifier, fallbackChapters: [c4, c3, c2, c1])
+        #expect(next?.key == c4.key, "«Continuar» opens \(String(describing: next?.key))")
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 }
