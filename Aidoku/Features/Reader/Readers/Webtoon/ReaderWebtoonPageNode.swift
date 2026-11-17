@@ -56,6 +56,8 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
 
     private var pageLoadTask: Task<Void, Never>?
     private var measureTask: Task<Void, Never>?
+    /// Which measuring is the current one: a cancelled one that ends leaves the next one alone (SUWA-17 E2).
+    private var measureGeneration = 0
     private var imageTask: ImageTask?
     private var imageProcessingTask: Task<UIImage?, Never>?
 
@@ -170,6 +172,12 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     override func didExitPreloadState() {
         super.didExitPreloadState()
         cancelPageLoad()
+        // nor is it measured ahead any more unless the reader still wants it (one of the «pages to preload»
+        // ahead, further than Texture's range): its request would keep the server's slots in front of the pages
+        // coming (SUWA-17 E2)
+        if !(delegate?.wantsMeasure(self) ?? false) {
+            cancelMeasureAhead()
+        }
         // a page that leaves the preload range without having shown keeps no decoded image (it kept it until it
         // showed and went away): the decoded images stay those of Texture's ranges (SUWA-17 C)
         if !isInDisplayState, !isVisible, image != nil {
@@ -179,6 +187,8 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
 
     override func didEnterVisibleState() {
         super.didEnterVisibleState()
+        // on screen: its image before the ones ahead (SUWA-17 E2)
+        imageTask?.priority = .high
         displayPage()
     }
 
@@ -473,11 +483,13 @@ extension ReaderWebtoonPageNode {
             processors.append(UpscaleProcessor())
         }
 
-        let request = ImageRequest(
+        var request = ImageRequest(
             urlRequest: urlRequest,
             processors: processors,
             userInfo: [.processesKey: usePageProcessor]
         )
+        // the pages on screen first (SUWA-17 E2)
+        request.priority = isVisible ? .high : .normal
 
         // Store current image request for reload functionality
         self.currentImageRequest = request
@@ -654,9 +666,13 @@ extension ReaderWebtoonPageNode {
     func measureAhead() {
         guard !hasRealRatio, image == nil, text == nil, page.text == nil, measureTask == nil, let imageSettings else { return }
         guard !imageSettings.cropsBorders else { return }
+        measureGeneration += 1
+        let generation = measureGeneration
         measureTask = Task { [weak self] in
             guard let self else { return }
             let ratio = await self.headerRatio()
+            // cancelled (and maybe followed by another one): the current one is not this one
+            guard self.measureGeneration == generation else { return }
             self.measureTask = nil
             guard !Task.isCancelled, let ratio, !self.hasRealRatio else { return }
             self.ratio = ratio
@@ -671,7 +687,14 @@ extension ReaderWebtoonPageNode {
     /// Whether the page is measuring itself ahead now.
     var isMeasuringAhead: Bool { measureTask != nil }
 
+    /// Another chapter is opened: the page stops loading and being measured (SUWA-17 E2).
+    func stopLoading() {
+        cancelPageLoad()
+        cancelMeasureAhead()
+    }
+
     func cancelMeasureAhead() {
+        measureGeneration += 1
         measureTask?.cancel()
         measureTask = nil
     }
@@ -694,7 +717,10 @@ extension ReaderWebtoonPageNode {
         } else {
             URLRequest(url: url)
         }
-        guard !Task.isCancelled, let (data, _) = try? await ImagePipeline.shared.data(for: ImageRequest(urlRequest: urlRequest)) else {
+        // after the pages being loaded to show (SUWA-17 E2)
+        var request = ImageRequest(urlRequest: urlRequest)
+        request.priority = .low
+        guard !Task.isCancelled, let (data, _) = try? await ImagePipeline.shared.data(for: request) else {
             return nil
         }
         return PageSizeReader.ratio(data: data)

@@ -229,6 +229,15 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         )
     }
 
+    /// The pages the reader asked to measure themselves ahead and still wants measured: the ones that leave it
+    /// (left behind) stop (SUWA-17 E2).
+    private let measureWanted = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
+    nonisolated let measureWantedIDs = ReaderDecodeWindow()
+
+    nonisolated func wantsMeasure(_ node: ReaderWebtoonPageNode) -> Bool {
+        measureWantedIDs.contains(node)
+    }
+
     /// The same pages, to be asked from the pages' own callbacks.
     nonisolated let decodeWindowIDs = ReaderDecodeWindow()
 
@@ -298,8 +307,18 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             paths.append(previous)
             path = previous
         }
-        for path in paths {
-            (collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode)?.measureAhead()
+        let nodes = paths.compactMap { collectionNode.nodeForItem(at: $0) as? ReaderWebtoonPageNode }
+        // the ones no longer wanted (left behind) stop measuring
+        for node in measureWanted.allObjects where !nodes.contains(where: { $0 === node }) {
+            node.cancelMeasureAhead()
+        }
+        measureWanted.removeAllObjects()
+        for node in nodes {
+            measureWanted.add(node)
+        }
+        measureWantedIDs.set(nodes)
+        for node in nodes {
+            node.measureAhead()
         }
     }
 
@@ -1088,6 +1107,18 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func setChapter(_ chapter: AidokuRunner.Chapter, startPage: Int) {
+        // the pages of the chapters shown stop loading and being measured (SUWA-17 E2)
+        for (section, sectionPages) in pages.enumerated() {
+            for item in sectionPages.indices {
+                (collectionNode.nodeForItem(at: IndexPath(item: item, section: section)) as? ReaderWebtoonPageNode)?.stopLoading()
+            }
+        }
+        decodeWindow.removeAllObjects()
+        decodeLeaving.removeAllObjects()
+        decodeWindowIDs.set([])
+        measureWanted.removeAllObjects()
+        measureWantedIDs.set([])
+        measuredAheadFrom = nil
         self.chapter = chapter
         // a new chapter: its first page is reported even if it has the number the last one had
         pageReports.reset()
