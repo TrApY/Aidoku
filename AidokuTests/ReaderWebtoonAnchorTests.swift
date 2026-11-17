@@ -151,5 +151,53 @@ extension ImagePipelineSwappingTests {
         #expect(opened.reader.currentPage == 6)
         await opened.close()
     }
+
+    // MARK: - Paso 3: the layout puts the screen back on the anchor at every pass
+
+    /// Where the anchor's point is on the screen now, against where it should be (0 when it is in its place).
+    private func distanceFromTheAnchor(_ opened: Opened) throws -> CGFloat {
+        let webtoon = opened.webtoon
+        let anchor = try #require(webtoon.anchor, "no anchor")
+        let frame = try opened.frame(row: anchor.item)
+        let point = frame.minY + frame.height * anchor.fraction - webtoon.collectionNode.contentOffset.y
+        return point - anchor.screenFraction * webtoon.collectionNode.bounds.height
+    }
+
+    /// I2: the content moved without the user (UIKit, the zoom's scroll view): the next layout pass puts the
+    /// screen back on the anchor, and both scroll views agree (I9).
+    @Test func aMoveThatIsNotTheUsersIsUndoneAtTheNextLayout() async throws {
+        let opened = try await open(mangaKey: "anclasiguiente", startPage: 5)
+        try userScrolls(opened, toRow: 7, at: 0.3)
+        try await Task.sleep(for: .milliseconds(500))
+        let before = try #require(opened.webtoon.anchor)
+        let scrollView = opened.webtoon.scrollView
+        scrollView.setContentOffset(CGPoint(x: 0, y: scrollView.contentOffset.y + 700), animated: false)
+        opened.webtoon.collectionNode.collectionViewLayout.invalidateLayout()
+        opened.webtoon.collectionNode.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(opened.webtoon.anchor == before)
+        let distance = try distanceFromTheAnchor(opened)
+        #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
+        #expect(abs(scrollView.contentOffset.y - opened.webtoon.collectionNode.contentOffset.y) < 0.5)
+        await opened.close()
+    }
+
+    /// I8: a memory warning lets go of the images but not of the heights: the anchor and the screen stay. Born
+    /// green: it protects what the reader already does.
+    @Test func releasingTheImagesKeepsTheAnchor() async throws {
+        let opened = try await open(mangaKey: "anclamemoria", startPage: 5)
+        try userScrolls(opened, toRow: 9, at: 0.6)
+        try await Task.sleep(for: .milliseconds(500))
+        let before = try #require(opened.webtoon.anchor)
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        try await Task.sleep(for: .seconds(1))
+        opened.webtoon.collectionNode.collectionViewLayout.invalidateLayout()
+        opened.webtoon.collectionNode.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(opened.webtoon.anchor == before)
+        let distance = try distanceFromTheAnchor(opened)
+        #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
+        await opened.close()
+    }
 }
 }
