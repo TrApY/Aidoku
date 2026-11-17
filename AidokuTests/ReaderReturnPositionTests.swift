@@ -234,3 +234,55 @@ extension ReaderReturnPositionTests {
         await opened.close()
     }
 }
+
+// MARK: - D3: leaving the reader
+extension ReaderReturnPositionTests {
+    /// Opened at page 10 and left without moving: nothing is written (another device, through iCloud, may have
+    /// saved a newer page meanwhile).
+    @Test func leavingAtTheOpeningPageWritesNothing() async throws {
+        let manga = manga("salirsintocar", [c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await seed(id(manga, c1), page: 10, total: 38)
+        let reader = await pagedOpened(manga, on: c1)
+        try #require(reader.currentPage == 10, "opened at \(reader.currentPage)")
+        // the other device's newer page comes in
+        await seed(id(manga, c1), page: 15, total: 38)
+        reader.viewWillDisappear(false)
+        try await Task.sleep(for: .seconds(1))
+        #expect(await stored(id(manga, c1))?.progress == 15)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+
+    /// Opened at page 10, back to page 5 and left at once: page 5 is written.
+    @Test func leavingAfterMovingWritesThePage() async throws {
+        let manga = manga("salirmoviendo", [c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await seed(id(manga, c1), page: 10, total: 38)
+        let reader = await pagedOpened(manga, on: c1)
+        try #require(reader.currentPage == 10, "opened at \(reader.currentPage)")
+        reader.setCurrentPage(5, position: nil)
+        reader.viewWillDisappear(false)
+        try await Task.sleep(for: .seconds(1))
+        #expect(await stored(id(manga, c1))?.progress == 5)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+
+    /// The chapter changes by scrolling (no chapterOpened there): the page saved on the way out is the last one
+    /// saved, so coming back to the opening page is a change and is saved.
+    @Test func afterAChapterChangeTheSavedPageIsTheLastOneSaved() async throws {
+        let manga = manga("cambio", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await seed(id(manga, c2), page: 10, total: 38)
+        let reader = await pagedOpened(manga, on: c2)
+        try #require(reader.currentPage == 10, "opened at \(reader.currentPage)")
+        reader.setCurrentPage(11, position: nil)
+        // up into chapter 1 and straight back down (the readers tell both)
+        reader.setChapter(c1)
+        reader.setChapter(c2)
+        reader.setPages(pages(manga, c2))
+        reader.setCurrentPage(10, position: nil)
+        try await Task.sleep(for: .seconds(3))
+        #expect(await stored(id(manga, c2))?.progress == 10)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
