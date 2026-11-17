@@ -44,7 +44,8 @@ class ReaderViewController: BaseObservingViewController {
         }
     }
     /// The chapters whose last page the user reached in this reader, with the app in front: changing chapter
-    /// completes only the chapter being read, and only if it is one of these (SUWA-17 C1).
+    /// completes only the chapter being read, and only if it is one of these (SUWA-17 C1). Only in the current
+    /// visit: emptied on every chapter change (SUWA-17 D6).
     private var lastPageSeenChapters: Set<String> = []
     /// The chapters this reader already tried to complete: once each (entering the transition and then going
     /// on to the next chapter is one completion, not two; SUWA-17 C2).
@@ -1273,6 +1274,8 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             sessionLastInteraction = nil
         }
 
+        // the last page seen counts for this visit of the chapter only
+        lastPageSeenChapters.removeAll()
         // back to an earlier chapter (the list is the source's, newest first) by scrolling: entered from below
         let fromIndex = chapterList.firstIndex(of: oldChapter)
         let toIndex = chapterList.firstIndex(of: chapter)
