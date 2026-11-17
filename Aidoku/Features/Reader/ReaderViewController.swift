@@ -486,10 +486,22 @@ class ReaderViewController: BaseObservingViewController {
             }
         }
 
-        readPositionSaver.cancel()
-        guard currentPage >= 1 else { return }
+        guard currentPage >= 1 else {
+            readPositionSaver.cancel()
+            return
+        }
+        // only a page the user moved to and that is not saved yet: the opening page (or one already saved) is not
+        // written again, so leaving does not write over a newer page another device saved (iCloud; SUWA-17 D3)
+        let needsSave = readPositionSaver.claimImmediateSave(
+            pageKey: ReadPosition.pageKey(chapter: chapter, page: currentPage, position: currentPosition),
+            trackerKey: ReadPosition.pageKey(chapter: chapter, page: currentPage, position: nil)
+        )
         Task {
-            await updateReadPosition()
+            if needsSave {
+                await updateReadPosition()
+            } else if !AppSettings.general.incognitoMode.get() {
+                await saveReadingSession()
+            }
         }
     }
 
@@ -1222,15 +1234,24 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             }
         }
 
-        // the old chapter is saved right away below; nothing delayed may write it later
-        readPositionSaver.cancel()
+        // the old chapter is saved right away below, unless it is at the page it opened at or was saved at (another
+        // device may have saved a newer one); nothing delayed may write it later, and from now on the saver knows this
+        // page as saved (a chapter change by scrolling has no chapterOpened: what it knew was the old opening page)
+        let needsSave = readPositionSaver.claimImmediateSave(
+            pageKey: ReadPosition.pageKey(chapter: self.chapter, page: currentPage, position: currentPosition),
+            trackerKey: ReadPosition.pageKey(chapter: self.chapter, page: currentPage, position: nil)
+        )
 
         // store current history data since it will change when new chapter loads
         let currentPage = currentPage
         let totalPages = toolbarView.totalPages
         let oldChapter = self.chapter
         Task { [manga, leftCompleted] in
-            await updateReadPosition(currentPage: currentPage, totalPages: totalPages, chapter: oldChapter)
+            if needsSave {
+                await updateReadPosition(currentPage: currentPage, totalPages: totalPages, chapter: oldChapter)
+            } else if !AppSettings.general.incognitoMode.get() {
+                await saveReadingSession(chapter: oldChapter)
+            }
             if let leftCompleted {
                 await HistoryManager.shared.addHistory(mangaId: manga.identifier, chapters: leftCompleted.chapters, reason: leftCompleted.reason)
             }
