@@ -667,3 +667,45 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-19 paso 5: the chapter is the anchor's
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// The user goes into chapter 1: the anchor and the reader are in it. The content then moves into chapter 2
+    /// without the user (a layout, UIKit): neither the anchor nor the chapter change, and the screen is back on it.
+    @Test func theChapterIsTheAnchorsChapter() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "capituloancla", page: 3, width: 402, height: 874)
+        let page = try frame(opened, row: 5, section: 0)
+        drag(opened, middleAt: page.midY)
+        try await Task.sleep(for: .seconds(2))
+        #expect(opened.webtoon.anchor?.chapterKey == "c1")
+        #expect(opened.chapterKey == "c1")
+        let second = try frame(opened, row: 3, section: 1)
+        let height = opened.webtoon.collectionNode.bounds.height
+        opened.webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: second.midY - height / 2), animated: false)
+        try await Task.sleep(for: .seconds(1))
+        #expect(opened.webtoon.anchor?.chapterKey == "c1")
+        #expect(opened.chapterKey == "c1")
+        #expect(opened.middle?.section == 0, "the screen is not back in chapter 1: \(String(describing: opened.middle))")
+        await opened.close()
+    }
+
+    /// During a drag, a layout pass that moves the content (cells growing above) is not the user going up or
+    /// down inside the chapter: only the anchor moving is (before, the offset's change was).
+    @Test func aLayoutPassDuringADragIsNotMovingInsideTheChapter() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "arrastrelayout", page: 3, width: 402, height: 874)
+        let webtoon = opened.webtoon
+        try userScrolls(opened, toRow: 4, section: opened.lastSection)
+        try await Task.sleep(for: .seconds(1))
+        let before = try #require(webtoon.anchor, "no anchor")
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.collectionNode.collectionViewLayout.invalidateLayout()
+        webtoon.collectionNode.view.layoutIfNeeded()
+        webtoon.scrollViewDidScroll(webtoon.scrollView)
+        let after = try #require(webtoon.anchor, "no anchor")
+        #expect(after.chapterKey == before.chapterKey && after.item == before.item, "\(before) → \(after)")
+        #expect(abs(after.fraction - before.fraction) < 0.001, "\(before) → \(after)")
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+        #expect(opened.chapterKey == "c2")
+        await opened.close()
+    }
+}
