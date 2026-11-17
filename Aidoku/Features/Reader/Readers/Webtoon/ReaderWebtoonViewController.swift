@@ -61,8 +61,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private var isScrolling = false
     // Indicates if an info refresh should be done if info pages are off screen
     private var needsInfoRefresh = false
-    // How many size transitions haven't completed yet, so overlapping ones share the first anchor (upstream #1116)
-    private var pendingSizeTransitions = 0
+    /// The screen is being put on the anchor (its own scrolls are not the user's nor to be put back).
+    private var applyingAnchor = false
     private(set) var isContentScrolling = false {
         didSet {
             guard isContentScrolling != oldValue else { return }
@@ -91,9 +91,6 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private var userIsScrolling = false
     /// Turning a page (tap, key): its scroll may take the reader into another chapter (SUWA-17 H).
     private var turningPage = false
-    /// Out of front: the page in the middle of the screen when the app left, where in it the middle was and the
-    /// layout's width changes then; back in front after the width changed, it is put back (SUWA-17 H).
-    private var leftFront: (chapter: AidokuRunner.Chapter, item: Int, fraction: CGFloat, widthChanges: Int)?
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -615,18 +612,6 @@ extension ReaderWebtoonViewController {
             let chapterIndex = chapters.firstIndex(of: chapter)
         else { return }
 
-        // UIKit scales the offset by the content's size right after a width change, on top of the layout keeping
-        // the middle page: back to where the layout put it (SUWA-17 H)
-        if
-            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
-            let kept = layout.widthChangeOffset,
-            abs(collectionNode.contentOffset.y - kept.y) > 0.5
-        {
-            collectionNode.contentOffset = kept
-            self.scrollView.contentOffset = kept
-            return
-        }
-
         let pagePath = getCurrentPagePath()
 
         // The chapter changes only when the user moves the content (dragging and its deceleration, the auto
@@ -635,9 +620,12 @@ extension ReaderWebtoonViewController {
         // Stage Manager), nor by nothing being in the middle (that was section 0) (SUWA-17 H)
         let movedByUser = userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
             || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage
-        // only the user moves the anchor (SUWA-19)
+        // only the user moves the anchor (SUWA-19); the content moved by anything else (UIKit scaling the offset after
+        // a width change, the zoom's scroll view putting back an old offset, a layout) goes back on it (D5)
         if movedByUser {
             writeAnchorFromScreen()
+        } else if !applyingAnchor, !zoomView.isAnimatingZoom, applyAnchor() {
+            return
         }
         if infinite, let pageSection = pagePath?.section, movedByUser, delegate?.appActivity.isActive ?? true {
             // check if we need to switch chapters
@@ -697,18 +685,11 @@ extension ReaderWebtoonViewController {
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
-        // Stop active scroll deceleration before capturing the rotation anchor.
+        // Stop active scroll deceleration: the anchor is where the user was (SUWA-19; it is not taken here, so two
+        // transitions one on top of the other keep the same one, as upstream #1116 wanted)
         let offset = scrollView.contentOffset
         scrollView.setContentOffset(offset, animated: false)
         collectionNode.contentOffset = offset
-
-        let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout
-        // a transition that starts before the last one completes would capture an in-between position
-        // (switching apps on iPhone Duo resizes twice in quick succession)
-        if pendingSizeTransitions == 0 {
-            layout?.preserveVisiblePosition()
-        }
-        pendingSizeTransitions += 1
 
         super.viewWillTransition(to: size, with: coordinator)
 
@@ -724,17 +705,11 @@ extension ReaderWebtoonViewController {
         } completion: { [weak self] _ in
             guard let self else { return }
 
-            // restore the anchor against the final bounds, rather than relying on the collection view
-            // to have asked for a target offset (it may not, or may ask before the size settles)
+            // on the anchor against the final bounds, rather than relying on the collection view to have asked for a
+            // target offset (it may not, or may ask before the size settles)
             collectionNode.view.layoutIfNeeded()
-            let offset = layout?.preservedContentOffset() ?? collectionNode.contentOffset
-            pendingSizeTransitions -= 1
-            if pendingSizeTransitions == 0 {
-                layout?.clearPreservedPosition()
-            }
             zoomView.adjustContentSize()
-            scrollView.contentOffset = offset
-            collectionNode.contentOffset = offset
+            applyAnchor()
         }
     }
 }
@@ -1147,37 +1122,33 @@ extension ReaderWebtoonViewController {
     }
 
     /// The app going out of front and coming back (SUWA-17 H). Out of front, iPadOS lays the app out again at
-    /// other sizes (the app switcher, Stage Manager, a window): back in front after the width changed, the page
-    /// that was in the middle of the screen is put back there, at the same place inside it.
+    /// other sizes (the app switcher, Stage Manager, a window) and the anchor does not move (only the user moves
+    /// it, with the app in front): back in front, the screen is put on it (SUWA-19).
     func appActivityChanged(active: Bool) {
-        guard let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout else { return }
-        guard active else {
-            guard
-                let path = getCurrentPagePath(),
-                let chapter = chapters[safe: path.section],
-                let frame = layout.layoutAttributesForItem(at: path)?.frame, frame.height > 0
-            else {
-                leftFront = nil
-                return
-            }
-            let middle = collectionNode.contentOffset.y + collectionNode.bounds.height / 2
-            leftFront = (chapter, path.item, (middle - frame.minY) / frame.height, layout.widthChanges)
-            return
-        }
-        guard let left = leftFront else { return }
-        leftFront = nil
+        guard active else { return }
+        collectionNode.view.layoutIfNeeded()
+        applyAnchor()
+    }
+
+    /// Puts the screen (both scroll views) where the anchor goes with the layout as it is. False if it was there
+    /// already or there is no anchor to put it on.
+    @discardableResult
+    func applyAnchor() -> Bool {
         guard
-            left.widthChanges != layout.widthChanges,
-            let section = chapters.firstIndex(of: left.chapter),
-            let frame = layout.layoutAttributesForItem(at: IndexPath(item: left.item, section: section))?.frame
-        else { return }
+            !applyingAnchor,
+            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
+            let target = layout.anchorOffset()
+        else { return false }
+        guard abs(target.y - collectionNode.contentOffset.y) > 0.5 || abs(target.y - scrollView.contentOffset.y) > 0.5 else {
+            return false
+        }
+        applyingAnchor = true
+        defer { applyingAnchor = false }
         zoomView.adjustContentSize()
-        let height = collectionNode.bounds.height
-        let maxY = max(0, layout.collectionViewContentSize.height - height)
-        let y = min(max(frame.minY + frame.height * left.fraction - height / 2, 0), maxY)
-        guard abs(y - collectionNode.contentOffset.y) > 0.5 else { return }
-        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: y), animated: false)
-        collectionNode.contentOffset = scrollView.contentOffset
+        let offset = CGPoint(x: scrollView.contentOffset.x, y: target.y)
+        scrollView.setContentOffset(offset, animated: false)
+        collectionNode.contentOffset = offset
+        return true
     }
 
     /// How far the top of the screen is into the current chapter's section.

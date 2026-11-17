@@ -538,8 +538,10 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
 
 // MARK: - SUWA-18 U2 (upstream #1116): the rotation anchor follows its page
 extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
-    /// The anchor of a size transition is taken in chapter 2's page 3; before the transition ends, chapter 1 goes
-    /// in above: the anchor is still chapter 2's page 3 (now in the second section), not page 3 of chapter 1.
+    /// The user goes up to the start of chapter 2 and the anchor is there; chapter 1 goes in above: the anchor is
+    /// still chapter 2's item (now in the second section), not chapter 1's. SUWA-19: the reader's anchor is by
+    /// chapter, and it is what a size transition puts back (before, the layout's own anchor from #1116, by node,
+    /// taken in chapter 2's page 3)
     @Test func theTransitionAnchorFollowsItsPageWhenAChapterGoesInAbove() async throws {
         let opened = try await open(mangaKey: "anclanodo", startPage: 2)
         let webtoon = opened.webtoon
@@ -548,18 +550,20 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         try await Task.sleep(for: .seconds(2))
         try #require(opened.lastSection == 0 && opened.middle == IndexPath(row: 3, section: 0),
                      "not at chapter 2's page 3: \(String(describing: opened.middle))")
-        layout.preserveVisiblePosition()
         try userScrolls(opened, toRow: 0, section: 0)
+        let anchor = try #require(webtoon.anchor, "no anchor")
+        try #require(anchor.chapterKey == "c2" && anchor.item == 0, "the anchor is not chapter 2's start: \(anchor)")
         try await waitForThePreviousChapter(opened)
         try #require(opened.lastSection == 1, "chapter 1 did not go in above")
-        let offset = layout.preservedContentOffset()
-        layout.clearPreservedPosition()
-        let middle = offset.map { $0.y + webtoon.collectionNode.bounds.height / 2 }
+        #expect(webtoon.anchor?.chapterKey == "c2" && webtoon.anchor?.item == 0, "the anchor moved: \(String(describing: webtoon.anchor))")
+        let offset = layout.anchorOffset()
+        let target = try #require(webtoon.anchor)
+        let middle = offset.map { $0.y + webtoon.collectionNode.bounds.height * target.screenFraction }
         let path = middle.flatMap { y in
             layout.layoutAttributesForElements(in: CGRect(x: 0, y: y, width: 1, height: 1))?
                 .first { $0.representedElementCategory == .cell }?.indexPath
         }
-        #expect(path == IndexPath(row: 3, section: 1), "the anchor points at \(String(describing: path))")
+        #expect(path == IndexPath(row: 0, section: 1), "the anchor points at \(String(describing: path))")
         await opened.close()
     }
 }
