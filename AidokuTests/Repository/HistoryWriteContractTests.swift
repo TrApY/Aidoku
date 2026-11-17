@@ -27,10 +27,11 @@ import Testing
 
     private func date(_ seconds: Double) -> Date { Date(timeIntervalSinceReferenceDate: seconds) }
 
-    /// within a few seconds of now
+    /// within a minute of now: the dates seeded are from 2001, and under the whole suite's load the first write
+    /// of a fresh Core Data store has taken 6 and 11 s (SUWA-17 H)
     private func isNow(_ date: Date?) -> Bool {
         guard let date else { return false }
-        return abs(date.timeIntervalSinceNow) < 5
+        return abs(date.timeIntervalSinceNow) < 60
     }
 
     // MARK: - savePage (SUWA-7)
