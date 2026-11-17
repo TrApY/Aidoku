@@ -361,6 +361,10 @@ class ReaderViewController: BaseObservingViewController {
     }
 
     override func observe() {
+        // out of front and back: the webtoon puts back the page being read if the window's width changed (SUWA-17 H)
+        appActivity.onChange { [weak self] active in
+            (self?.reader as? ReaderWebtoonViewController)?.appActivityChanged(active: active)
+        }
         addObserver(forName: "Reader.readingMode.\(manga.identifier)") { [weak self] _ in
             guard let self else { return }
             self.setReadingMode(UserDefaults.standard.string(forKey: "Reader.readingMode.\(self.manga.identifier)"))

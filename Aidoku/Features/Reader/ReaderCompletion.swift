@@ -79,18 +79,35 @@ final class ReaderAppActivity: @unchecked Sendable {
     private(set) var isActive: Bool
     private let center: NotificationCenter
     private var observers: [NSObjectProtocol] = []
+    private var handlers: [@MainActor @Sendable (Bool) -> Void] = []
 
     init(center: NotificationCenter = .default, active: Bool) {
         self.center = center
         self.isActive = active
         for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
-                self?.isActive = false
+                self?.set(false)
             })
         }
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
-            self?.isActive = true
+            self?.set(true)
         })
+    }
+
+    /// `handler` hears, on the main thread, the app going out of front and coming back (SUWA-17 H).
+    func onChange(_ handler: @escaping @MainActor @Sendable (Bool) -> Void) {
+        handlers.append(handler)
+    }
+
+    private func set(_ active: Bool) {
+        guard active != isActive else { return }
+        isActive = active
+        let handlers = handlers
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { handlers.forEach { $0(active) } }
+        } else {
+            Task { @MainActor in handlers.forEach { $0(active) } }
+        }
     }
 
     deinit {

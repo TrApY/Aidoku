@@ -86,6 +86,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private var lastScrollOffset: CGFloat = 0
     /// The user is dragging the content, or it decelerates after their drag: not the layout moving it (SUWA-17 G2).
     private var userIsScrolling = false
+    /// Turning a page (tap, key): its scroll may take the reader into another chapter (SUWA-17 H).
+    private var turningPage = false
+    /// Out of front: the page in the middle of the screen when the app left, where in it the middle was and the
+    /// layout's width changes then; back in front after the width changed, it is put back (SUWA-17 H).
+    private var leftFront: (chapter: AidokuRunner.Chapter, item: Int, fraction: CGFloat, widthChanges: Int)?
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -502,6 +507,7 @@ extension ReaderWebtoonViewController {
 extension ReaderWebtoonViewController {
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         userIsScrolling = true
+        turningPage = false
         openingPageHold = nil
         super.scrollViewWillBeginDragging(scrollView)
         restorePreloadRange()
@@ -524,10 +530,27 @@ extension ReaderWebtoonViewController {
             let chapterIndex = chapters.firstIndex(of: chapter)
         else { return }
 
-        let pagePath = getCurrentPagePath()
-        let pageSection = pagePath?.section ?? 0
+        // UIKit scales the offset by the content's size right after a width change, on top of the layout keeping
+        // the middle page: back to where the layout put it (SUWA-17 H)
+        if
+            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
+            let kept = layout.widthChangeOffset,
+            abs(collectionNode.contentOffset.y - kept.y) > 0.5
+        {
+            collectionNode.contentOffset = kept
+            self.scrollView.contentOffset = kept
+            return
+        }
 
-        if infinite {
+        let pagePath = getCurrentPagePath()
+
+        // The chapter changes only when the user moves the content (dragging and its deceleration, the auto
+        // scroll, turning a page), with the app in front and a page in the middle of the screen: never by a layout
+        // pass (the window's width changing: iPadOS lays the app out again out of front, for the app switcher or
+        // Stage Manager), nor by nothing being in the middle (that was section 0) (SUWA-17 H)
+        let movedByUser = userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
+            || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage
+        if infinite, let pageSection = pagePath?.section, movedByUser, delegate?.appActivity.isActive ?? true {
             // check if we need to switch chapters
             if chapterIndex > 0 && pageSection < chapterIndex {
                 movePreviousChapter()
@@ -564,9 +587,8 @@ extension ReaderWebtoonViewController {
             }
         }
 
-        // update page number (the opening page until the user moves)
-        let page = openingPageHold ?? getCurrentPage()
-        if pageReports.shouldReport(page) {
+        // update page number (the opening page until the user moves); nothing in the middle of the screen: no page
+        if let page = openingPageHold ?? (pagePath == nil ? nil : getCurrentPage()), pageReports.shouldReport(page) {
             delegate?.setCurrentPage(page, position: nil)
         }
         measureAhead()
@@ -796,6 +818,7 @@ extension ReaderWebtoonViewController {
     }
 
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        turningPage = false
         setLiveTextButtonHidden(false)
         if infinite {
             isScrolling = false
@@ -1028,6 +1051,40 @@ extension ReaderWebtoonViewController {
         wentUpInside = nil
     }
 
+    /// The app going out of front and coming back (SUWA-17 H). Out of front, iPadOS lays the app out again at
+    /// other sizes (the app switcher, Stage Manager, a window): back in front after the width changed, the page
+    /// that was in the middle of the screen is put back there, at the same place inside it.
+    func appActivityChanged(active: Bool) {
+        guard let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout else { return }
+        guard active else {
+            guard
+                let path = getCurrentPagePath(),
+                let chapter = chapters[safe: path.section],
+                let frame = layout.layoutAttributesForItem(at: path)?.frame, frame.height > 0
+            else {
+                leftFront = nil
+                return
+            }
+            let middle = collectionNode.contentOffset.y + collectionNode.bounds.height / 2
+            leftFront = (chapter, path.item, (middle - frame.minY) / frame.height, layout.widthChanges)
+            return
+        }
+        guard let left = leftFront else { return }
+        leftFront = nil
+        guard
+            left.widthChanges != layout.widthChanges,
+            let section = chapters.firstIndex(of: left.chapter),
+            let frame = layout.layoutAttributesForItem(at: IndexPath(item: left.item, section: section))?.frame
+        else { return }
+        zoomView.adjustContentSize()
+        let height = collectionNode.bounds.height
+        let maxY = max(0, layout.collectionViewContentSize.height - height)
+        let y = min(max(frame.minY + frame.height * left.fraction - height / 2, 0), maxY)
+        guard abs(y - collectionNode.contentOffset.y) > 0.5 else { return }
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: y), animated: false)
+        collectionNode.contentOffset = scrollView.contentOffset
+    }
+
     /// How far the top of the screen is into the current chapter's section.
     private func offsetIntoChapter() -> CGFloat? {
         guard
@@ -1089,10 +1146,12 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 collectionNode.contentOffset.y - collectionNode.bounds.height * 2/3
             )
         )
-        scrollView.setContentOffset(
-            offset,
-            animated: UserDefaults.standard.bool(forKey: "Reader.animatePageTransitions")
-        )
+        let animated = UserDefaults.standard.bool(forKey: "Reader.animatePageTransitions")
+        turningPage = offset != scrollView.contentOffset
+        scrollView.setContentOffset(offset, animated: animated)
+        if !animated {
+            turningPage = false
+        }
     }
 
     func moveRight() {
@@ -1104,10 +1163,12 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 collectionNode.contentOffset.y + collectionNode.bounds.height * 2/3
             )
         )
-        scrollView.setContentOffset(
-            offset,
-            animated: UserDefaults.standard.bool(forKey: "Reader.animatePageTransitions")
-        )
+        let animated = UserDefaults.standard.bool(forKey: "Reader.animatePageTransitions")
+        turningPage = offset != scrollView.contentOffset
+        scrollView.setContentOffset(offset, animated: animated)
+        if !animated {
+            turningPage = false
+        }
     }
 
     func sliderMoved(value: CGFloat) {

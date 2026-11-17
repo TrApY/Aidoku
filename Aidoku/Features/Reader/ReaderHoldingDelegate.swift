@@ -10,6 +10,8 @@ import AidokuRunner
 
 protocol ReaderHoldingDelegate: AnyObject {
     var barsHidden: Bool { get }
+    /// The app in front for the reader (SUWA-12 I1): the webtoon changes chapter by scrolling only then (SUWA-17 H).
+    var appActivity: ReaderAppActivity { get }
 
     func hideBars()
 

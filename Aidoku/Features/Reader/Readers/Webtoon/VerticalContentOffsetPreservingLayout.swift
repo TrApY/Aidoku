@@ -46,6 +46,46 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
     private var preservedViewportAnchor: ViewportAnchor?
 
+    /// Width changes of the layout so far (SUWA-17 H).
+    private(set) var widthChanges = 0
+
+    /// The cell in the middle of the screen and where in it the middle is (0 its top, 1 its bottom).
+    private struct MiddleAnchor {
+        let indexPath: IndexPath
+        let identifier: AnyHashable?
+        let fraction: CGFloat
+    }
+
+    /// The middle of the screen right before the width changes (SUWA-17 H).
+    private var widthChangeAnchor: MiddleAnchor?
+    /// The offset that keeps the middle page after the width changed, until the end of this pass: UIKit then
+    /// scales the offset by the content's size on top of it, and the webtoon puts it back (SUWA-17 H).
+    private(set) var widthChangeOffset: CGPoint?
+
+    private func middleAnchor(in bounds: CGRect) -> MiddleAnchor? {
+        let middleY = bounds.midY
+        guard
+            let attributes = currentAttributes.values.first(where: { $0.frame.minY <= middleY && $0.frame.maxY > middleY }),
+            attributes.frame.height > 0
+        else { return nil }
+        return MiddleAnchor(
+            indexPath: attributes.indexPath,
+            identifier: itemIdentifiers[attributes.indexPath],
+            fraction: (middleY - attributes.frame.minY) / attributes.frame.height
+        )
+    }
+
+    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool {
+        guard let collectionView, newBounds.width != collectionView.bounds.width else {
+            return super.shouldInvalidateLayout(forBoundsChange: newBounds)
+        }
+        // the width is about to change: the middle of the screen as it is now (SUWA-17 H)
+        if widthChangeAnchor == nil {
+            widthChangeAnchor = middleAnchor(in: collectionView.bounds)
+        }
+        return true
+    }
+
     func preserveVisiblePosition() {
         guard let collectionView else { return }
 
@@ -99,9 +139,24 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         // when only its bottom showed and it grew, everything under it slid down by its growth (into the previous
         // chapter, SUWA-17); and a growing cell asked after the pass that applied its growth (SUWA-16)
         let sameGeometry = !currentAttributes.isEmpty && lastWidth == collectionView.bounds.size.width && lastScale == scale
+        // The width changing with nothing else asked (iPadOS lays the app out again at other sizes: the app
+        // switcher, Stage Manager, a window; a rotation has its own anchor from viewWillTransition): every height
+        // is the width times its ratio, so the same offset would be another page, or another chapter. The page in
+        // the middle of the screen stays there, at the same place inside it, and that is all: not the anchor of
+        // the cells above (all of them change, and say so as they lay out again for the new width), nor UIKit
+        // scaling the offset by the content's size on top of it (SUWA-17 H)
+        let widthChanged = !currentAttributes.isEmpty && lastWidth != collectionView.bounds.size.width
+        let proportional = widthChanged && lastScale == scale && preservedViewportAnchor == nil
+            ? widthChangeAnchor ?? middleAnchor(in: collectionView.bounds)
+            : nil
+        widthChangeAnchor = nil
+        widthChangeOffset = nil
+        if widthChanged {
+            widthChanges += 1
+        }
         let middleY = collectionView.contentOffset.y + collectionView.bounds.size.height / 2
         let middleCell = currentAttributes.values.first { $0.frame.minY <= middleY && $0.frame.maxY > middleY }
-        let anchor = isChangingCellsAbove || sameGeometry ? middleCell ?? currentAttributes.values
+        let anchor = proportional == nil && (isChangingCellsAbove || sameGeometry) ? middleCell ?? currentAttributes.values
             .filter { $0.frame.maxY > collectionView.contentOffset.y }
             .min { $0.frame.minY < $1.frame.minY } : nil
         let anchorPath = anchor?.indexPath
@@ -164,6 +219,29 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         lastWidth = width
         lastScale = scale
         itemCounts = (0..<collectionView.numberOfSections).map { collectionView.numberOfItems(inSection: $0) }
+
+        if
+            let proportional,
+            let path = proportional.identifier.flatMap({ identifier in
+                itemIdentifiers.first(where: { $0.value == identifier })?.key
+            }) ?? (oldItemCounts == itemCounts ? proportional.indexPath : nil),
+            let frame = currentAttributes[path]?.frame, frame.height > 0
+        {
+            let height = collectionView.bounds.size.height
+            let maxY = max(0, contentSize.height - height)
+            let y = min(max(frame.minY + frame.height * proportional.fraction - height / 2, 0), maxY)
+            let offset = CGPoint(x: collectionView.contentOffset.x, y: y)
+            widthChangeOffset = offset
+            Task { @MainActor [weak self] in
+                self?.widthChangeOffset = nil
+            }
+            if abs(y - collectionView.contentOffset.y) > 0.01 {
+                UIView.performWithoutAnimation {
+                    collectionView.contentOffset = offset
+                    onOffsetPreserved?(offset)
+                }
+            }
+        }
 
         // Only movement of the anchor counts, not resizing of cells; and the scroll view is left alone when
         // there is nothing to make up for (every pass set its offset and content size, also while pinching)
@@ -231,6 +309,10 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
     }
 
     override func targetContentOffset(forProposedContentOffset proposedContentOffset: CGPoint) -> CGPoint {
+        // right after a width change, the offset that keeps the middle page (SUWA-17 H)
+        if let offset = widthChangeOffset {
+            return offset
+        }
         guard
             let collectionView,
             let anchor = preservedViewportAnchor,
