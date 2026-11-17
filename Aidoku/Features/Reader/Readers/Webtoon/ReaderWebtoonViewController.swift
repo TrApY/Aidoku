@@ -178,7 +178,10 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         }
         // a double tap's zoom is the user moving; the layout puts the screen on the anchor (SUWA-19)
         zoomView.onZoomAnimationEnded = { [weak self] in
-            self?.writeAnchorFromScreen()
+            guard let self else { return }
+            self.writeAnchorFromScreen()
+            // the chapter follows the anchor now, not at the next scroll event (hallazgo 5)
+            self.scrollViewDidScroll(self.collectionNode.view)
         }
         (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.anchorTarget = { [weak self] in
             self?.anchorTarget()
