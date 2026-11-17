@@ -408,8 +408,10 @@ extension ReaderWebtoonPageNode {
     private func startPageLoad() {
         guard pageLoadTask == nil, image == nil, text == nil, mayDecode else { return }
 
-        pageLoadTask = Task { [weak self] in
-            guard let self else { return }
+        // on the main thread, as the measuring (SUWA-17 E3): the image and the page's state change there
+        let weakNode = WeakPageNode(self)
+        pageLoadTask = Task { @MainActor in
+            guard let self = weakNode.node else { return }
             await self.loadPage()
             self.pageLoadTask = nil
         }
@@ -426,6 +428,7 @@ extension ReaderWebtoonPageNode {
         imageProcessingTask = nil
     }
 
+    @MainActor
     func loadPage() async {
         guard image == nil, text == nil, !Task.isCancelled else { return }
 
@@ -452,6 +455,7 @@ extension ReaderWebtoonPageNode {
         }
     }
 
+    @MainActor
     private func loadImage(url: URL, context: PageContext?) async {
         let urlRequest = if !url.isFileURL, let source {
             await source.getModifiedImageRequest(url: url, context: context)
@@ -478,7 +482,7 @@ extension ReaderWebtoonPageNode {
             processors.append(CropBordersProcessor())
         }
         if shouldDownsample {
-            processors.append(await DownsampleProcessor(width: width))
+            processors.append(DownsampleProcessor(width: width))
         } else if shouldUpscale {
             processors.append(UpscaleProcessor())
         }
@@ -544,10 +548,11 @@ extension ReaderWebtoonPageNode {
             }
 
             // TODO: handle failure
-            await self.progressView.setProgress(value: 0, withAnimation: true)
+            self.progressView.setProgress(value: 0, withAnimation: true)
         }
     }
 
+    @MainActor
     private func loadImage(base64: String) async {
         let fullKey = "\(page.key)-\(ImageProcessingSettingsKey.getProcessorSettingsKey())"
         let request = ImageRequest(
@@ -612,6 +617,7 @@ extension ReaderWebtoonPageNode {
         imageArrived()
     }
 
+    @MainActor
     private func loadImage(zipURL: URL, filePath: String) async {
         guard let extractedURL = await self.temporaryPageStore.storeArchiveEntry(
             from: zipURL,
@@ -668,8 +674,11 @@ extension ReaderWebtoonPageNode {
         guard !imageSettings.cropsBorders else { return }
         measureGeneration += 1
         let generation = measureGeneration
-        measureTask = Task { [weak self] in
-            guard let self else { return }
+        // on the main thread: it changes the page's state and its layout (SUWA-17 E3); the reading of the header
+        // is done elsewhere (headerRatio)
+        let weakNode = WeakPageNode(self)
+        measureTask = Task { @MainActor in
+            guard let self = weakNode.node else { return }
             let ratio = await self.headerRatio()
             // cancelled (and maybe followed by another one): the current one is not this one
             guard self.measureGeneration == generation else { return }
@@ -703,6 +712,7 @@ extension ReaderWebtoonPageNode {
         measureTask = nil
     }
 
+    @MainActor
     private func headerRatio() async -> CGFloat? {
         if let zipURL = page.zipURL, let url = URL(string: zipURL), let filePath = page.imageURL {
             guard let file = await temporaryPageStore.storeArchiveEntry(from: url, path: filePath) else { return nil }
@@ -971,5 +981,14 @@ extension ReaderWebtoonPageNode {
             let request = ImageRequest(id: fullKey, data: { Data() })
             ImagePipeline.shared.cache.removeCachedImage(for: request)
         }
+    }
+}
+
+/// A page node, weakly, handed to the main actor: Texture's nodes are used on the main thread (SUWA-17 E3).
+private final class WeakPageNode: @unchecked Sendable {
+    weak var node: ReaderWebtoonPageNode?
+
+    init(_ node: ReaderWebtoonPageNode) {
+        self.node = node
     }
 }
