@@ -172,7 +172,7 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
         cancelPageLoad()
         // a page that leaves the preload range without having shown keeps no decoded image (it kept it until it
         // showed and went away): the decoded images stay those of Texture's ranges (SUWA-17 C)
-        if !isInDisplayState, !isVisible, image != nil, delegate?.isZooming != true {
+        if !isInDisplayState, !isVisible, image != nil {
             clearDisplayedImage()
         }
     }

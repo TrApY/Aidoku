@@ -11,7 +11,9 @@ import ImageIO
 
 /// The height/width ratio of an image from its header, without decoding it.
 enum PageSizeReader {
-    private static let options = [kCGImageSourceShouldCache: false] as CFDictionary
+    private static var options: CFDictionary {
+        [kCGImageSourceShouldCache: false] as CFDictionary
+    }
 
     static func ratio(fileURL: URL) -> CGFloat? {
         guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, options) else { return nil }
