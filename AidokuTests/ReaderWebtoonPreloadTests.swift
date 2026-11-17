@@ -317,4 +317,50 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         #expect(heights.changes.isEmpty, "\(heights.changes.prefix(4))")
         await opened.close()
     }
+
+    /// P2: from the server, the «pages to preload» pages after the screen are loaded and measured while the user
+    /// is still on the first one, and each page has its height before it shows.
+    @Test func fromTheServerTheNextPagesAreMeasuredBeforeTheyShow() async throws {
+        let opened = try await open(.remote(delay: 0.3), mangaKey: "remoto", preload: 4)
+        try await watch(opened, seconds: 4) { _ in }
+        #expect(opened.measuredBelow >= 4, "only \(opened.measuredBelow) pages below the screen measured")
+        // the scroll view the user moves can go as far as the measured pages
+        let content = opened.layout.collectionViewContentSize.height
+        #expect(abs(opened.webtoon.scrollView.contentSize.height - content) < 1, "scroll content \(opened.webtoon.scrollView.contentSize.height), pages \(content)")
+        var shownUnmeasured: [String] = []
+        var shown: Set<Int> = []
+        let look: (String) -> Void = { when in
+            for row in opened.pageRows where !shown.contains(row) && (opened.frame(row)?.minY ?? .infinity) < opened.bottom {
+                shown.insert(row)
+                if !opened.isMeasured(row) {
+                    shownUnmeasured.append("\(when): fila \(row) \(Int(opened.frame(row)?.height ?? 0))")
+                }
+            }
+        }
+        look("al abrir")
+        try await scroll(opened, seconds: 9, velocity: 700, every: look)
+        #expect(shown.count >= 7, "the scroll showed \(shown.count) pages")
+        #expect(shownUnmeasured.isEmpty, "\(shownUnmeasured)")
+        await opened.close()
+    }
+
+    /// P2 and memory: with more pages to preload than Texture's own range (it decodes the pages up to 2.5
+    /// screens below), the ones further down get measured from their header without decoding them, and the
+    /// decoded images at once stay within «pages to preload» + 2.
+    @Test func measuringFarAheadDecodesNothingMore() async throws {
+        let preload = 8
+        let opened = try await open(.remote(delay: 0.3), mangaKey: "lejos", preload: preload)
+        var maxDecoded = 0
+        try await watch(opened, seconds: 6) { _ in maxDecoded = max(maxDecoded, opened.decodedImages) }
+        #expect(opened.measuredBelow >= preload, "only \(opened.measuredBelow) pages below the screen measured")
+        #expect(maxDecoded <= preload + 2, "\(maxDecoded) images decoded at once")
+        let last = try #require(opened.lastVisibleRow)
+        let screen = opened.webtoon.collectionNode.bounds.height
+        let farRows = ((last + 1)...(last + preload)).filter { (opened.frame($0)?.minY ?? 0) > opened.bottom + 3 * screen }
+        #expect(!farRows.isEmpty, "no page further than 3 screens within the \(preload) to preload")
+        let decodedFar = farRows.filter { (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0, section: 0)) as? ReaderWebtoonPageNode)?.image != nil }
+        #expect(decodedFar.isEmpty, "rows \(decodedFar) of \(farRows), further than 3 screens, decoded")
+        #expect(farRows.allSatisfy { opened.isMeasured($0) }, "rows \(farRows.filter { !opened.isMeasured($0) }) not measured")
+        await opened.close()
+    }
 }
