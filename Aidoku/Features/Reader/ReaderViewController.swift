@@ -1914,17 +1914,18 @@ extension ReaderViewController {
         reader?.toggleOffset()
     }
 
+    // as the chapter list: the chapter opens where it was left, and that page is not a change (SUWA-17 D1)
     @objc func nextChapter() {
         if let nextChapter = getNextChapter() {
-            reader?.setChapter(nextChapter, startPage: 1)
             setChapter(nextChapter)
+            loadCurrentChapter()
         }
     }
 
     @objc func previousChapter() {
-        if let previousChaoter = getPreviousChapter() {
-            reader?.setChapter(previousChaoter, startPage: 1)
-            setChapter(previousChaoter)
+        if let previousChapter = getPreviousChapter() {
+            setChapter(previousChapter)
+            loadCurrentChapter()
         }
     }
 }
