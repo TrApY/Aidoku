@@ -195,3 +195,42 @@ extension ReaderTextScrollChapterTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-17 F4: leaving the text reader before it tells its first page
+extension ReaderTextScrollChapterTests {
+    /// A chapter stored at page 3 (position 0.3) opened in the scrolling text reader and left before the reader
+    /// tells anything: nothing is written (the newer page another device saved meanwhile stays).
+    @Test func leavingBeforeTheFirstReportWritesNothing() async throws {
+        let manga = AidokuRunner.Manga(sourceKey: "lectortexto", key: "salirantes", title: "Novela", chapters: [current, previous])
+        let id = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: current.key)
+        await removeTestHistory(id)
+        await DataRepositories.shared.history.savePage(PageSave(chapter: id, page: 3, totalPages: 9, scrollPosition: 0.3))
+        UserDefaults.standard.set("scroll", forKey: "Reader.textReaderStyle")
+        let reader = ReaderViewController(source: nil, manga: manga, chapter: current)
+        reader.appActivity = ReaderAppActivity(center: NotificationCenter(), active: true)
+        let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = reader
+        window.makeKeyAndVisible()
+        try await Task.sleep(for: .seconds(1))
+        reader.presentedViewController?.dismiss(animated: false)
+        reader.setReader(.text)
+        try #require(reader.reader is ReaderTextViewController, "not the scrolling text reader")
+        // no pages for the text reader, so it tells nothing; the chapter's pages are known (as when the reader has
+        // its pages and has not told its page yet)
+        reader.loadCurrentChapter()
+        try await Task.sleep(for: .seconds(1))
+        reader.setPages((0..<9).map { Aidoku.Page(sourceId: manga.sourceKey, chapterId: current.key, index: $0, text: "Texto \($0)") })
+        try #require(reader.currentPage == 3, "opened at \(reader.currentPage)")
+        // the other device's newer page comes in
+        await DataRepositories.shared.history.savePage(PageSave(chapter: id, page: 6, totalPages: 9, scrollPosition: 0.6))
+        reader.viewWillDisappear(false)
+        try await Task.sleep(for: .seconds(1))
+        let record = await DataRepositories.shared.history.record(of: id)
+        #expect(record?.progress == 6, "written: page \(String(describing: record?.progress))")
+        #expect(record?.scrollPosition == 0.6)
+        window.isHidden = true
+        await removeTestHistory(id)
+    }
+}
