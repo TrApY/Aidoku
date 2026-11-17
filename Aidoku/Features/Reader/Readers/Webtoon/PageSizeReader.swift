@@ -135,6 +135,8 @@ final class PageRatioMemory: @unchecked Sendable {
     /// The file is read on first use, not when the store is made (the shared one is made early).
     private var loaded = false
     private var saveScheduled = false
+    /// Something changed since the last write (going to the background with nothing new writes nothing).
+    private var dirty = false
     /// Writes one at a time, in order.
     private let writer = DispatchQueue(label: "PageRatioMemory.writer", qos: .utility)
     private var observer: NSObjectProtocol?
@@ -180,6 +182,9 @@ final class PageRatioMemory: @unchecked Sendable {
             if old == nil {
                 order.append(key)
                 trim()
+            }
+            if old != ratio {
+                dirty = true
             }
             return old != ratio
         }
@@ -259,11 +264,14 @@ final class PageRatioMemory: @unchecked Sendable {
     /// On the writer queue.
     private func write() {
         guard let fileURL else { return }
-        let (keys, values): ([String], [Double]) = lock.withLock {
+        let snapshot: ([String], [Double])? = lock.withLock {
             loadIfNeeded()
             saveScheduled = false
+            guard dirty else { return nil }
+            dirty = false
             return (order, order.map { Double(ratios[$0] ?? 0) })
         }
+        guard let (keys, values) = snapshot else { return }
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
         guard let data = try? encoder.encode(Stored(version: Self.version, keys: keys, ratios: values)) else { return }
