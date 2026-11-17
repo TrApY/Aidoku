@@ -556,3 +556,103 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-18 U3 (upstream #1116): size transitions, one or two overlapping
+/// A size transition whose animations and completion run when the test says (the simulator can't rotate).
+@MainActor
+final class SteppedTransitionCoordinator: NSObject, UIViewControllerTransitionCoordinator {
+    private var animations: [(any UIViewControllerTransitionCoordinatorContext) -> Void] = []
+    private var completions: [(any UIViewControllerTransitionCoordinatorContext) -> Void] = []
+    let containerView = UIView()
+
+    var isAnimated: Bool { true }
+    var presentationStyle: UIModalPresentationStyle { .none }
+    var initiallyInteractive: Bool { false }
+    var isInterruptible: Bool { false }
+    var isInteractive: Bool { false }
+    var isCancelled: Bool { false }
+    var transitionDuration: TimeInterval { 0.3 }
+    var percentComplete: CGFloat { 0 }
+    var completionVelocity: CGFloat { 1 }
+    var completionCurve: UIView.AnimationCurve { .easeInOut }
+    var targetTransform: CGAffineTransform { .identity }
+
+    func viewController(forKey key: UITransitionContextViewControllerKey) -> UIViewController? { nil }
+    func view(forKey key: UITransitionContextViewKey) -> UIView? { nil }
+
+    func animate(
+        alongsideTransition animation: ((any UIViewControllerTransitionCoordinatorContext) -> Void)?,
+        completion: ((any UIViewControllerTransitionCoordinatorContext) -> Void)? = nil
+    ) -> Bool {
+        if let animation { animations.append(animation) }
+        if let completion { completions.append(completion) }
+        return true
+    }
+
+    func animateAlongsideTransition(
+        in view: UIView?,
+        animation: ((any UIViewControllerTransitionCoordinatorContext) -> Void)?,
+        completion: ((any UIViewControllerTransitionCoordinatorContext) -> Void)? = nil
+    ) -> Bool {
+        animate(alongsideTransition: animation, completion: completion)
+    }
+
+    @available(iOS, deprecated: 10.0)
+    func notifyWhenInteractionEnds(_ handler: @escaping (any UIViewControllerTransitionCoordinatorContext) -> Void) {}
+    func notifyWhenInteractionChanges(_ handler: @escaping (any UIViewControllerTransitionCoordinatorContext) -> Void) {}
+
+    func runAnimations() {
+        let pending = animations
+        animations = []
+        pending.forEach { $0(self) }
+    }
+
+    func complete() {
+        let pending = completions
+        completions = []
+        pending.forEach { $0(self) }
+    }
+}
+
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// The webtoon is told the size will change, the window takes it, the animations run and it lays out.
+    private func transition(_ opened: Opened, to size: CGSize) -> SteppedTransitionCoordinator {
+        let coordinator = SteppedTransitionCoordinator()
+        opened.webtoon.viewWillTransition(to: size, with: coordinator)
+        opened.window.frame = CGRect(origin: .zero, size: size)
+        coordinator.runAnimations()
+        opened.window.layoutIfNeeded()
+        return coordinator
+    }
+
+    /// Turned once (portrait → landscape): the page in the middle of the screen stays there.
+    @Test func aSizeTransitionKeepsTheMiddlePage() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "ungiro", page: 3, width: 402, height: 874)
+        let before = try middleOfScreen(opened)
+        transition(opened, to: CGSize(width: 874, height: 402)).complete()
+        try await Task.sleep(for: .seconds(1))
+        let after = try middleOfScreen(opened)
+        #expect(after.path == before.path, "\(before) → \(after)")
+        #expect(abs(after.fraction - before.fraction) < 0.02, "\(before) → \(after)")
+        #expect(opened.chapterKey == "c2")
+        await opened.close()
+    }
+
+    /// Switching apps on iPhone Duo: to the other display's size and back, the second transition starting
+    /// before the first one completes. The page in the middle of the screen stays there.
+    @Test func twoOverlappingSizeTransitionsKeepTheMiddlePage() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "dosgiros", page: 3, width: 402, height: 874)
+        let before = try middleOfScreen(opened)
+        let first = transition(opened, to: CGSize(width: 874, height: 402))
+        let second = transition(opened, to: CGSize(width: 402, height: 874))
+        first.complete()
+        second.complete()
+        try await Task.sleep(for: .seconds(1))
+        let after = try middleOfScreen(opened)
+        #expect(after.path == before.path, "\(before) → \(after)")
+        #expect(abs(after.fraction - before.fraction) < 0.02, "\(before) → \(after)")
+        #expect(opened.chapterKey == "c2")
+        #expect(opened.reader.currentPage == 3)
+        await opened.close()
+    }
+}
