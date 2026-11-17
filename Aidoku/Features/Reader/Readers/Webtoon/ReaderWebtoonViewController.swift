@@ -73,12 +73,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     // Stores the last calculated page number
     /// Reports only real page changes, and the first page of each chapter.
     private var pageReports = PageReportFilter()
-    /// The page the chapter opened at, reported as the current page until the user moves (drag, slider, tap or
-    /// key navigation, auto scroll, zoom). Opening puts that page at the top; the pages above it then grow as
-    /// their images load and move the content, and the page in the middle of the screen becomes the one
-    /// before: that is not the user reading, so it is neither reported nor saved. SUWA-16
-    private var openingPageHold: Int?
-    /// Where the user is reading (SUWA-19): only the user moves it, and opening a chapter.
+    /// Where the user is reading (SUWA-19): this point of this item at this height of the screen. Only the user
+    /// moves it (dragging and its deceleration, the auto scroll, turning a page, the slider, a zoom that ends) and
+    /// opening a chapter, which puts the top of its page at the top of the screen; the page reported is the
+    /// anchor's. Before, the page was the one in the middle of the screen, and the pages above growing as their
+    /// images loaded made it the one before (SUWA-16: openingPageHold held the opening page until the user moved).
     private(set) var anchor: ReadingAnchor?
     /// Entering the previous chapter from below by scrolling: how far into its section the screen was. Once the
     /// user goes half a screen further up inside it, they are reading it (SUWA-17 F3: a chapter of one page, or a
@@ -245,6 +244,50 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         let hasStartInfo = currentPages.first?.type != .imagePage
         return min(
             max(pageRow + (hasStartInfo ? 0 : 1), 0),
+            currentPages.count - (hasStartInfo ? 1 : 0)
+        )
+    }
+
+    /// The anchor at the middle of the screen now: the item there and where in it (SUWA-19).
+    func anchorAtScreen() -> ReadingAnchor? {
+        guard
+            let path = getCurrentPagePath(),
+            let chapter = chapters[safe: path.section],
+            let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
+            let found = ReadingAnchorGeometry.locate(
+                lineY: collectionNode.contentOffset.y + collectionNode.bounds.height / 2,
+                frames: [(item: path.item, frame: frame)]
+            )
+        else { return nil }
+        let node = collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode
+        return ReadingAnchor(
+            chapterKey: chapter.key,
+            item: found.item,
+            fraction: found.fraction,
+            screenFraction: 0.5,
+            measured: node.map { $0.hasRealRatio || $0.image != nil } ?? true
+        )
+    }
+
+    /// The user moved: the anchor is where the middle of the screen is now (nothing there: it stays). Not with the
+    /// app out of front (SUWA-19 I7).
+    private func writeAnchorFromScreen() {
+        guard delegate?.appActivity.isActive ?? true, let new = anchorAtScreen() else { return }
+        anchor = new
+    }
+
+    /// The page of the anchor, counted as getCurrentPage() counts them, when it is in the current chapter.
+    private func anchorPage() -> Int? {
+        guard
+            let anchor,
+            let chapter,
+            anchor.chapterKey == chapter.key,
+            let chapterIndex = chapters.firstIndex(of: chapter),
+            let currentPages = pages[safe: chapterIndex]
+        else { return nil }
+        let hasStartInfo = currentPages.first?.type != .imagePage
+        return min(
+            max(anchor.item + (hasStartInfo ? 0 : 1), 0),
             currentPages.count - (hasStartInfo ? 1 : 0)
         )
     }
@@ -432,7 +475,6 @@ extension ReaderWebtoonViewController {
 
     private func startAutoScroll() {
         guard !isAutoScrolling else { return }
-        openingPageHold = nil
 
         isAutoScrolling = true
         resumeAutoScroll()
@@ -512,7 +554,6 @@ extension ReaderWebtoonViewController {
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         userIsScrolling = true
         turningPage = false
-        openingPageHold = nil
         super.scrollViewWillBeginDragging(scrollView)
         restorePreloadRange()
         pauseAutoScroll()
@@ -554,6 +595,10 @@ extension ReaderWebtoonViewController {
         // Stage Manager), nor by nothing being in the middle (that was section 0) (SUWA-17 H)
         let movedByUser = userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
             || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage
+        // only the user moves the anchor (SUWA-19)
+        if movedByUser {
+            writeAnchorFromScreen()
+        }
         if infinite, let pageSection = pagePath?.section, movedByUser, delegate?.appActivity.isActive ?? true {
             // check if we need to switch chapters
             if chapterIndex > 0 && pageSection < chapterIndex {
@@ -591,8 +636,8 @@ extension ReaderWebtoonViewController {
             }
         }
 
-        // update page number (the opening page until the user moves); nothing in the middle of the screen: no page
-        if let page = openingPageHold ?? (pagePath == nil ? nil : getCurrentPage()), pageReports.shouldReport(page) {
+        // the page is the anchor's: the content moving without the user tells nothing (SUWA-19)
+        if let page = anchorPage(), pageReports.shouldReport(page) {
             delegate?.setCurrentPage(page, position: nil)
         }
         measureAhead()
@@ -601,13 +646,13 @@ extension ReaderWebtoonViewController {
     // disable slider movement while zooming
     // zooming sometimes causes page count to jitter between two pages
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
-        openingPageHold = nil
         isZooming = true
         stopAutoScroll()
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
         isZooming = false
+        writeAnchorFromScreen()
         scrollViewDidScroll(scrollView)
     }
 
@@ -1153,7 +1198,6 @@ extension ReaderWebtoonViewController {
 // MARK: - Reader Delegate
 extension ReaderWebtoonViewController: ReaderReaderDelegate {
     func moveLeft() {
-        openingPageHold = nil
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: max(
@@ -1170,7 +1214,6 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func moveRight() {
-        openingPageHold = nil
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: min(
@@ -1187,7 +1230,6 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func sliderMoved(value: CGFloat) {
-        openingPageHold = nil
         isSliding = true
 
         // get slider area
@@ -1223,12 +1265,15 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
             animated: false
         )
 
+        // the slider is the user moving (SUWA-19)
+        writeAnchorFromScreen()
         let page = getCurrentPage()
         delegate?.displayPage(page)
     }
 
     func sliderStopped(value: CGFloat) {
         isSliding = false
+        writeAnchorFromScreen()
         scrollViewDidScroll(collectionNode.view)
     }
 
@@ -1250,7 +1295,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         pageReports.reset()
         enteredFromBelowAt = nil
         wentUpInside = nil
-        openingPageHold = nil
+        anchor = nil
         updateDoubleTapZoomSetting()
         chapters = [chapter]
 
@@ -1286,7 +1331,8 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 startPage = viewModel.pages.count
             }
 
-            openingPageHold = startPage
+            // the top of the page it opens at, at the top of the screen (SUWA-19 D4)
+            anchor = ReadingAnchor(chapterKey: chapter.key, item: startPage, fraction: 0, screenFraction: 0, measured: true)
             await collectionNode.reloadData()
             zoomView.adjustContentSize()
 
