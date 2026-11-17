@@ -14,6 +14,7 @@ import Foundation
 import Nuke
 import Testing
 import UIKit
+import ZIPFoundation
 
 @testable import Aidoku
 
@@ -59,9 +60,24 @@ extension ImagePipelineSwappingTests {
         return pages
     }
 
+    /// The pages put in a .cbz archive at `url`, as pages of it (DownloadManager.getDownloadedPages).
+    private static func archived(_ pages: [Aidoku.Page], as url: URL) throws -> [Aidoku.Page] {
+        let archive = try Archive(url: url, accessMode: .create)
+        return try pages.map { page in
+            guard let file = page.imageURL.flatMap(URL.init(string:)) else { throw URLError(.badURL) }
+            try archive.addEntry(with: file.lastPathComponent, relativeTo: file.deletingLastPathComponent(), compressionMethod: .deflate)
+            var page = page
+            page.imageURL = file.lastPathComponent
+            page.zipURL = url.absoluteString
+            return page
+        }
+    }
+
     enum Kind {
         /// The chapter is downloaded: its pages are files, read straight from the disk (as the app does).
         case downloaded
+        /// The chapter is downloaded as the app downloads it: a .cbz archive with its pages.
+        case downloadedArchive
         /// From the server: each image comes `delay` seconds after the previous one, two at a time.
         case remote(delay: Double)
     }
@@ -144,13 +160,17 @@ extension ImagePipelineSwappingTests {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("precarga-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let remote = if case .remote = kind { true } else { false }
-        let pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: first.key, in: directory, remote: remote)
-        let nextPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: second.key, in: directory, remote: remote)
+        var pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: first.key, in: directory, remote: remote)
+        var nextPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: second.key, in: directory, remote: remote)
+        if case .downloadedArchive = kind {
+            pages = try Self.archived(pages, as: directory.appendingPathComponent("\(first.key).cbz"))
+            nextPages = try Self.archived(nextPages, as: directory.appendingPathComponent("\(second.key).cbz"))
+        }
 
         let pipeline = ImagePipeline.shared
         var dataCaches: [DataCache] = []
         switch kind {
-            case .downloaded:
+            case .downloaded, .downloadedArchive:
                 // as the app's pipeline, with empty caches
                 ImagePipeline.shared = ImagePipeline {
                     $0.imageCache = Nuke.ImageCache()
@@ -361,6 +381,18 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         let decodedFar = farRows.filter { (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0, section: 0)) as? ReaderWebtoonPageNode)?.image != nil }
         #expect(decodedFar.isEmpty, "rows \(decodedFar) of \(farRows), further than 3 screens, decoded")
         #expect(farRows.allSatisfy { opened.isMeasured($0) }, "rows \(farRows.filter { !opened.isMeasured($0) }) not measured")
+        await opened.close()
+    }
+
+    /// P3: the same with the chapter downloaded as the app does it, a .cbz archive (each page's height from the
+    /// header of its entry).
+    @Test func aDownloadedArchiveChapterNeverChangesAPageHeightOnScreenOrAbove() async throws {
+        let opened = try await open(.downloadedArchive, mangaKey: "cbz", preload: 2)
+        let heights = Heights()
+        try await watch(opened, seconds: 3) { heights.look(opened, $0) }
+        try await scroll(opened, seconds: 4, velocity: 1500) { heights.look(opened, $0) }
+        try await watch(opened, seconds: 2) { heights.look(opened, $0) }
+        #expect(heights.changes.isEmpty, "\(heights.changes.prefix(4))")
         await opened.close()
     }
 }
