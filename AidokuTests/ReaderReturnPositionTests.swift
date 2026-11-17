@@ -390,3 +390,64 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 }
+
+// MARK: - SUWA-17 F2: completed chapters with a partial page that were not read again
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
+    /// Completed elsewhere (a sync, the other device) with a page before its last one; or completed here right
+    /// after its last session (the old relayout, «marcar como leído» after reading some of it); or read again but
+    /// left at its last but one page: not taken up, «Continuar» goes on as before.
+    @Test func oldCompletedChaptersWithAPartialPageAreNotTakenUp() async throws {
+        let synced = manga("f2sinc", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: synced.identifier)
+        await oldPartialCompletion(id(synced, c1), page: 5, total: Self.pageCount)
+        var (_, next) = await MangaManager.shared.getNextChapter(mangaId: synced.identifier, fallbackChapters: [c2, c1])
+        #expect(next?.key == c2.key, "completed elsewhere: \(String(describing: next?.key))")
+
+        let here = manga("f2aqui", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: here.identifier)
+        await DataRepositories.shared.sessions.add(
+            .init(startDate: Date().addingTimeInterval(-90), endDate: Date().addingTimeInterval(-80), pagesRead: 3),
+            chapter: id(here, c1)
+        )
+        let completedAt = Date().addingTimeInterval(-60)
+        await DataRepositories.shared.history.markCompleted([id(here, c1)], date: completedAt)
+        CompletionJournal.record(id(here, c1), reason: "test: completado", date: completedAt)
+        await seed(id(here, c1), page: 5, total: Self.pageCount)
+        (_, next) = await MangaManager.shared.getNextChapter(mangaId: here.identifier, fallbackChapters: [c2, c1])
+        #expect(next?.key == c2.key, "completed here after its last session: \(String(describing: next?.key))")
+
+        let lastButOne = manga("f2penultima", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: lastButOne.identifier)
+        await reread(id(lastButOne, c1), page: Self.pageCount - 1, total: Self.pageCount)
+        (_, next) = await MangaManager.shared.getNextChapter(mangaId: lastButOne.identifier, fallbackChapters: [c2, c1])
+        #expect(next?.key == c2.key, "at its last but one page: \(String(describing: next?.key))")
+
+        for manga in [synced, here, lastButOne] {
+            await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        }
+    }
+
+    /// A manga all read, one of them completed long ago with a partial page: «Continuar» as before (no chapter
+    /// to go on with).
+    @Test func allReadWithAnOldPartialCompletionContinuesAsBefore() async throws {
+        let manga = manga("f2todo", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await oldPartialCompletion(id(manga, c1), page: 5, total: Self.pageCount)
+        try await Task.sleep(for: .milliseconds(1100))
+        await seed(id(manga, c2), page: Self.pageCount, total: Self.pageCount)
+        await complete(id(manga, c2))
+        let (_, next) = await MangaManager.shared.getNextChapter(mangaId: manga.identifier, fallbackChapters: [c2, c1])
+        #expect(next == nil, "all read: \(String(describing: next?.key))")
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+
+    /// The reader opens a chapter completed long ago with a partial page at its start, as before.
+    @Test func theReaderOpensAnOldPartialCompletionAtItsStart() async throws {
+        let manga = manga("f2lector", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await oldPartialCompletion(id(manga, c1), page: 5, total: Self.pageCount)
+        let opened = try await webtoon(manga, on: c1)
+        #expect(opened.reader.currentPage == 1, "opened at \(opened.reader.currentPage)")
+        await opened.close()
+    }
+}
