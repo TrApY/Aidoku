@@ -129,3 +129,35 @@ import UIKit
         await opened.close()
     }
 }
+
+// MARK: - SUWA-17 D4, D7: the previous chapter entered from below
+extension ReaderTextScrollChapterTests {
+    /// Chapter 2 opened and up to its top: chapter 1 goes in above and the screen is at its end (the transition after
+    /// it: entered from below, not into its text). Back down into chapter 2: chapter 1 keeps what it had stored (it
+    /// was not read), and the same leaving the reader at its end.
+    @Test func intoThePreviousChapterFromBelowAndBackSavesNothingOfIt() async throws {
+        let opened = try await open(mangaKey: "abajoyvuelta", paragraphs: 40)
+        let scrollView = try #require(opened.scrollView)
+        await DataRepositories.shared.history.savePage(PageSave(chapter: opened.ids[0], page: 3, totalPages: 9, scrollPosition: 0.3))
+        try userScrolls(opened, to: 0)
+        try await Task.sleep(for: .seconds(3))
+        let top = scrollView.contentOffset.y
+        try #require(top > scrollView.bounds.height, "chapter 1 did not go in above (y \(top))")
+        try #require(opened.reader.chapter.key == previous.key, "not at the end of chapter 1 (y \(top))")
+        // and back down into chapter 2
+        try userScrolls(opened, to: top + scrollView.bounds.height * 1.5)
+        try await Task.sleep(for: .seconds(3))
+        #expect(opened.reader.chapter.key == current.key, "y \(scrollView.contentOffset.y), top \(top)")
+        var record = await DataRepositories.shared.history.record(of: opened.ids[0])
+        #expect(record?.progress == 3, "chapter 1 saved at page \(String(describing: record?.progress)) without reading it")
+        #expect(record?.scrollPosition == 0.3)
+        // up to its end again, and out of the reader there
+        try userScrolls(opened, to: top)
+        try await Task.sleep(for: .seconds(1))
+        opened.reader.viewWillDisappear(false)
+        try await Task.sleep(for: .seconds(1))
+        record = await DataRepositories.shared.history.record(of: opened.ids[0])
+        #expect(record?.progress == 3, "leaving: chapter 1 saved at page \(String(describing: record?.progress))")
+        await opened.close()
+    }
+}
