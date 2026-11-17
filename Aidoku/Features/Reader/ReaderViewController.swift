@@ -1302,6 +1302,13 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         if enteredFromBelow, reportsFromText || pages.upperBound < totalPages {
             enteredFromBelow = false
         }
+        // still at its end (its last page, the transition after it): shown, but not read going down: not seen, not
+        // saved, not completed (SUWA-17 D5)
+        if enteredFromBelow {
+            toolbarView.currentPage = max(1, min(pages.lowerBound, totalPages))
+            toolbarView.updateSliderPosition()
+            return
+        }
         let previousPage = currentPage
 
         updateDescriptionButton(pages: pages)
