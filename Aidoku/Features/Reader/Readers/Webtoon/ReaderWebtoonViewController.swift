@@ -76,6 +76,10 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// their images load and move the content, and the page in the middle of the screen becomes the one
     /// before: that is not the user reading, so it is neither reported nor saved. SUWA-16
     private var openingPageHold: Int?
+    /// Entering the previous chapter from below by scrolling: how far into its section the screen was. Once the
+    /// user goes half a screen further up inside it, they are reading it (SUWA-17 F3: a chapter of one page, or a
+    /// last page taller than the screen, has no page before the last to report).
+    private var enteredFromBelowAt: CGFloat?
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -529,6 +533,12 @@ extension ReaderWebtoonViewController {
                     pageReports.reset()
                 }
             }
+        }
+
+        // up inside a chapter entered from below: the reader reads it from now on (SUWA-17 F3)
+        if let entry = enteredFromBelowAt, let offset = offsetIntoChapter(), offset < entry - collectionNode.bounds.height / 2 {
+            enteredFromBelowAt = nil
+            delegate?.movedUpIntoChapter(page: getCurrentPage())
         }
 
         // update page number (the opening page until the user moves)
@@ -989,6 +999,17 @@ extension ReaderWebtoonViewController {
         delegate?.setChapter(chapter)
         delegate?.setPages(pages.filter({ $0.type == .imagePage }))
         viewModel.setPages(chapter: chapter, pages: pages)
+        enteredFromBelowAt = offsetIntoChapter()
+    }
+
+    /// How far the top of the screen is into the current chapter's section.
+    private func offsetIntoChapter() -> CGFloat? {
+        guard
+            let chapter,
+            let section = chapters.firstIndex(of: chapter),
+            let top = collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(item: 0, section: section))?.frame.minY
+        else { return nil }
+        return collectionNode.contentOffset.y - top
     }
 
     /// Switch current chapter to next
@@ -1004,6 +1025,7 @@ extension ReaderWebtoonViewController {
         delegate?.setChapter(chapter)
         delegate?.setPages(pages.filter({ $0.type == .imagePage }))
         viewModel.setPages(chapter: chapter, pages: pages)
+        enteredFromBelowAt = nil
     }
 
     /// Refresh info page chapter info
@@ -1123,6 +1145,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         self.chapter = chapter
         // a new chapter: its first page is reported even if it has the number the last one had
         pageReports.reset()
+        enteredFromBelowAt = nil
         openingPageHold = nil
         updateDoubleTapZoomSetting()
         chapters = [chapter]

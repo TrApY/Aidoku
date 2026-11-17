@@ -1302,6 +1302,14 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         setCurrentPages(pages, position: nil)
     }
 
+    /// Up into the chapter entered from below (inside its page, even if it is its only or last one): from now on
+    /// it is being read, and the page it is at counts (SUWA-17 F3).
+    func movedUpIntoChapter(page: Int) {
+        guard enteredFromBelow else { return }
+        enteredFromBelow = false
+        setCurrentPage(page, position: nil)
+    }
+
     private func setCurrentPages(_ pages: ClosedRange<Int>, position: Double? = nil) {
         // nothing from a reader while the app isn't in front: not the page, not a save, not «seen» (SUWA-12 I1)
         guard appActivity.isActive else { return }
