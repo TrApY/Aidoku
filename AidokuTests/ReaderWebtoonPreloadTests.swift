@@ -303,3 +303,18 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         try await measure(.remote(delay: 0.3), name: "remoto", preload: 6)
     }
 }
+
+// MARK: - P2, P3: measured before showing, the setting deciding how far, memory
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// P3: a downloaded chapter, opened and scrolled down quickly: no page changes height on screen or above it
+    /// (its height comes from the file's header when the page is made).
+    @Test func aDownloadedChapterNeverChangesAPageHeightOnScreenOrAbove() async throws {
+        let opened = try await open(.downloaded, mangaKey: "descargado", preload: 2)
+        let heights = Heights()
+        try await watch(opened, seconds: 3) { heights.look(opened, $0) }
+        try await scroll(opened, seconds: 4, velocity: 1500) { heights.look(opened, $0) }
+        try await watch(opened, seconds: 2) { heights.look(opened, $0) }
+        #expect(heights.changes.isEmpty, "\(heights.changes.prefix(4))")
+        await opened.close()
+    }
+}
