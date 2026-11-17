@@ -130,7 +130,7 @@ actor MangaManager {
             chapters: sortedChapters,
             readingHistory: readingHistory,
             sortAscending: sortAscending,
-            rereading: entries.rereadPages
+            rereading: RereadRule.rereadPages(entries, manga: mangaId)
         )
 
         return (sortedChapters, nextChapter)

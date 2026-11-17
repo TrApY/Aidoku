@@ -619,7 +619,7 @@ extension MangaView.ViewModel {
     private func loadHistory() async {
         let entries = await DataRepositories.shared.history.readingHistory(of: manga.identifier)
         readingHistory = entries.pagesAndDates
-        rereading = entries.rereadPages
+        rereading = RereadRule.rereadPages(entries, manga: manga.identifier)
     }
 
     private func checkTrackerSync(item: TrackItem) async {

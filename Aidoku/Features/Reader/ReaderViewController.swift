@@ -691,7 +691,7 @@ extension ReaderViewController {
             )
             // only the position stored for the page it opens at (not for a completed chapter, unless it is being
             // read again: SUWA-17 D2)
-            if let history, !history.completed || Self.isRereading(history), history.progress == currentPage {
+            if let history, !history.completed || isRereading(history), history.progress == currentPage {
                 storedPosition = history.scrollPosition
             }
         }
@@ -703,10 +703,16 @@ extension ReaderViewController {
         )
     }
 
-    /// A completed chapter with a page before its last one: completing leaves it at its last page, so the user
-    /// is reading it again (SUWA-17 D2).
-    static func isRereading(_ record: HistoryRecord) -> Bool {
-        record.completed && record.progress > 0 && record.progress < record.total
+    /// A completed chapter with a page before its last but one that was opened again after its completion (SUWA-17
+    /// D2, F2: RereadRule): it opens where it was left.
+    private func isRereading(_ record: HistoryRecord) -> Bool {
+        guard record.completed, record.progress > 0, record.progress < record.total - 1 else { return false }
+        let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+        return RereadRule.isRereading(
+            chapter: chapterId,
+            sessionStart: DataRepositories.shared.mainActorReads.latestSessionStart(of: chapterId),
+            journal: CompletionJournal.lines()
+        )
     }
 
     func loadCurrentChapter() {
@@ -736,7 +742,7 @@ extension ReaderViewController {
                 let record = DataRepositories.shared.mainActorReads.record(
                     of: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
                 ),
-                Self.isRereading(record)
+                isRereading(record)
             {
                 // a completed chapter being read again: where it was left (SUWA-17 D2)
                 currentPage = record.progress

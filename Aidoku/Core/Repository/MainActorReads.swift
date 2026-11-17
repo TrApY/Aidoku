@@ -6,6 +6,8 @@
 //  the order things happen in (the reader opening a chapter, the tracking badge). Retired in F9/F11.
 //
 
+import Foundation
+
 @MainActor
 protocol MainActorReads: Sendable {
     /// Whether the manga has any track item (TrackerManager.isTracking).
@@ -14,6 +16,8 @@ protocol MainActorReads: Sendable {
     func progress(of chapter: ChapterIdentifier) -> ChapterProgress
     /// The stored scroll position of the page it opens at (ReaderViewController.openingPageKey).
     func record(of chapter: ChapterIdentifier) -> HistoryRecord?
+    /// The start of the chapter's latest reading session with pages read; nil if there is none (SUWA-17 F2).
+    func latestSessionStart(of chapter: ChapterIdentifier) -> Date?
     /// Whether the manga is stored (the reader's reading mode «auto»).
     func manga(contains id: MangaIdentifier) -> Bool
     /// The reading mode the manga stores; -1 if it is not stored.

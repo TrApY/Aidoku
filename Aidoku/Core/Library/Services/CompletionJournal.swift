@@ -41,6 +41,25 @@ enum CompletionJournal {
         }
     }
 
+    /// When the chapter was last marked completed on this device (not the readers' own «webtoon:» notes), from
+    /// the journal's `lines` (SUWA-17 F2).
+    static func lastCompletion(of chapter: ChapterIdentifier, lines: [String]) -> Date? {
+        var last: Date?
+        for line in lines {
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard
+                fields.count >= 5,
+                fields[1] == chapter.sourceKey, fields[2] == chapter.mangaKey, fields[3] == chapter.chapterKey,
+                !fields[4].hasPrefix("webtoon:"),
+                let date = lock.withLock({ formatter.date(from: String(fields[0])) })
+            else { continue }
+            if last.map({ date > $0 }) ?? true {
+                last = date
+            }
+        }
+        return last
+    }
+
     static func lines(fileUrl: URL? = nil) -> [String] {
         guard let text = try? String(contentsOf: fileUrl ?? defaultUrl, encoding: .utf8) else { return [] }
         return text.split(separator: "\n").map(String.init)

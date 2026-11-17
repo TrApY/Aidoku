@@ -26,6 +26,11 @@ final class CoreDataMainActorReads: MainActorReads {
         CoreDataManager.shared.getHistory(chapterId: chapter, context: container.viewContext).map(CoreDataHistoryRepository.record)
     }
 
+    func latestSessionStart(of chapter: ChapterIdentifier) -> Date? {
+        CoreDataManager.shared.getHistory(chapterId: chapter, context: container.viewContext)
+            .flatMap(CoreDataHistoryRepository.latestSessionStart)
+    }
+
     func manga(contains id: MangaIdentifier) -> Bool {
         CoreDataManager.shared.hasManga(mangaId: id, context: container.viewContext)
     }

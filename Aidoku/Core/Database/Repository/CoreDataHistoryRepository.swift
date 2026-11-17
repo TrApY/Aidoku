@@ -40,14 +40,24 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
         }
     }
 
+    /// The start of the history's latest reading session with pages read (SUWA-17 F2).
+    static func latestSessionStart(of history: HistoryObject) -> Date? {
+        (history.sessions as? Set<ReadingSessionObject>)?
+            .filter { $0.pagesRead > 0 }
+            .compactMap { session -> Date? in session.startDate }
+            .max()
+    }
+
     func readingHistory(of manga: MangaIdentifier) async -> [String: ReadingHistoryEntry] {
         await container.performBackgroundTask { context in
             var entries = CoreDataManager.shared.getReadingHistory(mangaId: manga, context: context)
                 .mapValues { ReadingHistoryEntry(page: $0.page, date: $0.date) }
-            // the completed chapters being read again (SUWA-17 D2)
+            // the completed chapters with a page before their last but one, and when they were last opened (the
+            // service decides which are being read again: SUWA-17 D2, F2)
             for history in CoreDataManager.shared.getHistoryForManga(mangaId: manga, context: context)
-            where history.completed && history.progress > 0 && history.progress < history.total {
+            where history.completed && history.progress > 0 && history.progress < history.total - 1 {
                 entries[history.chapterId]?.rereadPage = Int(history.progress)
+                entries[history.chapterId]?.rereadSessionStart = Self.latestSessionStart(of: history)
             }
             return entries
         }

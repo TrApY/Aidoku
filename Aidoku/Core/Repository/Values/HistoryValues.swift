@@ -29,8 +29,11 @@ struct HistoryRecord: Sendable, Hashable {
 struct ReadingHistoryEntry: Sendable, Hashable {
     var page: Int
     var date: Int
-    /// A completed chapter being read again (0 < page < total, SUWA-17 D2): its page.
+    /// A completed chapter with a page before its last but one (0 < page < total - 1, SUWA-17 D2, F2): its page;
+    /// whether it is being read again is RereadRule's.
     var rereadPage: Int?
+    /// For those, when its latest reading session with pages read started (SUWA-17 F2).
+    var rereadSessionStart: Date?
 }
 
 extension Dictionary where Value == ReadingHistoryEntry {
@@ -39,10 +42,6 @@ extension Dictionary where Value == ReadingHistoryEntry {
         mapValues { (page: $0.page, date: $0.date) }
     }
 
-    /// [chapter key: page] of the completed chapters being read again.
-    var rereadPages: [Key: Int] {
-        compactMapValues(\.rereadPage)
-    }
 }
 
 /// A page saved by the reader (SUWA-7). `totalPages`/`scrollPosition` nil keep what was stored.
