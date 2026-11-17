@@ -451,3 +451,72 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-17 F5: «siguiente» and the paged reader
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
+    /// Chapter 1 at page 2 → «next chapter» to chapter 2, stored at page 10: it opens at 10 and keeps it.
+    @Test func nextChapterOpensAtItsStoredPageAndKeepsIt() async throws {
+        let manga = manga("siguiente", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await seed(id(manga, c1), page: 2, total: Self.pageCount)
+        await seed(id(manga, c2), page: 10, total: Self.pageCount)
+        let opened = try await webtoon(manga, on: c1)
+        try #require(opened.reader.currentPage == 2, "chapter 1 opened at \(opened.reader.currentPage)")
+        opened.ready(c2)
+        opened.reader.nextChapter()
+        try await Task.sleep(for: .seconds(4))
+        #expect(opened.reader.chapter.key == c2.key)
+        #expect(opened.reader.currentPage == 10, "chapter 2 opened at \(opened.reader.currentPage)")
+        #expect(await stored(id(manga, c2))?.progress == 10)
+        #expect(await stored(id(manga, c1))?.progress == 2)
+        await opened.close()
+    }
+
+    /// The paged reader (left to right), in a window: chapter 2 at page 2 → «previous» to chapter 1 stored at
+    /// page 10 (it opened at the last page before D1) → opens at 10 and keeps it; and «next» back to chapter 2 at 2.
+    @Test func thePagedReaderOpensPreviousAndNextAtTheirStoredPages() async throws {
+        let manga = manga("paginado", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await seed(id(manga, c1), page: 10, total: Self.pageCount)
+        await seed(id(manga, c2), page: 2, total: Self.pageCount)
+        let modeKey = "Reader.readingMode.\(manga.identifier)"
+        UserDefaults.standard.set("ltr", forKey: modeKey)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("paginado-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            UserDefaults.standard.removeObject(forKey: modeKey)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let reader = ReaderViewController(source: nil, manga: manga, chapter: c2)
+        reader.appActivity = ReaderAppActivity(center: NotificationCenter(), active: true)
+        let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = reader
+        window.makeKeyAndVisible()
+        try await Task.sleep(for: .seconds(1))
+        let paged = try #require(reader.reader as? ReaderPagedViewController, "not the paged reader")
+        reader.presentedViewController?.dismiss(animated: false)
+        paged.viewModel.preloadedChapter = c2
+        paged.viewModel.preloadedPages = try Self.files(manga, c2, in: directory)
+        reader.loadCurrentChapter()
+        try await Task.sleep(for: .seconds(3))
+        try #require(reader.currentPage == 2, "chapter 2 opened at \(reader.currentPage)")
+        paged.viewModel.preloadedChapter = c1
+        paged.viewModel.preloadedPages = try Self.files(manga, c1, in: directory)
+        reader.previousChapter()
+        try await Task.sleep(for: .seconds(4))
+        #expect(reader.chapter.key == c1.key)
+        #expect(reader.currentPage == 10, "chapter 1 opened at \(reader.currentPage)")
+        #expect(await stored(id(manga, c1))?.progress == 10)
+        paged.viewModel.preloadedChapter = c2
+        paged.viewModel.preloadedPages = try Self.files(manga, c2, in: directory)
+        reader.nextChapter()
+        try await Task.sleep(for: .seconds(4))
+        #expect(reader.chapter.key == c2.key)
+        #expect(reader.currentPage == 2, "chapter 2 opened again at \(reader.currentPage)")
+        #expect(await stored(id(manga, c2))?.progress == 2)
+        window.isHidden = true
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
