@@ -277,12 +277,13 @@ extension ReaderWebtoonPageNode {
         if let key = ratioKey(of: page, settings: settings), let ratio = PageRatioMemory.shared[key] {
             return ratio
         }
-        guard
-            !settings.cropsBorders,
-            page.zipURL == nil,
-            let urlString = page.imageURL,
-            let url = URL(string: urlString)
-        else { return nil }
+        guard !settings.cropsBorders, let urlString = page.imageURL else { return nil }
+        // a downloaded .cbz: from the header of the entry
+        if let zipURL = page.zipURL {
+            guard let archiveURL = URL(string: zipURL), archiveURL.isFileURL else { return nil }
+            return PageSizeReader.ratio(archive: archiveURL, path: urlString)
+        }
+        guard let url = URL(string: urlString) else { return nil }
         if url.isFileURL {
             return PageSizeReader.ratio(fileURL: url)
         }

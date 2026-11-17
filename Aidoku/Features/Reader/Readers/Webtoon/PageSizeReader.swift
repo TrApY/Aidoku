@@ -8,6 +8,7 @@
 
 import Foundation
 import ImageIO
+import ZIPFoundation
 
 /// The height/width ratio of an image from its header, without decoding it.
 enum PageSizeReader {
@@ -23,6 +24,31 @@ enum PageSizeReader {
     static func ratio(data: Data) -> CGFloat? {
         guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
         return ratio(source)
+    }
+
+    /// From an entry of an archive (a downloaded .cbz): only its first chunks are read, until the header is in.
+    static func ratio(archive archiveURL: URL, path: String) -> CGFloat? {
+        struct Enough: Error {}
+        guard
+            let archive = try? Archive(url: archiveURL, accessMode: .read),
+            let entry = archive[path]
+        else { return nil }
+        let source = CGImageSourceCreateIncremental(options)
+        var data = Data()
+        var found: CGFloat?
+        _ = try? archive.extract(entry, bufferSize: 16 * 1024, skipCRC32: true) { chunk in
+            data.append(chunk)
+            CGImageSourceUpdateData(source, data as CFData, false)
+            if let ratio = ratio(source) {
+                found = ratio
+                throw Enough()
+            }
+            // the header is at the start: no further than 1 MB
+            if data.count > 1024 * 1024 {
+                throw Enough()
+            }
+        }
+        return found
     }
 
     private static func ratio(_ source: CGImageSource) -> CGFloat? {
