@@ -78,6 +78,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// their images load and move the content, and the page in the middle of the screen becomes the one
     /// before: that is not the user reading, so it is neither reported nor saved. SUWA-16
     private var openingPageHold: Int?
+    /// Where the user is reading (SUWA-19): only the user moves it, and opening a chapter.
+    private(set) var anchor: ReadingAnchor?
     /// Entering the previous chapter from below by scrolling: how far into its section the screen was. Once the
     /// user goes half a screen further up inside it, they are reading it (SUWA-17 F3: a chapter of one page, or a
     /// last page taller than the screen, has no page before the last to report).
