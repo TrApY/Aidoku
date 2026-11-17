@@ -520,3 +520,42 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 }
+
+
+// MARK: - SUWA-17 F2b: the manga page's «Continuar» once the reread's session is saved
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
+    /// The reader leaving a completed chapter read again saves its page (historySet) and then its reading session:
+    /// the manga page's «Continuar» goes to that chapter once the session is in, as the reader leaves it.
+    @Test func theMangaPageTakesUpTheRereadOnceItsSessionIsSaved() async throws {
+        let manga = manga("f2ficha", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        let completedAt = Date().addingTimeInterval(-120)
+        await seed(id(manga, c1), page: Self.pageCount, total: Self.pageCount)
+        await DataRepositories.shared.history.markCompleted([id(manga, c1)], date: completedAt)
+        CompletionJournal.record(id(manga, c1), reason: "test: completado", date: completedAt)
+        await seed(id(manga, c2), page: 6, total: Self.pageCount)
+        try await Task.sleep(for: .milliseconds(1100))
+
+        let model = MangaView.ViewModel(source: nil, manga: manga)
+        await model.fetchDetails()
+        if model.chapters.isEmpty {
+            model.chapters = [c2, c1]
+        }
+        model.refreshReadButtonState()
+        try #require(model.nextChapter?.key == c2.key, "before: \(String(describing: model.nextChapter?.key))")
+
+        // the reader leaves chapter 1, read again up to page 9: its page, then its session
+        await HistoryManager.shared.setProgress(
+            chapterId: id(manga, c1), chapter: c1, progress: 9, totalPages: Self.pageCount, completed: false, updateTrackers: false
+        )
+        try await Task.sleep(for: .seconds(1))
+        await HistoryManager.shared.addSession(
+            chapterId: id(manga, c1),
+            data: .init(startDate: Date().addingTimeInterval(-30), endDate: Date(), pagesRead: 3)
+        )
+        try await Task.sleep(for: .seconds(1))
+        #expect(model.nextChapter?.key == c1.key, "«Continuar» on the manga page: \(String(describing: model.nextChapter?.key))")
+        #expect(model.rereading[c1.key] == 9)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
