@@ -83,7 +83,7 @@ struct StatsGridView: View {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     var mainContent: some View {
         // monthly chart
         let defaultChartHeight = Self.chartHeight + (chartIsExpanded ? Self.chartExpansionHeight : 0)
@@ -261,7 +261,7 @@ struct StatsGridView: View {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     func squareView(index: Int, size: CGSize, expanded: Bool) -> some View {
         InsightPlatterView {
             ZStack {

@@ -135,7 +135,7 @@ struct BackupsView: View {
         }
     }
 
-    @ToolbarContentBuilder
+    @ContentBuilder
     var toolbarContentiOS26: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             autoBackupButton

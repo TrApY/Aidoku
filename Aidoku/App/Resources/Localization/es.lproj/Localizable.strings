@@ -751,6 +751,8 @@
 
 // Download ahead
 "DOWNLOAD_AHEAD" = "Descarga adelantada";
+"NEXT_UNREAD" = "Siguiente sin leer";
+"NEXT_%i_UNREAD" = "Siguientes %i sin leer";
 "DOWNLOAD_AHEAD_OFF" = "Desactivada";
 "DOWNLOAD_AHEAD_ONE" = "1 capítulo";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i capítulos";

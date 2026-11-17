@@ -669,12 +669,8 @@ extension BrowseViewController {
             dataSource.apply(snapshot)
         }
 
-        Task { @MainActor in
-            if sourcesSearchController?.searchBar.text?.isEmpty ?? true {
-                applyEmptyState(items: snapshot.itemIdentifiers.count)
-            }
-            checkUpdateCount()
-        }
+        applyEmptyState(items: snapshot.itemIdentifiers.count)
+        checkUpdateCount()
     }
 
     func updateExternalSources() {
@@ -699,10 +695,8 @@ extension BrowseViewController {
         // prevents jumpiness from pull to refresh
         dataSource.apply(snapshot)
 
-        Task { @MainActor in
-            applyEmptyState(items: snapshot.itemIdentifiers.count)
-            checkUpdateCount()
-        }
+        applyEmptyState(items: snapshot.itemIdentifiers.count)
+        checkUpdateCount()
     }
 }
 
@@ -710,7 +704,11 @@ extension BrowseViewController {
 extension BrowseViewController: UISearchResultsUpdating {
     func updateSearchResults(for searchController: UISearchController) {
         viewModel.search(query: searchController.searchBar.text)
-        updateDataSource()
+        if hasAppliedInitialSnapshot {
+            // only refresh if sources have already loaded
+            // fixes the "no sources" view from showing incorrectly
+            updateDataSource()
+        }
     }
 }
 

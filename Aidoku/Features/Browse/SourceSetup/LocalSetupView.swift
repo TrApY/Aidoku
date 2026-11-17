@@ -33,7 +33,7 @@ struct LocalSetupView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    @ViewBuilder
+    @ContentBuilder
     static func infoView(title: LocalizedStringKey, subtitle: LocalizedStringKey, error: Bool = false) -> some View {
         let titleColor = error
             ? Color(uiColor: UIColor(dynamicProvider: { traitCollection in

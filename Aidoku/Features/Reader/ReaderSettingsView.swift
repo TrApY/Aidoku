@@ -575,7 +575,7 @@ extension ReaderSettingsView {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     var textSection: some View {
         let title = String(format: NSLocalizedString("%@_EXPERIMENTAL"), NSLocalizedString("TEXT_READER"))
         Section(title) {

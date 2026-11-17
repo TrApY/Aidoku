@@ -22,7 +22,7 @@ struct UnavailableView: View {
         ContentUnavailableView(title, systemImage: systemImage, description: description)
     }
 
-    @ViewBuilder
+    @ContentBuilder
     static func search(text: String) -> some View {
         ContentUnavailableView.search(text: text)
     }

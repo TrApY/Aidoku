@@ -89,7 +89,7 @@ struct ErrorView: View {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     func retryButton(title: String = NSLocalizedString("RETRY"), action: @escaping () async -> Void) -> some View {
         HStack {
             if loading {

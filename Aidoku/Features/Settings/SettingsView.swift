@@ -291,7 +291,7 @@ extension SettingsView {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     func pageContentHandler(_ key: String) -> (some View)? {
         if key == "Library.categories" {
             CategoriesView(categories: $categoriesOnly)
@@ -322,7 +322,7 @@ extension SettingsView {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     func customContentHandler(_ setting: Setting) -> some View {
         if setting.key == AppSettings.appearance.layout.key {
             LayoutSettingView()

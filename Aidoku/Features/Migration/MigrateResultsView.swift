@@ -306,7 +306,7 @@ extension MigrateResultsView {
             }
         }
 
-        @ViewBuilder
+        @ContentBuilder
         var menuContent: some View {
             Button {
                 path.push(MigrateSingleSearchView(

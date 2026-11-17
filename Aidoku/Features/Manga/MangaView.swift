@@ -323,9 +323,13 @@ extension MangaView {
         .listRowInsets(.zero)
     }
 
-    @ViewBuilder
+    @ContentBuilder
     func viewForChapter(_ chapter: AidokuRunner.Chapter, index: Int, secondSection: Bool = false) -> some View {
-        let last = index == (secondSection ? viewModel.otherDownloadedChapters : viewModel.chapters).count - 1
+        let last = if viewModel.chapterSortAscending {
+            index == 0
+        } else {
+            index == (secondSection ? viewModel.otherDownloadedChapters : viewModel.chapters).count - 1
+        }
         let downloadStatus = viewModel.downloadStatus[chapter.key, default: .none]
         let downloaded = downloadStatus == .finished
         let locked = chapter.locked && !downloaded
@@ -375,7 +379,7 @@ extension MangaView {
         .matchedTransitionSourcePlease(id: chapter, in: transitionNamespace)
     }
 
-    @ViewBuilder
+    @ContentBuilder
     func contextMenu(
         chapter: AidokuRunner.Chapter,
         downloadStatus: DownloadStatus,
@@ -521,7 +525,7 @@ extension MangaView {
         }
     }
 
-    @ViewBuilder
+    @ContentBuilder
     var rightNavbarButton: some View {
         RightNavbarButton(
             viewModel: viewModel,
@@ -546,6 +550,12 @@ extension MangaView {
                     await viewModel.markUnread(chapters: chapters)
                     hideLoadingIndicator()
                 }
+            },
+            downloadAll: {
+                downloadChapters(unread: false)
+            },
+            downloadUnread: { limit in
+                downloadChapters(unread: true, limit: limit)
             },
             editCategories: {
                 path.present(
@@ -577,10 +587,25 @@ extension MangaView {
             editMode: $editMode
         ).equatable()
     }
+
+    func downloadChapters(unread: Bool, limit: Int? = nil) {
+        if AppSettings.downloads.downloadOnlyOnWifi.get(), Reachability.getConnectionType() != .wifi {
+            showConnectionAlert = true
+            return
+        }
+
+        Task {
+            if unread {
+                await DownloadManager.shared.downloadUnread(manga: viewModel.manga, limit: limit)
+            } else {
+                await DownloadManager.shared.downloadAll(manga: viewModel.manga)
+            }
+        }
+    }
 }
 
 extension MangaView {
-    @ToolbarContentBuilder
+    @ContentBuilder
     var toolbarContentBase: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             rightNavbarButton
@@ -609,7 +634,7 @@ extension MangaView {
         }
     }
 
-    @ToolbarContentBuilder
+    @ContentBuilder
     var toolbarContentiOS26: some ToolbarContent {
         toolbarContentBase
 
@@ -673,7 +698,7 @@ extension MangaView {
         .disabled(selectedChapters.isEmpty)
     }
 
-    @ViewBuilder
+    @ContentBuilder
     var toolbarDownloadButton: some View {
         let allChaptersQueued = !selectedChapters.contains(where: {
             viewModel.downloadStatus[$0] != .queued
@@ -898,12 +923,15 @@ private struct RightNavbarButton: View, Equatable {
     private let hasCategories: Bool
     private let url: URL?
     private let hasDownloads: Bool
+    private let canDownload: Bool
     private let isEditing: Bool
     private let canDownloadAhead: Bool
     private let refresh: () async -> Void
 
     let markAllRead: () -> Void
     let markAllUnread: () -> Void
+    let downloadAll: () -> Void
+    let downloadUnread: (Int?) -> Void
     let editCategories: () -> Void
     let migrate: () -> Void
     let showShareSheet: (URL) -> Void
@@ -918,6 +946,8 @@ private struct RightNavbarButton: View, Equatable {
         refreshController: RefreshController,
         markAllRead: @escaping () -> Void,
         markAllUnread: @escaping () -> Void,
+        downloadAll: @escaping () -> Void,
+        downloadUnread: @escaping (Int?) -> Void,
         editCategories: @escaping () -> Void,
         migrate: @escaping () -> Void,
         showShareSheet: @escaping (URL) -> Void,
@@ -936,10 +966,15 @@ private struct RightNavbarButton: View, Equatable {
             isLocal: viewModel.manga.isLocal()
         )
         self._downloadAhead = State(initialValue: DownloadAheadSetting.get(for: viewModel.manga.identifier))
+        self.canDownload = viewModel.source != nil
+            && !viewModel.manga.isLocal()
+            && !(viewModel.manga.chapters?.isEmpty ?? true)
         self.refresh = refreshController.refresh
 
         self.markAllRead = markAllRead
         self.markAllUnread = markAllUnread
+        self.downloadAll = downloadAll
+        self.downloadUnread = downloadUnread
         self.editCategories = editCategories
         self.migrate = migrate
         self.showShareSheet = showShareSheet
@@ -974,6 +1009,26 @@ private struct RightNavbarButton: View, Equatable {
                             markAllUnread()
                         } label: {
                             Label(NSLocalizedString("UNREAD"), systemImage: "minus.circle")
+                        }
+                    }
+                    if canDownload {
+                        Menu {
+                            Button(NSLocalizedString("NEXT_UNREAD")) {
+                                downloadUnread(1)
+                            }
+                            ForEach([5, 10], id: \.self) { limit in
+                                Button(String(format: NSLocalizedString("NEXT_%i_UNREAD"), limit)) {
+                                    downloadUnread(limit)
+                                }
+                            }
+                            Button(NSLocalizedString("UNREAD")) {
+                                downloadUnread(nil)
+                            }
+                            Button(NSLocalizedString("ALL")) {
+                                downloadAll()
+                            }
+                        } label: {
+                            Label(NSLocalizedString("DOWNLOAD"), systemImage: "arrow.down.circle")
                         }
                     }
                     Button {
@@ -1060,6 +1115,7 @@ private struct RightNavbarButton: View, Equatable {
             && lhs.hasCategories == rhs.hasCategories
             && lhs.url == rhs.url
             && lhs.hasDownloads == rhs.hasDownloads
+            && lhs.canDownload == rhs.canDownload
             && lhs.isEditing == rhs.isEditing
             && lhs.canDownloadAhead == rhs.canDownloadAhead
     }

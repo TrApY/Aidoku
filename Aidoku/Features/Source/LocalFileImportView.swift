@@ -683,7 +683,7 @@ extension LocalFileImportView.ContentView {
 // only supported on ios 16+
 private struct PresentationDetentHandler<Content: View & Sendable>: View {
     @Binding var fullyPresented: Bool
-    @ViewBuilder let content: Content
+    @ContentBuilder let content: Content
 
     @State private var detents: Set<PresentationDetent> = [.height(220)]
     @State private var detent: PresentationDetent = .height(220)
