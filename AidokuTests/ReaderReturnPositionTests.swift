@@ -14,6 +14,7 @@ import UIKit
 
 @testable import Aidoku
 
+extension ImagePipelineSwappingTests {
 @MainActor
 @Suite(.serialized) struct ReaderReturnPositionTests {
     static let pageCount = 12
@@ -148,9 +149,10 @@ import UIKit
         return opened
     }
 }
+}
 
 // MARK: - D1: «previous / next chapter» open the chapter where it was left
-extension ReaderReturnPositionTests {
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     /// Chapter 2 at page 2 → «previous chapter» to chapter 1, stored at page 10: it opens at 10, and that page is
     /// not written over (nothing is saved until the user moves).
     @Test func previousChapterOpensAtItsStoredPageAndKeepsIt() async throws {
@@ -172,7 +174,7 @@ extension ReaderReturnPositionTests {
 }
 
 // MARK: - D2: a completed chapter read again
-extension ReaderReturnPositionTests {
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     /// «Continuar»: a completed chapter being read again (0 < page < total, the latest read) is the one; a completed
     /// one read to its end is not (the next one is); a chapter not completed, read last, is the one.
     @Test func continueGoesToTheChapterBeingReadAgain() async throws {
@@ -236,7 +238,7 @@ extension ReaderReturnPositionTests {
 }
 
 // MARK: - D3: leaving the reader
-extension ReaderReturnPositionTests {
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     /// Opened at page 10 and left without moving: nothing is written (another device, through iCloud, may have
     /// saved a newer page meanwhile).
     @Test func leavingAtTheOpeningPageWritesNothing() async throws {
@@ -288,7 +290,7 @@ extension ReaderReturnPositionTests {
 }
 
 // MARK: - D5: a chapter entered from below
-extension ReaderReturnPositionTests {
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     /// Up from the start of chapter 2 into the last page of chapter 1 and down again: chapter 1 is not completed
     /// (it was not read going down).
     @Test func upIntoThePreviousChapterAndDownAgainCompletesNothing() async throws {
@@ -328,7 +330,7 @@ extension ReaderReturnPositionTests {
 }
 
 // MARK: - D6: the last page seen counts for the visit
-extension ReaderReturnPositionTests {
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
     /// The last page of chapter 2 seen, «previous» to chapter 1, back to chapter 2 and «next» from its page 3:
     /// chapter 2 is not completed (its last page was seen in an earlier visit).
     @Test func theLastPageSeenInAnEarlierVisitDoesNotCount() async throws {

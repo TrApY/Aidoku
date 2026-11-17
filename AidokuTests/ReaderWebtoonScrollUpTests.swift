@@ -17,6 +17,7 @@ import UIKit
 
 @testable import Aidoku
 
+extension ImagePipelineSwappingTests {
 @MainActor
 @Suite(.serialized) struct ReaderWebtoonScrollUpTests {
     private static let pageCount = 12
@@ -162,4 +163,5 @@ import UIKit
         #expect(opened.chapterKey == "c1")
         await opened.close()
     }
+}
 }

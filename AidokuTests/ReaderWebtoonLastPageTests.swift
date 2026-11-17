@@ -14,6 +14,7 @@ import UIKit
 
 @testable import Aidoku
 
+extension ImagePipelineSwappingTests {
 @MainActor
 @Suite(.serialized) struct ReaderWebtoonLastPageTests {
     private static let pageCount = 12
@@ -114,4 +115,5 @@ import UIKit
         UserDefaults.standard.removeObject(forKey: modeKey)
         await removeTestHistory(chapterId)
     }
+}
 }

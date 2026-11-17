@@ -118,7 +118,8 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
 }
 
 /// The suites that put their own ImagePipeline.shared (the reader loads through it) run one after the other:
-/// suites run at the same time, and one would load its pages through the other's.
+/// suites run at the same time, and one would load its pages through the other's. So do the other suites of the
+/// reader that load pages through it (SUWA-17 E6): they would load through the slow one of a suite of these.
 @Suite(.serialized) enum ImagePipelineSwappingTests {}
 
 extension ImagePipelineSwappingTests {

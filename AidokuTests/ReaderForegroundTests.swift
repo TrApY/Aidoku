@@ -35,6 +35,7 @@ func removeTestHistory(_ chapterId: ChapterIdentifier) async {
     await DataRepositories.shared.history.removeAll(of: chapterId.mangaIdentifier)
 }
 
+extension ImagePipelineSwappingTests {
 @MainActor
 @Suite(.serialized) struct ReaderForegroundTests {
     /// The iPad at 14:18: page 18, the app goes to the background and the webtoon reports the end transition.
@@ -85,4 +86,5 @@ func removeTestHistory(_ chapterId: ChapterIdentifier) async {
         try await Task.sleep(for: .seconds(1))
         #expect(await storedProgress(chapterId).completed == false)
     }
+}
 }

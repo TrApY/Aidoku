@@ -520,3 +520,42 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         #expect(all.allSatisfy { $0 }, "\(all.filter { !$0 }.count) of \(all.count) applied off the main thread")
     }
 }
+
+// MARK: - SUWA-17 E6: the pause after a memory warning
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// After a memory warning nothing is measured ahead for half a minute; after it, again.
+    @Test func afterAMemoryWarningNothingIsMeasuredAheadForHalfAMinute() async throws {
+        let opened = try await open(.remote(delay: 1.0), mangaKey: "pausa", preload: 6)
+        let measuring: () -> [Int] = {
+            opened.pageRows.filter { (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0, section: 0)) as? ReaderWebtoonPageNode)?.isMeasuringAhead == true }
+        }
+        // the first pages in (until then the scroll view outside has no size yet: nothing to scroll)
+        try await watch(opened, seconds: 2) { _ in }
+        let opening = "y \(Int(opened.webtoon.scrollView.contentOffset.y)) contentSize \(Int(opened.webtoon.scrollView.contentSize.height)) layout \(Int(opened.layout.collectionViewContentSize.height))"
+        try #require(!measuring().isEmpty, "nothing measuring ahead after opening")
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(measuring().isEmpty, "rows \(measuring()) still measuring after the warning")
+        let sv = opened.webtoon.scrollView
+        let before = "y \(Int(sv.contentOffset.y)) contentSize \(Int(sv.contentSize.height)) layout \(Int(opened.layout.collectionViewContentSize.height)) bounds \(Int(sv.bounds.height))"
+        try await scroll(opened, seconds: 0.5, velocity: 900) { _ in }
+        try await watch(opened, seconds: 0.3) { _ in }
+        let after = "y \(Int(sv.contentOffset.y)) contentSize \(Int(sv.contentSize.height)) layout \(Int(opened.layout.collectionViewContentSize.height))"
+        #expect(measuring().isEmpty, "rows \(measuring()) measuring during the pause")
+        #expect(sv.contentOffset.y > 300, "did not move: opening \(opening); \(before) → \(after)")
+        // half a minute later
+        try #require(opened.webtoon.measureAheadPausedUntil != nil)
+        opened.webtoon.measureAheadPausedUntil = Date()
+        try await scroll(opened, seconds: 0.5, velocity: 900) { _ in }
+        try await watch(opened, seconds: 0.3) { _ in }
+        let state: () -> String = {
+            guard let last = opened.lastVisibleRow else { return "?" }
+            return ((last + 1)...(last + 7)).filter { opened.pageRows.contains($0) }.map { row in
+                let node = opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: row, section: 0)) as? ReaderWebtoonPageNode
+                return "\(row):\(opened.isMeasured(row) ? "M" : "-")\(node?.isMeasuringAhead == true ? "m" : "-")\(node?.image != nil ? "i" : "-")"
+            }.joined(separator: " ")
+        }
+        #expect(!measuring().isEmpty || opened.measuredBelow >= 6, "nothing measured ahead after the pause: \(state()) paused \(String(describing: opened.webtoon.measureAheadPausedUntil))")
+        await opened.close()
+    }
+}

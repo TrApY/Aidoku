@@ -36,7 +36,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// The last page on screen when the pages around it were last asked to be measured.
     private var measuredAheadFrom: IndexPath?
     /// After a memory warning nothing is measured ahead for a while.
-    private var measureAheadPausedUntil: Date?
+    /// Until when nothing is measured ahead, after a memory warning (internal for the tests).
+    var measureAheadPausedUntil: Date?
     /// The pages that may hold a decoded image: from the first one on screen, «pages to preload» + 2 in all
     /// counting the ones on screen (all of these if more show at once). Texture's preload range alone loads
     /// and decodes as far as 2.5 screens below (SUWA-17 E1).

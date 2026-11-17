@@ -14,6 +14,7 @@ import UIKit
 
 @testable import Aidoku
 
+extension ImagePipelineSwappingTests {
 @MainActor
 @Suite(.serialized) struct ReaderChapterEndTests {
     private static let pageCount = 38
@@ -168,4 +169,5 @@ import UIKit
         UserDefaults.standard.removeObject(forKey: queueKey)
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
+}
 }
