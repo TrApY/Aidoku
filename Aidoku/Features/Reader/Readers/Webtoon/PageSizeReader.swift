@@ -31,18 +31,60 @@ enum PageSizeReader {
         return ratio(source)
     }
 
+    /// An archive opened with its entries by path: a chapter's pages are measured opening it once, not once a page
+    /// with a walk through all its entries (SUWA-17 E5). Extracting from it is one at a time.
+    private final class OpenedArchive: @unchecked Sendable {
+        let archive: Archive
+        let entries: [String: Entry]
+        let lock = NSLock()
+
+        init(_ archive: Archive) {
+            self.archive = archive
+            var entries: [String: Entry] = [:]
+            for entry in archive where entries[entry.path] == nil {
+                entries[entry.path] = entry
+            }
+            self.entries = entries
+        }
+    }
+
+    /// The last archives opened (a chapter and the next one), by path, size and date: a new download is opened again.
+    nonisolated(unsafe) private static var opened: [(key: String, archive: OpenedArchive)] = []
+
+    private static func openedArchive(_ url: URL) -> OpenedArchive? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attributes?[.size] as? NSNumber)?.int64Value ?? -1
+        let date = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+        let key = "\(url.path)|\(size)|\(date)"
+        return opensLock.withLock {
+            if let found = opened.first(where: { $0.key == key }) {
+                return found.archive
+            }
+            guard let archive = try? Archive(url: url, accessMode: .read, pathEncoding: nil) else { return nil }
+            opens += 1
+            let new = OpenedArchive(archive)
+            opened.removeAll { $0.key.hasPrefix(url.path + "|") }
+            opened.insert((key, new), at: 0)
+            if opened.count > 2 {
+                opened.removeLast()
+            }
+            return new
+        }
+    }
+
     /// From an entry of an archive (a downloaded .cbz): only its first chunks are read, until the header is in.
     static func ratio(archive archiveURL: URL, path: String) -> CGFloat? {
         struct Enough: Error {}
         guard
-            let archive = try? Archive(url: archiveURL, accessMode: .read, pathEncoding: nil),
-            let entry = archive[path]
+            let opened = openedArchive(archiveURL),
+            let entry = opened.entries[path]
         else { return nil }
-        opensLock.withLock { opens += 1 }
         let source = CGImageSourceCreateIncremental(options)
         var data = Data()
         var found: CGFloat?
-        _ = try? archive.extract(entry, bufferSize: 16 * 1024, skipCRC32: true) { chunk in
+        opened.lock.lock()
+        defer { opened.lock.unlock() }
+        _ = try? opened.archive.extract(entry, bufferSize: 16 * 1024, skipCRC32: true) { chunk in
             data.append(chunk)
             CGImageSourceUpdateData(source, data as CFData, false)
             if let ratio = ratio(source) {
