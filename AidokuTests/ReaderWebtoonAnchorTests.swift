@@ -46,6 +46,7 @@ extension ImagePipelineSwappingTests {
         let webtoon: ReaderWebtoonViewController
         let chapterId: ChapterIdentifier
         let window: UIWindow
+        let center: NotificationCenter
         let directory: URL
         let modeKey: String
 
@@ -73,7 +74,8 @@ extension ImagePipelineSwappingTests {
         let (pages, directory) = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key)
 
         let reader = ReaderViewController(source: nil, manga: manga, chapter: chapter)
-        reader.appActivity = ReaderAppActivity(center: NotificationCenter(), active: true)
+        let center = NotificationCenter()
+        reader.appActivity = ReaderAppActivity(center: center, active: true)
         let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -86,7 +88,9 @@ extension ImagePipelineSwappingTests {
         webtoon.viewModel.preloadedPages = pages
         reader.loadCurrentChapter()
         try await Task.sleep(for: .seconds(wait))
-        return Opened(reader: reader, webtoon: webtoon, chapterId: chapterId, window: window, directory: directory, modeKey: modeKey)
+        return Opened(
+            reader: reader, webtoon: webtoon, chapterId: chapterId, window: window, center: center, directory: directory, modeKey: modeKey
+        )
     }
 
     /// The user drags until the middle of the screen is at `fraction` of `row`, and lets go.
@@ -197,6 +201,43 @@ extension ImagePipelineSwappingTests {
         #expect(opened.webtoon.anchor == before)
         let distance = try distanceFromTheAnchor(opened)
         #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
+        await opened.close()
+    }
+
+    // MARK: - Paso 4: the width, a rotation and coming back to the front, from the anchor
+
+    /// D5: the content moved by something that is not the user (UIKit scaling the offset after a width change, the
+    /// zoom's scroll view putting back an old offset) goes back on the anchor at once, without waiting for a layout.
+    @Test func aMoveThatIsNotTheUsersIsUndoneAtOnce() async throws {
+        let opened = try await open(mangaKey: "anclaenseguida", startPage: 5)
+        try userScrolls(opened, toRow: 7, at: 0.3)
+        try await Task.sleep(for: .milliseconds(500))
+        let before = try #require(opened.webtoon.anchor)
+        let scrollView = opened.webtoon.scrollView
+        scrollView.setContentOffset(CGPoint(x: 0, y: scrollView.contentOffset.y + 700), animated: false)
+        #expect(opened.webtoon.anchor == before)
+        let distance = try distanceFromTheAnchor(opened)
+        #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
+        #expect(abs(scrollView.contentOffset.y - opened.webtoon.collectionNode.contentOffset.y) < 0.5)
+        await opened.close()
+    }
+
+    /// I7: out of front, the content moving (iPadOS, a drag that is not taken) does not move the anchor; back in
+    /// front, the screen is on it and the page is the anchor's.
+    @Test func backInFrontTheScreenIsOnTheAnchor() async throws {
+        let opened = try await open(mangaKey: "anclaprimerplano", startPage: 5)
+        try userScrolls(opened, toRow: 7, at: 0.3)
+        try await Task.sleep(for: .seconds(1))
+        let before = try #require(opened.webtoon.anchor)
+        opened.center.post(name: UIApplication.willResignActiveNotification, object: nil)
+        try userScrolls(opened, toRow: 12)
+        try await Task.sleep(for: .milliseconds(300))
+        opened.center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(opened.webtoon.anchor == before)
+        let distance = try distanceFromTheAnchor(opened)
+        #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
+        #expect(opened.reader.currentPage == 7)
         await opened.close()
     }
 }
