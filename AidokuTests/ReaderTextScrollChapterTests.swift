@@ -161,3 +161,37 @@ extension ReaderTextScrollChapterTests {
         await opened.close()
     }
 }
+
+extension ReaderTextScrollChapterTests {
+    /// The previous chapter entered from below, then up into its text: its page is saved as the reader tells it;
+    /// then read down to its end: completed (the SUWA-12 rule).
+    @Test func intoThePreviousChapterFromBelowThenReadItSavesAndCompletes() async throws {
+        let opened = try await open(mangaKey: "abajoyleer", paragraphs: 40)
+        let scrollView = try #require(opened.scrollView)
+        try userScrolls(opened, to: 0)
+        try await Task.sleep(for: .seconds(3))
+        let top = scrollView.contentOffset.y
+        try #require(top > scrollView.bounds.height * 3, "chapter 1 did not go in above (y \(top))")
+        // up into the end of chapter 1, then well into its text
+        try userScrolls(opened, to: top - scrollView.bounds.height * 0.7)
+        try await Task.sleep(for: .seconds(1))
+        try userScrolls(opened, to: top - scrollView.bounds.height * 3)
+        try await Task.sleep(for: .seconds(3))
+        try #require(opened.reader.chapter.key == previous.key)
+        let page = opened.reader.currentPage
+        let record = await DataRepositories.shared.history.record(of: opened.ids[0])
+        #expect(page >= 1)
+        #expect(record?.progress == page, "chapter 1 at page \(page), saved \(String(describing: record?.progress))")
+        #expect(await storedProgress(opened.ids[0]).completed == false)
+        // read down to its end
+        var y = scrollView.contentOffset.y
+        while y < top - 60 {
+            y = min(y + 300, top - 60)
+            try userScrolls(opened, to: y)
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try await Task.sleep(for: .seconds(2))
+        #expect(await storedProgress(opened.ids[0]).completed == true, "chapter 1 read to its end")
+        await opened.close()
+    }
+}

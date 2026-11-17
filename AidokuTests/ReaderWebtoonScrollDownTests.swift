@@ -7,6 +7,15 @@
 //  real images much taller than the provisional height that load while the user scrolls down (dragging, a fling
 //  decelerating, and up to the end where the next chapter goes in below): what is on screen never goes back.
 //
+//  The red (the layout before f223d2f3, as in 0ec254fb and the build installed then, 90862f69), to see it again:
+//    git show 0ec254fb:Aidoku/Features/Reader/Readers/Webtoon/VerticalContentOffsetPreservingLayout.swift \
+//      > Aidoku/Features/Reader/Readers/Webtoon/VerticalContentOffsetPreservingLayout.swift
+//    xcodebuild test ... -only-testing:AidokuTests/ImagePipelineSwappingTests/ReaderWebtoonScrollDownTests
+//    git checkout -- Aidoku
+//  pagesPassedBeforeTheyLoadedGrowAboveWithoutMovingTheScreen fails (row 14 back to 13 once the held pages come
+//  in above) and so does aFlingDeceleratingWhilePagesLoadNeverGoesBack (row 9 back to 8 while decelerating); the
+//  other two pass with both layouts. That layout has no anchor test of its own (C3, C4): those need the new one.
+//
 
 import AidokuRunner
 import AsyncDisplayKit
