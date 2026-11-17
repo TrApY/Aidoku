@@ -12,6 +12,11 @@ import ZIPFoundation
 
 /// The height/width ratio of an image from its header, without decoding it.
 enum PageSizeReader {
+    private static let opensLock = NSLock()
+    nonisolated(unsafe) private static var opens = 0
+    /// How many times an archive was opened to measure its pages (tests).
+    static var archiveOpens: Int { opensLock.withLock { opens } }
+
     private static var options: CFDictionary {
         [kCGImageSourceShouldCache: false] as CFDictionary
     }
@@ -33,6 +38,7 @@ enum PageSizeReader {
             let archive = try? Archive(url: archiveURL, accessMode: .read, pathEncoding: nil),
             let entry = archive[path]
         else { return nil }
+        opensLock.withLock { opens += 1 }
         let source = CGImageSourceCreateIncremental(options)
         var data = Data()
         var found: CGFloat?

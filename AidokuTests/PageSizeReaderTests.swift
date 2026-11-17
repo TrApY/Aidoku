@@ -58,4 +58,32 @@ import ZIPFoundation
         let fromEntry = PageSizeReader.ratio(archive: zip, path: "0.webp")
         #expect(fromEntry == nil || abs(fromEntry! - 0.5) < 0.01, "from the archive entry \(String(describing: fromEntry))")
     }
+
+    /// E5: the pages of a chapter are measured opening its archive once, not once a page.
+    @Test func aChapterArchiveIsOpenedOnceForAllItsPages() throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let count = 60
+        let zip = folder.appendingPathComponent("capitulo.cbz")
+        let archive = try Archive(url: zip, accessMode: .create)
+        for index in 0..<count {
+            let size = CGSize(width: 40, height: 60 + index)
+            let data = UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.5) {
+                UIColor.gray.setFill()
+                $0.fill(CGRect(origin: .zero, size: size))
+            }
+            try data.write(to: folder.appendingPathComponent("\(index).jpg"))
+            try archive.addEntry(with: "\(index).jpg", relativeTo: folder, compressionMethod: .deflate)
+        }
+        let before = PageSizeReader.archiveOpens
+        let start = ContinuousClock.now
+        for index in 0..<count {
+            let ratio = try #require(PageSizeReader.ratio(archive: zip, path: "\(index).jpg"))
+            #expect(abs(ratio - CGFloat(60 + index) / 40) < 0.01)
+        }
+        let elapsed = ContinuousClock.now - start
+        #expect(PageSizeReader.archiveOpens - before == 1, "the archive was opened \(PageSizeReader.archiveOpens - before) times for \(count) pages (\(elapsed))")
+    }
 }
