@@ -34,18 +34,25 @@ enum ReadingAnchorGeometry {
         viewportHeight: CGFloat,
         contentHeight: CGFloat
     ) -> CGFloat {
-        0
+        let y = frame.minY + fraction * frame.height - screenFraction * viewportHeight
+        return min(max(y, 0), max(0, contentHeight - viewportHeight))
     }
 
     /// The item whose frame holds the line (`lineY`, in content coordinates) and where in it: nil if none does or
     /// it has no height.
     static func locate(lineY: CGFloat, frames: [(item: Int, frame: CGRect)]) -> (item: Int, fraction: CGFloat)? {
-        nil
+        guard let found = frames.first(where: { $0.frame.height > 0 && $0.frame.minY <= lineY && $0.frame.maxY > lineY })
+        else { return nil }
+        return (found.item, (lineY - found.frame.minY) / found.frame.height)
     }
 
     /// An anchor taken on an item with its provisional height, once the item has its real one: the same distance
     /// to the item's top (a fraction of a made-up height means nothing: D6).
     static func measured(_ anchor: ReadingAnchor, provisionalHeight: CGFloat, realHeight: CGFloat) -> ReadingAnchor {
-        anchor
+        guard !anchor.measured, realHeight > 0 else { return anchor }
+        var measured = anchor
+        measured.fraction = min(max(anchor.fraction * provisionalHeight / realHeight, 0), 1)
+        measured.measured = true
+        return measured
     }
 }
