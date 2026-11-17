@@ -49,7 +49,9 @@ import UIKit
             try "guardado en segundo plano: mediana \(sorted[sorted.count / 2]), máximo \(sorted.last!)\n"
                 .write(to: URL(fileURLWithPath: out).appendingPathComponent("guardado-segundo-plano.txt"), atomically: true, encoding: .utf8)
         }
-        // the background time is at least ~5 s; the save takes a small part of it
-        #expect(sorted.last! < .seconds(1))
+        // the background time is at least ~5 s; the save takes a small part of it. Alone it takes a few ms; with the
+        // whole suite in parallel it waits for the shared store and took up to 2.4 s (SUWA-17 F, G): the ceiling is
+        // what matters, the background time, with a margin
+        #expect(sorted.last! < .seconds(4))
     }
 }
