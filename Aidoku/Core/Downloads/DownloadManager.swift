@@ -219,7 +219,12 @@ extension DownloadManager {
     }
 
     /// Download unread chapters for a manga.
-    func downloadUnread(manga: AidokuRunner.Manga, limit: Int? = nil) async {
+    /// - start: as `download(manga:chapters:start:)` (the menus start the queue).
+    func downloadUnread(
+        manga: AidokuRunner.Manga,
+        limit: Int? = nil,
+        start: DownloadQueue.AutoStart = .always
+    ) async {
         if let limit, limit <= 0 { return }
 
         let readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.identifier)
@@ -242,7 +247,7 @@ extension DownloadManager {
             }
         }
 
-        await download(manga: manga, chapters: chaptersToDownload)
+        await download(manga: manga, chapters: chaptersToDownload, start: start)
     }
 
     /// Download given chapters from a manga.
