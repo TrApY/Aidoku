@@ -79,6 +79,13 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// anchor's. Before, the page was the one in the middle of the screen, and the pages above growing as their
     /// images loaded made it the one before (SUWA-16: openingPageHold held the opening page until the user moved).
     private(set) var anchor: ReadingAnchor?
+    /// The anchor was written by the user (not the opening one): only then is its fraction reported (SUWA-19 D12).
+    private var anchorIsTheUsers = false
+    /// The position last reported with a page (page + fraction), to report a new fraction of the same page.
+    private var reportedPosition: Double?
+    /// Where in its start page the next chapter opened with setChapter goes (0 its top, 1 its bottom), in the
+    /// middle of the screen; nil: the top of the page at the top of the screen (SUWA-19 D12, D14).
+    var openingFraction: Double?
     /// Entering the previous chapter from below by scrolling: how far into its section the screen was. Once the
     /// user goes half a screen further up inside it, they are reading it (SUWA-17 F3: a chapter of one page, or a
     /// last page taller than the screen, has no page before the last to report).
@@ -279,6 +286,22 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private func writeAnchorFromScreen() {
         guard delegate?.appActivity.isActive ?? true, let new = anchorAtScreen() else { return }
         anchor = new
+        anchorIsTheUsers = true
+    }
+
+    /// The position saved with `page` (D12): the page plus the anchor's fraction rounded down to a tenth, when the
+    /// user put the anchor on that page (an image page); nil otherwise (the history keeps what it had).
+    private func positionToReport(page: Int) -> Double? {
+        guard
+            anchorIsTheUsers,
+            let anchor,
+            let chapter,
+            anchor.chapterKey == chapter.key,
+            anchor.item == page,
+            let chapterIndex = chapters.firstIndex(of: chapter),
+            pages[safe: chapterIndex]?[safe: anchor.item]?.type == .imagePage
+        else { return nil }
+        return Double(page) + min(floor(Double(anchor.fraction) * 10) / 10, 0.9)
     }
 
     /// Where the layout puts the screen: the anchor's item and point (SUWA-19). Nothing while a zoom goes on (the
@@ -666,9 +689,23 @@ extension ReaderWebtoonViewController {
             }
         }
 
-        // the page is the anchor's: the content moving without the user tells nothing (SUWA-19)
-        if let page = anchorPage(), pageReports.shouldReport(page) {
-            delegate?.setCurrentPage(page, position: nil)
+        // the page is the anchor's: the content moving without the user tells nothing (SUWA-19); with it, where in
+        // the page (D12), also when only that changes, but not inside a chapter entered from below (F3, G1: what
+        // counts there is the next page)
+        if let page = anchorPage() {
+            let position = positionToReport(page: page)
+            if pageReports.shouldReport(page) {
+                reportedPosition = position
+                delegate?.setCurrentPage(page, position: position)
+            } else if
+                let position,
+                position != reportedPosition,
+                enteredFromBelowAt == nil,
+                wentUpInside == nil
+            {
+                reportedPosition = position
+                delegate?.setCurrentPage(page, position: position)
+            }
         }
         measureAhead()
     }
@@ -1307,6 +1344,10 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         enteredFromBelowAt = nil
         wentUpInside = nil
         anchor = nil
+        anchorIsTheUsers = false
+        reportedPosition = nil
+        let openingFraction = openingFraction
+        self.openingFraction = nil
         updateDoubleTapZoomSetting()
         chapters = [chapter]
 
@@ -1342,8 +1383,13 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 startPage = viewModel.pages.count
             }
 
-            // the top of the page it opens at, at the top of the screen (SUWA-19 D4)
-            anchor = ReadingAnchor(chapterKey: chapter.key, item: startPage, fraction: 0, screenFraction: 0, measured: true)
+            // the top of the page it opens at, at the top of the screen (SUWA-19 D4); with a saved fraction, that
+            // point of the page in the middle of the screen (D12)
+            anchor = if let openingFraction {
+                ReadingAnchor(chapterKey: chapter.key, item: startPage, fraction: CGFloat(openingFraction), screenFraction: 0.5, measured: true)
+            } else {
+                ReadingAnchor(chapterKey: chapter.key, item: startPage, fraction: 0, screenFraction: 0, measured: true)
+            }
             await collectionNode.reloadData()
             zoomView.adjustContentSize()
 
@@ -1354,6 +1400,9 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 animated: false
             )
             scrollView.contentOffset = collectionNode.contentOffset
+            if openingFraction != nil {
+                applyAnchor()
+            }
         }
     }
 }

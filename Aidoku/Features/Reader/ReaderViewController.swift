@@ -772,7 +772,25 @@ extension ReaderViewController {
             pageKey: openingPageKey(),
             trackerKey: ReadPosition.pageKey(chapter: chapter, page: max(1, currentPage), position: nil)
         )
+        (reader as? ReaderWebtoonViewController)?.openingFraction = webtoonOpeningFraction()
         reader?.setChapter(chapter, startPage: currentPage)
+    }
+
+    /// Where in the page it opens at the webtoon reader goes (SUWA-19 D12): the history's scrollPosition is the
+    /// page plus its fraction; it counts only for the page it opens at (an old version, another device or a text
+    /// reader, whose position is from 0 to 1, leave values for another page, and nil does not clear it).
+    private func webtoonOpeningFraction() -> Double? {
+        guard reader is ReaderWebtoonViewController, currentPage >= 1 else { return nil }
+        let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+        guard
+            let history = DataRepositories.shared.mainActorReads.record(of: chapterId),
+            !history.completed || isRereading(history),
+            history.progress == currentPage,
+            let position = history.scrollPosition,
+            position >= 1,
+            floor(position) == Double(currentPage)
+        else { return nil }
+        return position - floor(position)
     }
 
     func loadNavbarTitle() {
