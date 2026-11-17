@@ -139,6 +139,18 @@ extension ImagePipelineSwappingTests {
             return count
         }
 
+        /// The rows with any of them on screen, or still on screen for Texture (its visible state follows the
+        /// screen a moment later).
+        var visibleRows: Int {
+            pageRows.filter { row in
+                if (webtoon.collectionNode.nodeForItem(at: IndexPath(row: row, section: 0)) as? ReaderWebtoonPageNode)?.isVisible == true {
+                    return true
+                }
+                guard let frame = frame(row) else { return false }
+                return frame.maxY > top + 0.5 && frame.minY < bottom - 0.5
+            }.count
+        }
+
         /// The page nodes holding a decoded image now.
         var decodedImages: Int {
             pageRows.filter { (webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0, section: 0)) as? ReaderWebtoonPageNode)?.image != nil }.count
@@ -394,5 +406,42 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         try await watch(opened, seconds: 2) { heights.look(opened, $0) }
         #expect(heights.changes.isEmpty, "\(heights.changes.prefix(4))")
         await opened.close()
+    }
+}
+
+// MARK: - SUWA-17 E1: decoded images at once
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// Opened, still, scrolled down quickly and still again: never more pages hold a decoded image than «pages to
+    /// preload» + 2, counting the ones on screen (more only while more than that are on screen at once).
+    private func decodedStayWithin(_ preload: Int, _ kind: Kind, key: String) async throws {
+        let opened = try await open(kind, mangaKey: key, preload: preload)
+        var over: [String] = []
+        var most = 0
+        let look: (String) -> Void = { when in
+            let limit = max(preload + 2, opened.visibleRows)
+            let decoded = opened.decodedImages
+            most = max(most, decoded)
+            if decoded > limit, over.count < 6 {
+                over.append("\(when): \(decoded) > \(limit)")
+            }
+        }
+        try await watch(opened, seconds: 3, every: look)
+        try await scroll(opened, seconds: 4, velocity: 1500, every: look)
+        try await watch(opened, seconds: 2, every: look)
+        #expect(over.isEmpty, "preload \(preload), most \(most): \(over)")
+        #expect(most >= 1)
+        await opened.close()
+    }
+
+    @Test func downloadedAtMostTwoMoreDecodedThanToPreload() async throws {
+        try await decodedStayWithin(2, .downloaded, key: "decod2")
+    }
+
+    @Test func downloadedWithNothingToPreloadAtMostTwoDecoded() async throws {
+        try await decodedStayWithin(0, .downloaded, key: "decod0")
+    }
+
+    @Test func fromTheServerAtMostTwoMoreDecodedThanToPreload() async throws {
+        try await decodedStayWithin(2, .remote(delay: 0.3), key: "decod2r")
     }
 }
