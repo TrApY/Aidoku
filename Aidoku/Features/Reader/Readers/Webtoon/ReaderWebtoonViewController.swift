@@ -80,6 +80,10 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// user goes half a screen further up inside it, they are reading it (SUWA-17 F3: a chapter of one page, or a
     /// last page taller than the screen, has no page before the last to report).
     private var enteredFromBelowAt: CGFloat?
+    /// After going up inside it: where the user entered and the highest point they went up to. Going down after
+    /// going a whole screen above where they entered is reading it: its page is told again (SUWA-17 G1).
+    private var wentUpInside: (entry: CGFloat, highest: CGFloat)?
+    private var lastScrollOffset: CGFloat = 0
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -535,10 +539,25 @@ extension ReaderWebtoonViewController {
             }
         }
 
-        // up inside a chapter entered from below: the reader reads it from now on (SUWA-17 F3)
-        if let entry = enteredFromBelowAt, let offset = offsetIntoChapter(), offset < entry - collectionNode.bounds.height / 2 {
-            enteredFromBelowAt = nil
-            delegate?.movedUpIntoChapter(page: getCurrentPage())
+        // up inside a chapter entered from below (SUWA-17 F3, G1): nothing is told; reading it going down is
+        let offsetY = collectionNode.contentOffset.y
+        let goingUp = offsetY < lastScrollOffset
+        let goingDown = offsetY > lastScrollOffset
+        lastScrollOffset = offsetY
+        if let offset = offsetIntoChapter() {
+            let height = collectionNode.bounds.height
+            if let entry = enteredFromBelowAt, goingUp, offset < entry - height / 2 {
+                enteredFromBelowAt = nil
+                wentUpInside = (entry, offset)
+                delegate?.movedUpIntoChapter()
+            } else if let inside = wentUpInside {
+                if goingUp {
+                    wentUpInside?.highest = min(inside.highest, offset)
+                } else if goingDown, inside.entry - inside.highest >= height - 1 {
+                    wentUpInside = nil
+                    pageReports.reset()
+                }
+            }
         }
 
         // update page number (the opening page until the user moves)
@@ -1000,6 +1019,7 @@ extension ReaderWebtoonViewController {
         delegate?.setPages(pages.filter({ $0.type == .imagePage }))
         viewModel.setPages(chapter: chapter, pages: pages)
         enteredFromBelowAt = offsetIntoChapter()
+        wentUpInside = nil
     }
 
     /// How far the top of the screen is into the current chapter's section.
@@ -1026,6 +1046,7 @@ extension ReaderWebtoonViewController {
         delegate?.setPages(pages.filter({ $0.type == .imagePage }))
         viewModel.setPages(chapter: chapter, pages: pages)
         enteredFromBelowAt = nil
+        wentUpInside = nil
     }
 
     /// Refresh info page chapter info
@@ -1146,6 +1167,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         // a new chapter: its first page is reported even if it has the number the last one had
         pageReports.reset()
         enteredFromBelowAt = nil
+        wentUpInside = nil
         openingPageHold = nil
         updateDoubleTapZoomSetting()
         chapters = [chapter]

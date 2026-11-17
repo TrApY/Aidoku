@@ -53,7 +53,11 @@ class ReaderViewController: BaseObservingViewController {
     /// The chapter was entered from below by scrolling (the reader went back up into it from the next one): nothing
     /// of it is saved or completed until the user goes up into its pages (SUWA-17 D4, D5). Opening a chapter
     /// (loadCurrentChapter: the chapter list, the buttons) is not entering it from below.
-    private var enteredFromBelow = false
+    private var enteredFromBelow = false {
+        didSet { movedUpInsideEnteredChapter = false }
+    }
+    /// The user went up inside the chapter entered from below (SUWA-17 G1): its next page report counts.
+    private var movedUpInsideEnteredChapter = false
     private var forceStartPage: Int?
     private(set) var currentPage = 1
     /// The app in front (page changes and completions only then). Replaced in tests. SUWA-12 I1
@@ -1311,12 +1315,12 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         setCurrentPages(pages, position: nil)
     }
 
-    /// Up into the chapter entered from below (inside its page, even if it is its only or last one): from now on
-    /// it is being read, and the page it is at counts (SUWA-17 F3).
-    func movedUpIntoChapter(page: Int) {
+    /// Up inside the chapter entered from below (inside its page, even if it is its only or last one): nothing is
+    /// told now (going up and back down does not read it: JoTa, 17-nov); the reader's next page report, the user
+    /// going down from there, counts (SUWA-17 F3, G1).
+    func movedUpIntoChapter() {
         guard enteredFromBelow else { return }
-        enteredFromBelow = false
-        setCurrentPage(page, position: nil)
+        movedUpInsideEnteredChapter = true
     }
 
     private func setCurrentPages(_ pages: ClosedRange<Int>, position: Double? = nil) {
@@ -1325,7 +1329,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         guard let totalPages = toolbarView.totalPages else { return }
         // a chapter entered from below: the user went up into it (a text reader only reports once in its text)
         let reportsFromText = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
-        if enteredFromBelow, reportsFromText || pages.upperBound < totalPages {
+        if enteredFromBelow, reportsFromText || pages.upperBound < totalPages || movedUpInsideEnteredChapter {
             enteredFromBelow = false
         }
         // still at its end (its last page, the transition after it): shown, but not read going down: not seen, not
