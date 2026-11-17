@@ -45,6 +45,24 @@ import UIKit
         #expect(second["k"] == 1.5)
     }
 
+    /// SUWA-19 revisión, hallazgo 9: going to the background with nothing new since the last write does not write the
+    /// whole file again (it was every time, on the main thread).
+    @Test func goingToTheBackgroundWithNothingNewDoesNotWrite() throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("PageRatios.plist")
+        let center = NotificationCenter()
+        let store = PageRatioMemory(fileURL: file, saveDelay: 3600, center: center)
+        store.set(3.25, for: "k")
+        store.saveNow()
+        try FileManager.default.removeItem(at: file)
+        center.post(name: Notification.Name("UIApplicationDidEnterBackgroundNotification"), object: nil)
+        #expect(!FileManager.default.fileExists(atPath: file.path), "written again with nothing new")
+        store.set(4.5, for: "k2")
+        center.post(name: Notification.Name("UIApplicationDidEnterBackgroundNotification"), object: nil)
+        #expect(PageRatioMemory(fileURL: file, saveDelay: 3600)["k2"] == 4.5, "a new ratio was not written")
+    }
+
     /// Going to the background writes what is pending at once (the app may be killed there).
     @Test func goingToTheBackgroundWritesAtOnce() throws {
         let dir = try folder()

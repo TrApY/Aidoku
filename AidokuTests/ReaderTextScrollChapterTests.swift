@@ -234,3 +234,64 @@ extension ReaderTextScrollChapterTests {
         await removeTestHistory(id)
     }
 }
+
+// MARK: - SUWA-19 revisión, hallazgo 3: a webtoon position (page + fraction, >= 1) is not a text position
+extension ReaderTextScrollChapterTests {
+    /// Chapter 2 stored at page 3 with 3.4 (what the webtoon writes: page 3 at 40 %) opened in a text reader
+    /// (`style`: "scroll" or "paged"), 40 paragraphs long.
+    private func openWithAWebtoonPosition(mangaKey: String, style: String) async throws -> (reader: ReaderViewController, window: UIWindow, id: ChapterIdentifier) {
+        let manga = AidokuRunner.Manga(sourceKey: "lectortexto", key: mangaKey, title: "Novela", chapters: [current, previous])
+        let id = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: current.key)
+        await removeTestHistory(id)
+        await DataRepositories.shared.history.savePage(PageSave(chapter: id, page: 3, totalPages: 9, scrollPosition: 3.4))
+        UserDefaults.standard.set(style, forKey: "Reader.textReaderStyle")
+        let reader = ReaderViewController(source: nil, manga: manga, chapter: current)
+        reader.appActivity = ReaderAppActivity(center: NotificationCenter(), active: true)
+        let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = reader
+        window.makeKeyAndVisible()
+        try await Task.sleep(for: .seconds(1))
+        reader.presentedViewController?.dismiss(animated: false)
+        reader.setReader(.text)
+        let page = Self.textPage(chapterKey: current.key, paragraphs: 40)
+        if let text = reader.reader as? ReaderTextViewController {
+            text.viewModel.preloadedChapter = current
+            text.viewModel.preloadedPages = [page]
+        } else if let paged = reader.reader as? ReaderPagedTextViewController {
+            paged.viewModel.preloadedChapter = current
+            paged.viewModel.preloadedPages = [page]
+        }
+        reader.loadCurrentChapter()
+        try await Task.sleep(for: .seconds(3))
+        return (reader, window, id)
+    }
+
+    /// The scrolling text reader does not take 3.4 as «340 % into the chapter»: it does not go past the end nor
+    /// complete the chapter.
+    @Test func theScrollingTextReaderIgnoresAWebtoonPosition() async throws {
+        let (reader, window, id) = try await openWithAWebtoonPosition(mangaKey: "textowebtoon", style: "scroll")
+        let text = try #require(reader.reader as? ReaderTextViewController, "not the scrolling text reader")
+        let scrollView = try #require(text.view.subviews.compactMap { $0 as? UIScrollView }.first)
+        #expect(await storedProgress(id).completed == false, "completed by a webtoon position")
+        #expect(scrollView.contentOffset.y < scrollView.contentSize.height / 2, "y \(scrollView.contentOffset.y) of \(scrollView.contentSize.height)")
+        window.isHidden = true
+        UserDefaults.standard.removeObject(forKey: "Reader.textReaderStyle")
+        await removeTestHistory(id)
+    }
+
+    /// The paged text reader does not take 3.4 as a progress: it does not jump to the last page nor complete.
+    @Test func thePagedTextReaderIgnoresAWebtoonPosition() async throws {
+        let (reader, window, id) = try await openWithAWebtoonPosition(mangaKey: "paginadowebtoon", style: "paged")
+        try #require(reader.reader is ReaderPagedTextViewController, "not the paged text reader")
+        let total = reader.pages.count
+        try #require(total > 3, "\(total) pages only")
+        #expect(reader.currentPage < total, "at page \(reader.currentPage) of \(total)")
+        #expect(await storedProgress(id).completed == false, "completed by a webtoon position")
+        window.isHidden = true
+        UserDefaults.standard.removeObject(forKey: "Reader.textReaderStyle")
+        await removeTestHistory(id)
+    }
+}
+

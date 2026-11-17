@@ -21,6 +21,15 @@ extension ImagePipelineSwappingTests {
     private static let pageCount = 38
 
     /// Pages as image files of 300×900 and 300×860 (about 1200 pt high on screen; the provisional one is ~577).
+    /// Text pages (a novel's chapter of several pages, which the webtoon reader shows: SUWA-19 revisión, hallazgo 3).
+    private static func textPages(sourceKey: String, chapterKey: String) -> [Aidoku.Page] {
+        (0..<pageCount).map { index in
+            let text = (1...12).map { "Párrafo \($0) de la página \(index). " + String(repeating: "Texto de prueba. ", count: 20) }
+                .joined(separator: "\n\n")
+            return Aidoku.Page(sourceId: sourceKey, chapterId: chapterKey, index: index, text: text)
+        }
+    }
+
     private static func pages(sourceKey: String, chapterKey: String) throws -> (pages: [Aidoku.Page], directory: URL) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ancla-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -33,7 +42,7 @@ extension ImagePipelineSwappingTests {
                 UIColor(hue: CGFloat(index) / CGFloat(pageCount), saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
                 context.fill(CGRect(origin: .zero, size: size))
             }
-            let url = directory.appendingPathComponent("\(index).png")
+            let url = directory.appendingPathComponent("\(chapterKey)-\(index).png")
             try data.write(to: url)
             pages.append(Aidoku.Page(sourceId: sourceKey, chapterId: chapterKey, index: index, imageURL: url.absoluteString))
         }
@@ -49,12 +58,21 @@ extension ImagePipelineSwappingTests {
         let center: NotificationCenter
         let directory: URL
         let modeKey: String
+        /// The next chapter's ("c2"), when it was opened with one.
+        var nextId: ChapterIdentifier?
+        var nextDirectory: URL?
 
         func close() async {
             window.isHidden = true
             UserDefaults.standard.removeObject(forKey: modeKey)
             try? FileManager.default.removeItem(at: directory)
             await removeTestHistory(chapterId)
+            if let nextId {
+                await removeTestHistory(nextId)
+            }
+            if let nextDirectory {
+                try? FileManager.default.removeItem(at: nextDirectory)
+            }
         }
 
         func frame(row: Int, section: Int = 0) throws -> CGRect {
@@ -63,9 +81,13 @@ extension ImagePipelineSwappingTests {
     }
 
     /// Opens chapter "c1" in the webtoon reader at the stored page `startPage`; `wait` seconds for the images.
-    private func open(mangaKey: String, startPage: Int, position: Double? = nil, wait: Double = 5) async throws -> Opened {
-        let manga = AidokuRunner.Manga(sourceKey: "lectorancla", key: mangaKey, title: "Webtoon")
+    /// `next`: with chapter "c2" after it, its pages ready for the reader; `text`: text pages instead of images.
+    private func open(
+        mangaKey: String, startPage: Int, position: Double? = nil, wait: Double = 5, next: Bool = false, text: Bool = false
+    ) async throws -> Opened {
         let chapter = AidokuRunner.Chapter(key: "c1", chapterNumber: 1)
+        let second = AidokuRunner.Chapter(key: "c2", chapterNumber: 2)
+        let manga = AidokuRunner.Manga(sourceKey: "lectorancla", key: mangaKey, title: "Webtoon", chapters: next ? [second, chapter] : nil)
         let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
         await removeTestHistory(chapterId)
         await DataRepositories.shared.history.savePage(PageSave(
@@ -73,7 +95,14 @@ extension ImagePipelineSwappingTests {
         ))
         let modeKey = "Reader.readingMode.\(manga.identifier)"
         UserDefaults.standard.set("webtoon", forKey: modeKey)
-        let (pages, directory) = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key)
+        var (pages, directory) = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key)
+        if text {
+            pages = Self.textPages(sourceKey: manga.sourceKey, chapterKey: chapter.key)
+        }
+        let nextId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: second.key)
+        if next {
+            await removeTestHistory(nextId)
+        }
 
         let reader = ReaderViewController(source: nil, manga: manga, chapter: chapter)
         let center = NotificationCenter()
@@ -90,15 +119,25 @@ extension ImagePipelineSwappingTests {
         webtoon.viewModel.preloadedPages = pages
         reader.loadCurrentChapter()
         try await Task.sleep(for: .seconds(wait))
+        if next {
+            // what the reader gets when it asks for the next chapter
+            let nextPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: second.key)
+            webtoon.viewModel.preloadedChapter = second
+            webtoon.viewModel.preloadedPages = nextPages.pages
+            return Opened(
+                reader: reader, webtoon: webtoon, chapterId: chapterId, window: window, center: center, directory: directory, modeKey: modeKey,
+                nextId: nextId, nextDirectory: nextPages.directory
+            )
+        }
         return Opened(
             reader: reader, webtoon: webtoon, chapterId: chapterId, window: window, center: center, directory: directory, modeKey: modeKey
         )
     }
 
     /// The user drags until the middle of the screen is at `fraction` of `row`, and lets go.
-    private func userScrolls(_ opened: Opened, toRow row: Int, at fraction: CGFloat = 0.5) throws {
+    private func userScrolls(_ opened: Opened, toRow row: Int, section: Int = 0, at fraction: CGFloat = 0.5) throws {
         let webtoon = opened.webtoon
-        let frame = try opened.frame(row: row)
+        let frame = try opened.frame(row: row, section: section)
         webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
         let y = frame.minY + frame.height * fraction - webtoon.collectionNode.bounds.height / 2
         webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
@@ -289,6 +328,131 @@ extension ImagePipelineSwappingTests {
         #expect(anchor.item == 7)
         #expect(anchor.fraction == 0)
         #expect(anchor.screenFraction == 0)
+        await opened.close()
+    }
+
+    // MARK: - SUWA-19 revisión (W6)
+
+    /// From chapter 1 opened at page 36, the user goes down to its end: chapter 2 is put in below. Returns the row
+    /// of chapter 2's page `page` in its section (its first row is its transition only when it has one).
+    private func goDownIntoTheNextChapter(_ opened: Opened, page: Int) async throws -> Int {
+        try userScrolls(opened, toRow: Self.pageCount)
+        try await Task.sleep(for: .seconds(1))
+        try userScrolls(opened, toRow: Self.pageCount + 1)
+        for _ in 0..<40 where opened.webtoon.collectionNode.numberOfSections < 2 {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        try #require(opened.webtoon.collectionNode.numberOfSections == 2, "chapter 2 was not put in below")
+        try await Task.sleep(for: .seconds(2))
+        let items = opened.webtoon.collectionNode.numberOfItems(inSection: 1)
+        return items == Self.pageCount + 2 ? page : page - 1
+    }
+
+    /// Hallazgo 1: chapter 2, put in below by the infinite scroll (its first row is its first page), read at its page
+    /// 3 at 43 %: its history keeps 3.4 (before, only chapters opened directly kept their fraction).
+    @Test func aChapterPutInBelowSavesItsFraction() async throws {
+        let opened = try await open(mangaKey: "fraccionabajo", startPage: 36, next: true)
+        let row = try await goDownIntoTheNextChapter(opened, page: 3)
+        try userScrolls(opened, toRow: row, section: 1, at: 0.43)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.reader.chapter.key == "c2", "not in chapter 2")
+        try #require(opened.reader.currentPage == 3, "at page \(opened.reader.currentPage)")
+        try await Task.sleep(for: .seconds(7))
+        let id = try #require(opened.nextId)
+        let record = try #require(await DataRepositories.shared.history.record(of: id), "nothing saved of chapter 2")
+        #expect(record.progress == 3)
+        let position = try #require(record.scrollPosition, "no scroll position saved for chapter 2")
+        #expect(abs(position - 3.4) < 0.001, "saved \(position)")
+        await opened.close()
+    }
+
+    /// Hallazgo 2 (JoTa, 17-nov: a): moving inside the page the chapter opened at keeps where in it, but it is not
+    /// reading: the read date stays (so does «Continuar»), also when leaving the reader.
+    @Test func movingInsideTheOpeningPageSavesTheFractionWithoutCountingAsReading() async throws {
+        let opened = try await open(mangaKey: "fraccionapertura", startPage: 5)
+        let before = try #require(await DataRepositories.shared.history.record(of: opened.chapterId))
+        try userScrolls(opened, toRow: 5, at: 0.4)
+        try await Task.sleep(for: .seconds(7))
+        opened.reader.viewWillDisappear(false)
+        try await Task.sleep(for: .seconds(1))
+        let after = try #require(await DataRepositories.shared.history.record(of: opened.chapterId))
+        #expect(after.progress == 5)
+        #expect(after.dateRead == before.dateRead, "read date \(String(describing: before.dateRead)) → \(String(describing: after.dateRead))")
+        let position = try #require(after.scrollPosition, "the fraction was not saved")
+        #expect(abs(position - 5.4) < 0.001, "saved \(position)")
+        await opened.close()
+    }
+
+    /// Hallazgo 2: turning to another page after that is reading, as always: the read date changes. Born green: it
+    /// keeps the fix of hallazgo 2 from also swallowing the page changes.
+    @Test func turningThePageAfterMovingInsideTheOpeningOneCountsAsReading() async throws {
+        let opened = try await open(mangaKey: "fraccionpasar", startPage: 5)
+        let before = try #require(await DataRepositories.shared.history.record(of: opened.chapterId))
+        try userScrolls(opened, toRow: 5, at: 0.4)
+        try await Task.sleep(for: .seconds(1))
+        try userScrolls(opened, toRow: 6, at: 0.2)
+        try await Task.sleep(for: .seconds(7))
+        let after = try #require(await DataRepositories.shared.history.record(of: opened.chapterId))
+        #expect(after.progress == 6)
+        #expect((after.dateRead ?? .distantPast) > (before.dateRead ?? .distantPast), "the read date did not change")
+        #expect(abs((after.scrollPosition ?? 0) - 6.2) < 0.001, "saved \(String(describing: after.scrollPosition))")
+        await opened.close()
+    }
+
+    /// Hallazgo 3: text pages shown in the webtoon reader (a chapter of several text pages) do not get a webtoon
+    /// fraction: a text reader would read 7.4 as its own progress.
+    @Test func textPagesInTheWebtoonDoNotSaveAFraction() async throws {
+        let opened = try await open(mangaKey: "fracciontextowebtoon", startPage: 5, text: true)
+        try #require(opened.reader.reader is ReaderWebtoonViewController, "not the webtoon reader")
+        try userScrolls(opened, toRow: 7, at: 0.43)
+        try await Task.sleep(for: .seconds(7))
+        let record = try #require(await DataRepositories.shared.history.record(of: opened.chapterId))
+        try #require(record.progress == 7, "saved page \(record.progress)")
+        #expect(record.scrollPosition == nil, "saved \(String(describing: record.scrollPosition))")
+        await opened.close()
+    }
+
+    /// Hallazgo 5: a double tap's zoom that ends with the middle of the screen in the next chapter changes the
+    /// chapter then, not at the next scroll event (which may be a layout pass out of front).
+    @Test func aDoubleTapZoomEndingInTheNextChapterChangesItAtOnce() async throws {
+        let opened = try await open(mangaKey: "zoomcapitulo", startPage: 36, next: true)
+        let row = try await goDownIntoTheNextChapter(opened, page: 2)
+        try #require(opened.reader.chapter.key == "c1", "already in chapter 2")
+        let webtoon = opened.webtoon
+        // the zoom animation moves the content (no scroll events reach the reader while it zooms)
+        webtoon.isZooming = true
+        let frame = try opened.frame(row: row, section: 1)
+        webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: frame.midY - webtoon.collectionNode.bounds.height / 2), animated: false)
+        webtoon.isZooming = false
+        webtoon.zoomView.onZoomAnimationEnded?()
+        #expect(webtoon.anchor?.chapterKey == "c2")
+        #expect(opened.reader.chapter.key == "c2", "the chapter did not change with the zoom")
+        await opened.close()
+    }
+
+    /// Hallazgo 8: a size transition stops a deceleration without UIKit telling it ended: after it, the content moved
+    /// by something else is not the user moving (before, the user stayed «scrolling» and that moved the anchor).
+    @Test func aSizeTransitionDuringADecelerationEndsTheUsersScroll() async throws {
+        let opened = try await open(mangaKey: "giroinercia", startPage: 5)
+        try userScrolls(opened, toRow: 7, at: 0.3)
+        try await Task.sleep(for: .milliseconds(500))
+        let webtoon = opened.webtoon
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: true)
+        let before = try #require(webtoon.anchor)
+        let coordinator = SteppedTransitionCoordinator()
+        webtoon.viewWillTransition(to: CGSize(width: 402, height: 874), with: coordinator)
+        coordinator.runAnimations()
+        opened.window.layoutIfNeeded()
+        coordinator.complete()
+        try await Task.sleep(for: .milliseconds(300))
+        let scrollView = webtoon.scrollView
+        scrollView.setContentOffset(CGPoint(x: 0, y: scrollView.contentOffset.y + 700), animated: false)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(webtoon.anchor?.item == before.item && abs((webtoon.anchor?.fraction ?? 0) - before.fraction) < 0.001,
+                "\(before) → \(String(describing: webtoon.anchor))")
+        let distance = try distanceFromTheAnchor(opened)
+        #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
         await opened.close()
     }
 }
