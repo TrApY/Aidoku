@@ -671,8 +671,9 @@ extension ReaderViewController {
             let history = DataRepositories.shared.mainActorReads.record(
                 of: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
             )
-            // only the position stored for the page it opens at (not for a completed chapter)
-            if let history, !history.completed, history.progress == currentPage {
+            // only the position stored for the page it opens at (not for a completed chapter, unless it is being
+            // read again: SUWA-17 D2)
+            if let history, !history.completed || Self.isRereading(history), history.progress == currentPage {
                 storedPosition = history.scrollPosition
             }
         }
@@ -682,6 +683,12 @@ extension ReaderViewController {
             isTextReader: isTextReader,
             storedPosition: storedPosition
         )
+    }
+
+    /// A completed chapter with a page before its last one: completing leaves it at its last page, so the user
+    /// is reading it again (SUWA-17 D2).
+    static func isRereading(_ record: HistoryRecord) -> Bool {
+        record.completed && record.progress > 0 && record.progress < record.total
     }
 
     func loadCurrentChapter() {
@@ -705,6 +712,15 @@ extension ReaderViewController {
             let (completed, startPage) = (stored.completed, stored.progress)
             if !completed, let startPage {
                 currentPage = startPage
+            } else if
+                completed,
+                let record = DataRepositories.shared.mainActorReads.record(
+                    of: .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+                ),
+                Self.isRereading(record)
+            {
+                // a completed chapter being read again: where it was left (SUWA-17 D2)
+                currentPage = record.progress
             } else {
                 currentPage = -1
             }

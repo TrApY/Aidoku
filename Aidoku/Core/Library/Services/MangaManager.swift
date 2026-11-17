@@ -29,19 +29,21 @@ actor MangaManager {
         manga: AidokuRunner.Manga,
         chapters: [AidokuRunner.Chapter],
         readingHistory: [String: (page: Int, date: Int)],
-        sortAscending: Bool
+        sortAscending: Bool,
+        rereading: [String: Int] = [:]
     ) -> AidokuRunner.Chapter? {
         let resumeLastOpened = AppSettings.library.resumeLastOpenedChapter.get()
 
         // 1. Resume Reading: Find the most recently read chapter that isn't
-        // completed, unless the "resume last opened" option is enabled.
+        // completed, unless the "resume last opened" option is enabled. A completed chapter being read again
+        // (rereading: its page) counts as not completed (SUWA-17 D2).
         var selectedChapter: AidokuRunner.Chapter?
         var selectedDate: Int = -1
 
         for chapter in chapters {
             guard
                 let history = readingHistory[chapter.id],
-                resumeLastOpened || history.page != -1,
+                resumeLastOpened || history.page != -1 || rereading[chapter.id] != nil,
                 history.date > selectedDate
             else { continue }
 
@@ -79,7 +81,8 @@ actor MangaManager {
         fallbackChapters: [AidokuRunner.Chapter]? = nil,
         fetchIfNeeded: Bool = false
     ) async -> (chapters: [AidokuRunner.Chapter], nextChapter: AidokuRunner.Chapter?) {
-        let readingHistory = await DataRepositories.shared.history.readingHistory(of: mangaId).pagesAndDates
+        let entries = await DataRepositories.shared.history.readingHistory(of: mangaId)
+        let readingHistory = entries.pagesAndDates
         var chapters = await DataRepositories.shared.chapters.chaptersBlankAsNil(of: mangaId)
 
         // chapters are only stored for manga in the library, so fall back to the ones we have loaded
@@ -123,7 +126,8 @@ actor MangaManager {
             manga: manga,
             chapters: sortedChapters,
             readingHistory: readingHistory,
-            sortAscending: sortAscending
+            sortAscending: sortAscending,
+            rereading: entries.rereadPages
         )
 
         return (sortedChapters, nextChapter)

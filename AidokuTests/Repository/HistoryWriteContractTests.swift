@@ -120,7 +120,8 @@ import Testing
         #expect(await history.markCompleted([id("c1"), id("c2"), id("c3")], date: date(400)) == true)
         #expect(await history.record(of: id("c1"))?.dateRead == date(100)) // already completed: untouched
         let c2 = try #require(await history.record(of: id("c2")))
-        #expect(c2.completed && c2.dateRead == date(400) && c2.progress == 7 && c2.total == 38 && c2.scrollPosition == 0.5)
+        // completing leaves it at its last page (SUWA-17 D2: a page before the last one is a reread)
+        #expect(c2.completed && c2.dateRead == date(400) && c2.progress == 38 && c2.total == 38 && c2.scrollPosition == 0.5)
         // a chapter without history: a new row, -1 page (§1.5 nº 1)
         #expect(await history.record(of: id("c3")) == HistoryRecord(chapterId: id("c3"), progress: -1, total: 0, completed: true, dateRead: date(400), scrollPosition: nil))
         #expect(await store.seed.lastRead(of: manga) == date(400))

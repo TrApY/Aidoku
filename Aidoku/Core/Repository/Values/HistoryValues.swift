@@ -29,12 +29,19 @@ struct HistoryRecord: Sendable, Hashable {
 struct ReadingHistoryEntry: Sendable, Hashable {
     var page: Int
     var date: Int
+    /// A completed chapter being read again (0 < page < total, SUWA-17 D2): its page.
+    var rereadPage: Int?
 }
 
 extension Dictionary where Value == ReadingHistoryEntry {
     /// The shape the screens and services use: [chapter key: (page, date)].
     var pagesAndDates: [Key: (page: Int, date: Int)] {
         mapValues { (page: $0.page, date: $0.date) }
+    }
+
+    /// [chapter key: page] of the completed chapters being read again.
+    var rereadPages: [Key: Int] {
+        compactMapValues(\.rereadPage)
     }
 }
 

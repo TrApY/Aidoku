@@ -280,6 +280,10 @@ extension CoreDataManager {
             guard !historyObject.completed else { continue }
             historyObject.completed = true
             historyObject.dateRead = date
+            // at its last page: a completed chapter with a page before the last one is being read again (SUWA-17 D2)
+            if historyObject.total > 0 {
+                historyObject.progress = historyObject.total
+            }
             success = true
         }
         return success

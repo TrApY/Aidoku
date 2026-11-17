@@ -21,6 +21,8 @@ extension MangaView {
         @Published var otherDownloadedChapters: [AidokuRunner.Chapter] = []
 
         @Published var readingHistory: [String: (page: Int, date: Int)] = [:]
+        /// The completed chapters being read again: [chapter key: page] (SUWA-17 D2).
+        var rereading: [String: Int] = [:]
         @Published var downloadProgress: [String: Float] = [:] // chapterId: progress
         @Published var downloadStatus: [String: DownloadStatus] = [:] // chapterId: status
 
@@ -225,6 +227,7 @@ extension MangaView.ViewModel {
                     let date = Int(Date().timeIntervalSince1970)
                     for chapterId in chapters where chapterId.mangaIdentifier == self.manga.identifier {
                         self.readingHistory[chapterId.chapterKey] = (page: -1, date: date)
+                        self.rereading[chapterId.chapterKey] = nil
                     }
                     self.updateReadButton()
                     self.checkForAllReadMarkOpened()
@@ -239,12 +242,14 @@ extension MangaView.ViewModel {
                     if let chapters = output.object as? [ChapterIdentifier] {
                         for chapterId in chapters where chapterId.mangaIdentifier == self.manga.identifier {
                             self.readingHistory.removeValue(forKey: chapterId.chapterKey)
+                            self.rereading.removeValue(forKey: chapterId.chapterKey)
                         }
                     } else if
                         let mangaId = output.object as? MangaIdentifier,
                         mangaId == self.manga.identifier
                             {
                         self.readingHistory = [:]
+                        self.rereading = [:]
                     }
                 }
             }
@@ -256,9 +261,14 @@ extension MangaView.ViewModel {
                     guard
                         let self,
                         let item = output.object as? (chapterId: ChapterIdentifier, page: Int),
-                        item.chapterId.mangaIdentifier == self.manga.identifier,
-                        self.readingHistory[item.chapterId.chapterKey]?.page != -1
-                            else {
+                        item.chapterId.mangaIdentifier == self.manga.identifier
+                    else {
+                        return
+                    }
+                    // a completed chapter read again: its page and date as stored (SUWA-17 D2)
+                    guard self.readingHistory[item.chapterId.chapterKey]?.page != -1 else {
+                        await self.loadHistory()
+                        self.updateReadButton()
                         return
                     }
                     self.readingHistory[item.chapterId.chapterKey] = (
@@ -607,7 +617,9 @@ extension MangaView.ViewModel {
     }
 
     private func loadHistory() async {
-        readingHistory = await DataRepositories.shared.history.readingHistory(of: manga.identifier).pagesAndDates
+        let entries = await DataRepositories.shared.history.readingHistory(of: manga.identifier)
+        readingHistory = entries.pagesAndDates
+        rereading = entries.rereadPages
     }
 
     private func checkTrackerSync(item: TrackItem) async {
@@ -684,6 +696,7 @@ extension MangaView.ViewModel {
         let date = Int(Date().timeIntervalSince1970)
         for chapter in chapters {
             readingHistory[chapter.key] = (page: -1, date: date)
+            rereading[chapter.key] = nil
         }
         updateReadButton()
     }
@@ -697,6 +710,7 @@ extension MangaView.ViewModel {
         )
         for chapter in chapters {
             readingHistory[chapter.key] = nil
+            rereading[chapter.key] = nil
         }
         updateReadButton()
     }
@@ -857,7 +871,8 @@ extension MangaView.ViewModel {
             manga: manga,
             chapters: chapters,
             readingHistory: readingHistory,
-            sortAscending: chapterSortAscending
+            sortAscending: chapterSortAscending,
+            rereading: rereading
         )
 
         if let chapter {

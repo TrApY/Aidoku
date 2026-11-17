@@ -42,8 +42,14 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
 
     func readingHistory(of manga: MangaIdentifier) async -> [String: ReadingHistoryEntry] {
         await container.performBackgroundTask { context in
-            CoreDataManager.shared.getReadingHistory(mangaId: manga, context: context)
+            var entries = CoreDataManager.shared.getReadingHistory(mangaId: manga, context: context)
                 .mapValues { ReadingHistoryEntry(page: $0.page, date: $0.date) }
+            // the completed chapters being read again (SUWA-17 D2)
+            for history in CoreDataManager.shared.getHistoryForManga(mangaId: manga, context: context)
+            where history.completed && history.progress > 0 && history.progress < history.total {
+                entries[history.chapterId]?.rereadPage = Int(history.progress)
+            }
+            return entries
         }
     }
 
