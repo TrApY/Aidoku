@@ -23,6 +23,7 @@ enum CompletionJournal {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else { return nil }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("completados-pruebas.log")
         try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: latestUrl(for: url))
         return url
     }()
 
@@ -47,26 +48,22 @@ enum CompletionJournal {
             }
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? (all.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
-        }
-    }
-
-    /// When the chapter was last marked completed on this device (not the readers' own «webtoon:» notes), from
-    /// the journal's `lines` (SUWA-17 F2).
-    static func lastCompletion(of chapter: ChapterIdentifier, lines: [String]) -> Date? {
-        var last: Date?
-        for line in lines {
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
-            guard
-                fields.count >= 5,
-                fields[1] == chapter.sourceKey, fields[2] == chapter.mangaKey, fields[3] == chapter.chapterKey,
-                !fields[4].hasPrefix("webtoon:"),
-                let date = lock.withLock({ formatter.date(from: String(fields[0])) })
-            else { continue }
-            if last.map({ date > $0 }) ?? true {
-                last = date
+            // the latest completion of each chapter, apart (not the readers' own «webtoon:» notes; SUWA-17 G3b)
+            if !reason.hasPrefix("webtoon:") {
+                let latestFile = latestUrl(for: url)
+                let entryKey = key(chapter)
+                let dateText = formatter.string(from: date)
+                var latest = lines(fileUrl: latestFile).filter {
+                    $0.split(separator: "\t", maxSplits: 4, omittingEmptySubsequences: false).dropFirst().prefix(3).joined(separator: "\t") != entryKey
+                }
+                latest.append([dateText, entryKey, reason].joined(separator: "\t").replacingOccurrences(of: "\n", with: " "))
+                if latest.count > maxLatest {
+                    latest = Array(latest.suffix(maxLatest))
+                }
+                try? (latest.joined(separator: "\n") + "\n").write(to: latestFile, atomically: true, encoding: .utf8)
+                completionsByFile[url]?.dates[entryKey, default: []].append(dateText)
             }
         }
-        return last
     }
 
     /// Latest completion of each chapter kept apart, at most (SUWA-17 G3b).
@@ -104,12 +101,32 @@ enum CompletionJournal {
         lock.withLock { dates.compactMap { formatter.date(from: $0) }.max() }
     }
 
-    /// The completions of each chapter recorded on this device.
+    /// The completions of each chapter recorded on this device: the latest one of each chapter, kept apart (the
+    /// journal keeps its last lines only: marking many as read or a sync would push out the completion of a chapter
+    /// being read again), and the journal; read once and then in memory, kept up to date by `record` (the reader and
+    /// the manga page decide on the main thread; SUWA-17 G3b, G3d). `warmUp` reads them off the main thread.
     static func latestCompletions(fileUrl: URL? = nil) -> Completions {
-        var completions = Completions()
-        completions.add(lines(fileUrl: fileUrl))
-        return completions
+        let url = fileUrl ?? defaultUrl
+        return lock.withLock {
+            if let cached = completionsByFile[url] {
+                return cached
+            }
+            var completions = Completions()
+            completions.add(lines(fileUrl: latestUrl(for: url)) + lines(fileUrl: url))
+            completionsByFile[url] = completions
+            return completions
+        }
     }
+
+    /// Reads the completions, so the main thread finds them read (at launch).
+    static func warmUp() {
+        Task.detached(priority: .utility) {
+            _ = latestCompletions()
+        }
+    }
+
+    /// `latestCompletions` of each journal file, once read.
+    nonisolated(unsafe) private static var completionsByFile: [URL: Completions] = [:]
 
     static func lines(fileUrl: URL? = nil) -> [String] {
         guard let text = try? String(contentsOf: fileUrl ?? defaultUrl, encoding: .utf8) else { return [] }

@@ -721,7 +721,7 @@ extension ReaderViewController {
         return RereadRule.isRereading(
             chapter: chapterId,
             sessionStart: DataRepositories.shared.mainActorReads.latestSessionStart(of: chapterId),
-            journal: CompletionJournal.lines()
+            completions: CompletionJournal.latestCompletions()
         )
     }
 

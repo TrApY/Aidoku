@@ -15,15 +15,7 @@ enum RereadRule {
     /// its completion: a reading session with pages read that started after the last completion recorded on this
     /// device (the journal). Without that completion (completed elsewhere, by a sync, before the journal) or
     /// without a later session (the page was saved in the visit that completed it), it is not.
-    static func isRereading(chapter: ChapterIdentifier, sessionStart: Date?, journal: [String]) -> Bool {
-        guard
-            let sessionStart,
-            let completed = CompletionJournal.lastCompletion(of: chapter, lines: journal)
-        else { return false }
-        return sessionStart > completed
-    }
-
-    /// The same with the completions (`CompletionJournal.latestCompletions`; SUWA-17 G3b).
+    /// (`completions`: CompletionJournal.latestCompletions; SUWA-17 G3b).
     static func isRereading(chapter: ChapterIdentifier, sessionStart: Date?, completions: CompletionJournal.Completions) -> Bool {
         guard let sessionStart, let completed = completions.last(of: chapter) else { return false }
         return sessionStart > completed
@@ -33,13 +25,13 @@ enum RereadRule {
     static func rereadPages(_ entries: [String: ReadingHistoryEntry], manga: MangaIdentifier) -> [String: Int] {
         let candidates = entries.filter { $0.value.rereadPage != nil }
         guard !candidates.isEmpty else { return [:] }
-        let journal = CompletionJournal.lines()
+        let completions = CompletionJournal.latestCompletions()
         var pages: [String: Int] = [:]
         for (key, entry) in candidates {
             let chapter = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.mangaKey, chapterKey: key)
             guard
                 let page = entry.rereadPage,
-                isRereading(chapter: chapter, sessionStart: entry.rereadSessionStart, journal: journal)
+                isRereading(chapter: chapter, sessionStart: entry.rereadSessionStart, completions: completions)
             else { continue }
             pages[key] = page
         }

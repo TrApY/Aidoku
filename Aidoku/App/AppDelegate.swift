@@ -168,6 +168,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             AppSettings.flags.isiCloudAvailable.register(isiCloudAvailable)
         }
 
+        // the completions «Continuar» and the reader look at, read off the main thread (SUWA-17 G3d)
+        CompletionJournal.warmUp()
+
         DataLoader.sharedUrlCache.diskCapacity = 0
 
         let pipeline = ImagePipeline(delegate: self) {
