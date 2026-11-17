@@ -41,6 +41,8 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
     private struct ViewportAnchor {
         let indexPath: IndexPath
+        // the anchored node, so the anchor follows its page if sections change above it (upstream #1116)
+        let identifier: AnyHashable?
         let position: CGPoint
     }
 
@@ -106,6 +108,7 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
         preservedViewportAnchor = ViewportAnchor(
             indexPath: attributes.indexPath,
+            identifier: itemIdentifiers[attributes.indexPath],
             position: CGPoint(
                 x: (center.x - attributes.frame.minX) / attributes.frame.width,
                 y: (center.y - attributes.frame.minY) / attributes.frame.height
@@ -320,7 +323,12 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
     /// (upstream #1116; also what a size transition restores when it completes).
     func preservedContentOffset() -> CGPoint? {
         guard let collectionView, let anchor = preservedViewportAnchor else { return nil }
-        let indexPath: IndexPath? = anchor.indexPath
+        // a chapter put in or trimmed above during the transition moves the page to another index path
+        let indexPath = if let identifier = anchor.identifier {
+            itemIdentifiers.first(where: { $0.value == identifier })?.key
+        } else {
+            anchor.indexPath
+        }
         guard let indexPath, let attributes = layoutAttributesForItem(at: indexPath) else { return nil }
 
         let frame = attributes.frame
