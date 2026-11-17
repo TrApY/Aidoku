@@ -668,6 +668,9 @@ extension ReaderWebtoonPageNode {
         }
     }
 
+    /// Whether the page is measuring itself ahead now.
+    var isMeasuringAhead: Bool { measureTask != nil }
+
     func cancelMeasureAhead() {
         measureTask?.cancel()
         measureTask = nil

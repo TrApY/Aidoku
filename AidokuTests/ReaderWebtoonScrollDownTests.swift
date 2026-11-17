@@ -45,8 +45,26 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
 
     private final class Work: Cancellable, @unchecked Sendable {
         let item: DispatchWorkItem
-        init(_ item: DispatchWorkItem) { self.item = item }
-        func cancel() { item.cancel() }
+        let cancelled: () -> Void
+        init(_ item: DispatchWorkItem, cancelled: @escaping () -> Void = {}) {
+            self.item = item
+            self.cancelled = cancelled
+        }
+        func cancel() {
+            item.cancel()
+            cancelled()
+        }
+    }
+
+    /// The requests not served nor cancelled yet (their file paths).
+    private var waiting: [Int: String] = [:]
+    private var lastRequest = 0
+    var pending: [String] { lock.withLock { Array(waiting.values) } }
+
+    private func ended(_ number: Int) {
+        lock.lock()
+        waiting[number] = nil
+        lock.unlock()
     }
 
     /// Pages from this index on wait until `release()` (a server that has not sent them yet).
@@ -69,7 +87,13 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
         didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
         completion: @escaping @Sendable (Error?) -> Void
     ) -> any Cancellable {
-        let item = DispatchWorkItem {
+        lock.lock()
+        lastRequest += 1
+        let number = lastRequest
+        waiting[number] = request.url?.path ?? "?"
+        lock.unlock()
+        let item = DispatchWorkItem { [weak self] in
+            self?.ended(number)
             guard let url = request.url, let data = try? Data(contentsOf: url.isFileURL ? url : URL(fileURLWithPath: url.path)) else {
                 completion(URLError(.cannotOpenFile))
                 return
@@ -82,14 +106,14 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
         if index >= heldFrom {
             held.append(item)
             lock.unlock()
-            return Work(item)
+            return Work(item) { [weak self] in self?.ended(number) }
         }
         let slot = slots[0] < slots[1] ? 0 : 1
         let deadline = max(slots[slot], .now()) + delay
         slots[slot] = deadline
         lock.unlock()
         DispatchQueue.global().asyncAfter(deadline: deadline, execute: item)
-        return Work(item)
+        return Work(item) { [weak self] in self?.ended(number) }
     }
 }
 

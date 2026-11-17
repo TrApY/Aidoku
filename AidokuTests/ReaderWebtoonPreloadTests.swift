@@ -93,6 +93,7 @@ extension ImagePipelineSwappingTests {
         let pipeline: ImagePipeline
         let preload: Int
         let dataCache: DataCache?
+        let loader: SlowImageLoader?
 
         func close() async {
             window.isHidden = true
@@ -181,6 +182,7 @@ extension ImagePipelineSwappingTests {
 
         let pipeline = ImagePipeline.shared
         var dataCaches: [DataCache] = []
+        var loaders: [SlowImageLoader] = []
         switch kind {
             case .downloaded, .downloadedArchive:
                 // as the app's pipeline, with empty caches
@@ -189,6 +191,7 @@ extension ImagePipelineSwappingTests {
                 }
             case .remote(let delay):
                 let loader = SlowImageLoader(delay: delay)
+                loaders.append(loader)
                 // as the app's pipeline: the server's data stays in a disk cache (this test's own, emptied after)
                 let dataCache = try DataCache(name: "precarga-\(UUID().uuidString)")
                 dataCaches.append(dataCache)
@@ -223,7 +226,7 @@ extension ImagePipelineSwappingTests {
         webtoon.viewModel.preloadedPages = nextPages
         return Opened(
             reader: reader, webtoon: webtoon, chapterIds: ids, window: window, directory: directory, modeKey: modeKey,
-            pipeline: pipeline, preload: savedPreload, dataCache: dataCaches.first
+            pipeline: pipeline, preload: savedPreload, dataCache: dataCaches.first, loader: loaders.first
         )
     }
 
@@ -443,5 +446,53 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
 
     @Test func fromTheServerAtMostTwoMoreDecodedThanToPreload() async throws {
         try await decodedStayWithin(2, .remote(delay: 0.3), key: "decod2r")
+    }
+}
+
+// MARK: - SUWA-17 E2: the measuring ahead stops when it is no longer wanted
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// Down quickly from a slow server: the pages left behind (out of the preload range) stop loading, they do not
+    /// keep the server's slots in front of the pages coming.
+    @Test func pagesLeftBehindStopLoading() async throws {
+        let opened = try await open(.remote(delay: 1.0), mangaKey: "dejadas", preload: 6)
+        let loader = try #require(opened.loader)
+        try await watch(opened, seconds: 1) { _ in }
+        try await scroll(opened, seconds: 3, velocity: 3000) { _ in }
+        let screen = opened.webtoon.collectionNode.bounds.height
+        let behind = opened.pageRows.filter { (opened.frame($0)?.maxY ?? .infinity) < opened.top - 3 * screen }
+        try #require(behind.count >= 3, "only \(behind.count) rows left behind")
+        let names = behind.map { "/c1-\($0 - 1).jpg" }
+        let stillLoading = loader.pending.filter { path in names.contains { path.hasSuffix($0) } }
+        #expect(stillLoading.isEmpty, "\(stillLoading.count) pages left behind still loading: \(stillLoading.map { URL(fileURLWithPath: $0).lastPathComponent }.sorted())")
+        await opened.close()
+    }
+
+    /// Another chapter opened while the pages of the first one are being measured: those stop.
+    @Test func changingChapterStopsTheMeasuringOfTheOldOne() async throws {
+        let opened = try await open(.remote(delay: 1.0), mangaKey: "cambiocap", preload: 6)
+        let loader = try #require(opened.loader)
+        try await watch(opened, seconds: 0.5) { _ in }
+        try #require(loader.pending.contains { $0.contains("/c1-") }, "nothing of chapter 1 loading")
+        opened.webtoon.setChapter(AidokuRunner.Chapter(key: "c2", chapterNumber: 2), startPage: 1)
+        try await watch(opened, seconds: 1) { _ in }
+        let old = loader.pending.filter { $0.contains("/c1-") }
+        #expect(old.isEmpty, "\(old.count) pages of chapter 1 still loading: \(old.map { URL(fileURLWithPath: $0).lastPathComponent }.sorted())")
+        await opened.close()
+    }
+
+    /// A measuring cancelled and a new one started at once: when the old one ends, the page still knows the new
+    /// one is going (it does not start a second one, and can still cancel it).
+    @Test func aCancelledMeasuringDoesNotForgetTheNextOne() async throws {
+        let opened = try await open(.remote(delay: 1.0), mangaKey: "relevo", preload: 1)
+        try await watch(opened, seconds: 0.5) { _ in }
+        let row = opened.pageRows.upperBound - 1
+        let node = try #require(opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: row, section: 0)) as? ReaderWebtoonPageNode)
+        try #require(!opened.isMeasured(row))
+        node.measureAhead()
+        node.cancelMeasureAhead()
+        node.measureAhead()
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(node.isMeasuringAhead, "the page forgot its measuring")
+        await opened.close()
     }
 }
