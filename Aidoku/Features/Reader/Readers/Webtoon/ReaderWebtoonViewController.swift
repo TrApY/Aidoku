@@ -84,6 +84,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// going a whole screen above where they entered is reading it: its page is told again (SUWA-17 G1).
     private var wentUpInside: (entry: CGFloat, highest: CGFloat)?
     private var lastScrollOffset: CGFloat = 0
+    /// The user is dragging the content, or it decelerates after their drag: not the layout moving it (SUWA-17 G2).
+    private var userIsScrolling = false
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -499,6 +501,7 @@ extension ReaderWebtoonViewController {
 // MARK: - Scroll View Delegate
 extension ReaderWebtoonViewController {
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        userIsScrolling = true
         openingPageHold = nil
         super.scrollViewWillBeginDragging(scrollView)
         restorePreloadRange()
@@ -544,7 +547,8 @@ extension ReaderWebtoonViewController {
         let goingUp = offsetY < lastScrollOffset
         let goingDown = offsetY > lastScrollOffset
         lastScrollOffset = offsetY
-        if let offset = offsetIntoChapter() {
+        let byUser = userIsScrolling || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+        if byUser, let offset = offsetIntoChapter() {
             let height = collectionNode.bounds.height
             if let entry = enteredFromBelowAt, goingUp, offset < entry - height / 2 {
                 enteredFromBelowAt = nil
@@ -769,6 +773,7 @@ extension ReaderWebtoonViewController {
         guard !decelerate else {
             return
         }
+        userIsScrolling = false
         setLiveTextButtonHidden(false)
 
         if infinite {
@@ -780,6 +785,7 @@ extension ReaderWebtoonViewController {
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        userIsScrolling = false
         setLiveTextButtonHidden(false)
         if infinite {
             isScrolling = false
