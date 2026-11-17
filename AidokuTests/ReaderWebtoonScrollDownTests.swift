@@ -18,7 +18,8 @@ import UIKit
 @testable import Aidoku
 
 /// The images come as from the server over the network: two at a time, each one `delay` seconds after the
-/// previous one in its slot, not from the disk at once (so the loaded pages fall behind a quick scroll).
+/// previous one in its slot, not from the disk at once (so the loaded pages fall behind a quick scroll). Their
+/// addresses are the server's (`serverURL`), read from the files with the same path.
 final class SlowImageLoader: DataLoading, @unchecked Sendable {
     let delay: Double
     private let lock = NSLock()
@@ -26,6 +27,11 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
 
     init(delay: Double) {
         self.delay = delay
+    }
+
+    /// The server address of a page file.
+    static func serverURL(_ file: URL) -> String {
+        "https://servidor.invalid\(file.path)"
     }
 
     private final class Work: Cancellable, @unchecked Sendable {
@@ -55,7 +61,7 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
         completion: @escaping @Sendable (Error?) -> Void
     ) -> any Cancellable {
         let item = DispatchWorkItem {
-            guard let url = request.url, let data = try? Data(contentsOf: url) else {
+            guard let url = request.url, let data = try? Data(contentsOf: url.isFileURL ? url : URL(fileURLWithPath: url.path)) else {
                 completion(URLError(.cannotOpenFile))
                 return
             }
@@ -78,6 +84,11 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
     }
 }
 
+/// The suites that put their own ImagePipeline.shared (the reader loads through it) run one after the other:
+/// suites run at the same time, and one would load its pages through the other's.
+@Suite(.serialized) enum ImagePipelineSwappingTests {}
+
+extension ImagePipelineSwappingTests {
 @MainActor
 @Suite(.serialized) struct ReaderWebtoonScrollDownTests {
     private static let pageCount = 16
@@ -97,7 +108,7 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
             }
             let url = directory.appendingPathComponent("\(chapterKey)-\(index).png")
             try data.write(to: url)
-            pages.append(Aidoku.Page(sourceId: sourceKey, chapterId: chapterKey, index: index, imageURL: url.absoluteString))
+            pages.append(Aidoku.Page(sourceId: sourceKey, chapterId: chapterKey, index: index, imageURL: SlowImageLoader.serverURL(url)))
         }
         return pages
     }
@@ -352,9 +363,10 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
         await opened.close()
     }
 }
+}
 
 // MARK: - The anchor of the layout (SUWA-17 C3, C4)
-extension ReaderWebtoonScrollDownTests {
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollDownTests {
     private var layoutOf: (Opened) -> VerticalContentOffsetPreservingLayout? {
         { $0.webtoon.collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout }
     }
