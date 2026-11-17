@@ -116,12 +116,24 @@ enum PageSizeReader {
 /// The ratios of the pages already shown in this run, by image and image settings: the images in the cache
 /// were shown, so their pages are made with their height. Kept in memory only, up to `limit` pages.
 final class PageRatioMemory: @unchecked Sendable {
-    static let shared = PageRatioMemory()
+    static let shared = PageRatioMemory(fileURL: defaultFileURL)
+
+    /// Where the shared store keeps its ratios between launches (SUWA-25).
+    static var defaultFileURL: URL? { nil }
 
     private let lock = NSLock()
     private var ratios: [String: CGFloat] = [:]
     private var order: [String] = []
     private let limit = 2000
+
+    /// - fileURL: the file the ratios are kept in between launches (nil: memory only).
+    /// - limit: how many pages it keeps, the oldest go first.
+    /// - saveDelay: how long after a change it is written.
+    /// - center: where it hears the app going to the background (then it is written at once).
+    init(fileURL: URL? = nil, limit: Int = 5000, saveDelay: TimeInterval = 10, center: NotificationCenter = .default) {}
+
+    /// Writes the ratios to the file now.
+    func saveNow() {}
 
     subscript(key: String) -> CGFloat? {
         lock.withLock { ratios[key] }

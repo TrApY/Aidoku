@@ -283,8 +283,13 @@ extension ReaderWebtoonPageNode {
 
     /// The ratio of the page's image if it is known without loading it: shown before with these settings, or
     /// from the header of the file (downloaded) or of its copy in the disk cache.
-    static func knownRatio(of page: Page, source: AidokuRunner.Source?, settings: ImageSettings) -> CGFloat? {
-        if let key = ratioKey(of: page, settings: settings), let ratio = PageRatioMemory.shared[key] {
+    static func knownRatio(
+        of page: Page,
+        source: AidokuRunner.Source?,
+        settings: ImageSettings,
+        memory: PageRatioMemory = .shared
+    ) -> CGFloat? {
+        if let key = ratioKey(of: page, settings: settings), let ratio = memory[key] {
             return ratio
         }
         guard !settings.cropsBorders, let urlString = page.imageURL else { return nil }
