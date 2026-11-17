@@ -286,3 +286,43 @@ extension ReaderReturnPositionTests {
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 }
+
+// MARK: - D5: a chapter entered from below
+extension ReaderReturnPositionTests {
+    /// Up from the start of chapter 2 into the last page of chapter 1 and down again: chapter 1 is not completed
+    /// (it was not read going down).
+    @Test func upIntoThePreviousChapterAndDownAgainCompletesNothing() async throws {
+        let manga = manga("subirybajar", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        let before = journaled(id(manga, c1))
+        let reader = await paged(manga, on: c2)
+        reader.setCurrentPage(1, position: nil)
+        reader.setChapter(c1)
+        reader.setPages(pages(manga, c1))
+        reader.setCurrentPage(38, position: nil)
+        reader.setCurrentPage(39, position: nil)
+        reader.setChapter(c2)
+        try await Task.sleep(for: .seconds(2))
+        #expect(await storedProgress(id(manga, c1)).completed == false)
+        #expect(journaled(id(manga, c1)) - before == 0)
+        #expect(await stored(id(manga, c1)) == nil, "chapter 1 saved without reading it")
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+
+    /// From below, up into its pages and then read down to its end: completed, as always.
+    @Test func upIntoItsPagesAndReadDownCompletes() async throws {
+        let manga = manga("subirleer", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        let reader = await paged(manga, on: c2)
+        reader.setCurrentPage(1, position: nil)
+        reader.setChapter(c1)
+        reader.setPages(pages(manga, c1))
+        reader.setCurrentPage(38, position: nil)
+        reader.setCurrentPage(30, position: nil)
+        for page in 31...39 {
+            reader.setCurrentPage(page, position: nil)
+        }
+        #expect(await completed(id(manga, c1)) == true)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
