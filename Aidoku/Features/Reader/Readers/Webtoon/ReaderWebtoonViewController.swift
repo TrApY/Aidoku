@@ -290,14 +290,16 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     }
 
     /// The position saved with `page` (D12): the page plus the anchor's fraction rounded down to a tenth, when the
-    /// user put the anchor on that page (an image page); nil otherwise (the history keeps what it had).
+    /// user put the anchor on that page (an image page); nil otherwise (the history keeps what it had). The anchor's
+    /// page, as anchorPage() counts it: a chapter put in below starts with its first page, not with a transition
+    /// (SUWA-19 revisión, hallazgo 1).
     private func positionToReport(page: Int) -> Double? {
         guard
             anchorIsTheUsers,
             let anchor,
             let chapter,
             anchor.chapterKey == chapter.key,
-            anchor.item == page,
+            anchorPage() == page,
             let chapterIndex = chapters.firstIndex(of: chapter),
             pages[safe: chapterIndex]?[safe: anchor.item]?.type == .imagePage
         else { return nil }
