@@ -14,8 +14,17 @@ enum CompletionJournal {
     static let keptLines = 200
 
     static var defaultUrl: URL {
-        FileManager.default.applicationSupportDirectory.appendingPathComponent("completados.log")
+        testsUrl ?? FileManager.default.applicationSupportDirectory.appendingPathComponent("completados.log")
     }
+
+    /// Hosting the tests: a journal of their own in the temporary directory (new each run), so they never write in
+    /// the app's real one (SUWA-17 G3a).
+    private static let testsUrl: URL? = {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else { return nil }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("completados-pruebas.log")
+        try? FileManager.default.removeItem(at: url)
+        return url
+    }()
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static let formatter: ISO8601DateFormatter = {
