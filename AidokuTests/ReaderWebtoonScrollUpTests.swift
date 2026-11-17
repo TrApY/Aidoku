@@ -47,6 +47,8 @@ extension ImagePipelineSwappingTests {
         let window: UIWindow
         let directory: URL
         let modeKey: String
+        /// Where the reader hears the app going out of front and back (SUWA-17 H).
+        let center: NotificationCenter
 
         func close() async {
             window.isHidden = true
@@ -79,7 +81,8 @@ extension ImagePipelineSwappingTests {
         let previousPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: previous.key, in: directory)
 
         let reader = ReaderViewController(source: nil, manga: manga, chapter: chapter)
-        reader.appActivity = ReaderAppActivity(center: NotificationCenter(), active: true)
+        let center = NotificationCenter()
+        reader.appActivity = ReaderAppActivity(center: center, active: true)
         let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -95,7 +98,9 @@ extension ImagePipelineSwappingTests {
         // what the reader gets when it asks for the previous chapter
         webtoon.viewModel.preloadedChapter = previous
         webtoon.viewModel.preloadedPages = previousPages
-        return Opened(reader: reader, webtoon: webtoon, chapterId: chapterId, window: window, directory: directory, modeKey: modeKey)
+        return Opened(
+            reader: reader, webtoon: webtoon, chapterId: chapterId, window: window, directory: directory, modeKey: modeKey, center: center
+        )
     }
 
     /// The user drags until the middle of the screen is in `row` of `section`, and lets go.
@@ -396,6 +401,109 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         #expect(opened.chapterKey == "c2")
         #expect(await storedProgress(previousId).completed == false, "completed by a layout adjustment")
         await removeTestHistory(previousId)
+        await opened.close()
+    }
+}
+
+// MARK: - SUWA-17 H: the window's size changing (iPadOS: app switcher, Stage Manager, windows) does not change the chapter
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// The window takes `width`×`height`, as iPadOS does with the app's window (no viewWillTransition).
+    private func resize(_ opened: Opened, width: CGFloat, height: CGFloat) async throws {
+        opened.window.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        opened.window.layoutIfNeeded()
+        try await Task.sleep(for: .seconds(1))
+    }
+
+    /// The cell in the middle of the screen and how far into it the middle is (0 its top, 1 its bottom).
+    private func middleOfScreen(_ opened: Opened) throws -> (path: IndexPath, fraction: CGFloat) {
+        let webtoon = opened.webtoon
+        let path = try #require(webtoon.getCurrentPagePath(), "nothing in the middle of the screen")
+        let frame = try #require(webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame)
+        let middle = webtoon.collectionNode.contentOffset.y + webtoon.collectionNode.bounds.height / 2
+        return (path, (middle - frame.minY) / frame.height)
+    }
+
+    /// Chapter N ("c2") at `page`, with N-1 ("c1") put in above it, in a window of `width`×`height`.
+    private func openInTheSecondChapter(mangaKey: String, page: Int, width: CGFloat, height: CGFloat) async throws -> Opened {
+        let opened = try await open(mangaKey: mangaKey, startPage: 2)
+        try await resize(opened, width: width, height: height)
+        try userScrolls(opened, toRow: 0, section: opened.lastSection)
+        try await waitForThePreviousChapter(opened)
+        try #require(opened.lastSection == 1, "chapter 1 did not go in above")
+        try userScrolls(opened, toRow: page, section: 1)
+        try await Task.sleep(for: .seconds(3))
+        try #require(opened.chapterKey == "c2" && opened.reader.currentPage == page,
+                     "not at chapter 2's page \(page): \(opened.chapterKey) \(opened.reader.currentPage)")
+        return opened
+    }
+
+    /// Out of front, iPadOS lays the app out again at other sizes (the app switcher's snapshots, Stage Manager):
+    /// 820×1180 → 1180×820 → 820×1180 with the app inactive. Back in front: the same chapter, page and place.
+    @Test func aSizeChangeWhileInactiveKeepsTheChapterAndThePage() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "tamano", page: 3, width: 820, height: 1180)
+        let before = try middleOfScreen(opened)
+        opened.center.post(name: UIApplication.willResignActiveNotification, object: nil)
+        opened.center.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        try await resize(opened, width: 1180, height: 820)
+        #expect(opened.chapterKey == "c2", "in landscape, out of front")
+        try await resize(opened, width: 820, height: 1180)
+        opened.center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        try await Task.sleep(for: .seconds(2))
+        #expect(opened.chapterKey == "c2")
+        #expect(opened.reader.currentPage == 3)
+        let after = try middleOfScreen(opened)
+        #expect(after.path == before.path, "middle of the screen \(before) → \(after)")
+        #expect(abs(after.fraction - before.fraction) < 0.05, "middle of the screen \(before) → \(after)")
+        await opened.close()
+    }
+
+    /// Nothing in the middle of the screen (past the end of the content, as when it gets shorter) while in the
+    /// second section: the reader stays in its chapter, not in the first section's.
+    @Test func nothingInTheMiddleOfTheScreenDoesNotChangeTheChapter() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "sinpagina", page: 3, width: 402, height: 874)
+        let webtoon = opened.webtoon
+        let end = webtoon.collectionNode.collectionViewLayout.collectionViewContentSize.height
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: end - webtoon.collectionNode.bounds.height / 2 + 40), animated: false)
+        let path = webtoon.getCurrentPagePath()
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+        try #require(path == nil, "a page in the middle: \(String(describing: path))")
+        try await Task.sleep(for: .seconds(1))
+        #expect(opened.chapterKey == "c2")
+        await opened.close()
+    }
+
+    /// With the app inactive, the content moving into the previous chapter does not change the chapter, and
+    /// nothing is saved.
+    @Test func withTheAppInactiveMovingIntoAnotherChapterDoesNotChangeIt() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "inactivaotro", page: 3, width: 402, height: 874)
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        let saved = await storedProgress(opened.chapterId)
+        opened.center.post(name: UIApplication.willResignActiveNotification, object: nil)
+        let page = try frame(opened, row: 5, section: 0)
+        drag(opened, middleAt: page.midY)
+        try await Task.sleep(for: .seconds(3))
+        #expect(opened.chapterKey == "c2")
+        #expect(await storedProgress(opened.chapterId).progress == saved.progress, "chapter 2 saved again")
+        #expect(await storedProgress(previousId).progress == nil, "chapter 1 saved")
+        opened.center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        await opened.close()
+    }
+
+    /// The window 400 → 600 → 400 wide with the app in front and nobody scrolling (Stage Manager, a window
+    /// resized): the page in the middle of the screen stays there, at the same place inside it.
+    @Test func aWidthChangeKeepsTheMiddlePage() async throws {
+        let opened = try await openInTheSecondChapter(mangaKey: "anchuracentro", page: 3, width: 400, height: 874)
+        let before = try middleOfScreen(opened)
+        try await resize(opened, width: 600, height: 874)
+        let wide = try middleOfScreen(opened)
+        #expect(wide.path == before.path, "600 wide: \(before) → \(wide)")
+        #expect(abs(wide.fraction - before.fraction) < 0.02, "600 wide: \(before) → \(wide)")
+        try await resize(opened, width: 400, height: 874)
+        let back = try middleOfScreen(opened)
+        #expect(back.path == before.path, "back to 400: \(before) → \(back)")
+        #expect(abs(back.fraction - before.fraction) < 0.02, "back to 400: \(before) → \(back)")
+        #expect(opened.chapterKey == "c2")
         await opened.close()
     }
 }
