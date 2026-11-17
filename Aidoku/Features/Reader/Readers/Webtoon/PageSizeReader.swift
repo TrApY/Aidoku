@@ -113,39 +113,161 @@ enum PageSizeReader {
     }
 }
 
-/// The ratios of the pages already shown in this run, by image and image settings: the images in the cache
-/// were shown, so their pages are made with their height. Kept in memory only, up to `limit` pages.
+/// The ratios of the pages already shown, by image and image settings: their pages are made with their height.
+/// Kept in memory and, between launches, in a file in Caches (SUWA-25): written a while after a change and at once
+/// when the app goes to the background. Up to `limit` pages, the oldest go first. Nothing in Core Data, CloudKit or
+/// UserDefaults; iOS may empty Caches, and then the pages are measured again as before.
 final class PageRatioMemory: @unchecked Sendable {
     static let shared = PageRatioMemory(fileURL: defaultFileURL)
 
     /// Where the shared store keeps its ratios between launches (SUWA-25).
-    static var defaultFileURL: URL? { nil }
+    static var defaultFileURL: URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("PageRatios.plist")
+    }
 
     private let lock = NSLock()
     private var ratios: [String: CGFloat] = [:]
     private var order: [String] = []
-    private let limit = 2000
+    private let limit: Int
+    private let fileURL: URL?
+    private let saveDelay: TimeInterval
+    /// The file is read on first use, not when the store is made (the shared one is made early).
+    private var loaded = false
+    private var saveScheduled = false
+    /// Writes one at a time, in order.
+    private let writer = DispatchQueue(label: "PageRatioMemory.writer", qos: .utility)
+    private var observer: NSObjectProtocol?
+    private let center: NotificationCenter
 
     /// - fileURL: the file the ratios are kept in between launches (nil: memory only).
     /// - limit: how many pages it keeps, the oldest go first.
     /// - saveDelay: how long after a change it is written.
     /// - center: where it hears the app going to the background (then it is written at once).
-    init(fileURL: URL? = nil, limit: Int = 5000, saveDelay: TimeInterval = 10, center: NotificationCenter = .default) {}
+    init(fileURL: URL? = nil, limit: Int = 5000, saveDelay: TimeInterval = 10, center: NotificationCenter = .default) {
+        self.fileURL = fileURL
+        self.limit = max(1, limit)
+        self.saveDelay = saveDelay
+        self.center = center
+        guard fileURL != nil else { return }
+        // the name's raw value: UIApplication's constant is the main actor's
+        observer = center.addObserver(
+            forName: Notification.Name("UIApplicationDidEnterBackgroundNotification"),
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.saveNow()
+        }
+    }
 
-    /// Writes the ratios to the file now.
-    func saveNow() {}
+    deinit {
+        if let observer {
+            center.removeObserver(observer)
+        }
+    }
 
     subscript(key: String) -> CGFloat? {
-        lock.withLock { ratios[key] }
+        lock.withLock {
+            loadIfNeeded()
+            return ratios[key]
+        }
     }
 
     func set(_ ratio: CGFloat, for key: String) {
-        lock.withLock {
-            guard ratios.updateValue(ratio, forKey: key) == nil else { return }
+        let changed: Bool = lock.withLock {
+            loadIfNeeded()
+            let old = ratios.updateValue(ratio, forKey: key)
+            if old == nil {
+                order.append(key)
+                trim()
+            }
+            return old != ratio
+        }
+        if changed {
+            scheduleSave()
+        }
+    }
+
+    /// Writes the ratios to the file now.
+    func saveNow() {
+        guard fileURL != nil else { return }
+        writer.sync { write() }
+    }
+
+    // MARK: - File
+
+    private static let version = 1
+
+    /// What the file holds: the keys oldest first and their ratios.
+    private struct Stored: Codable {
+        let version: Int
+        let keys: [String]
+        let ratios: [Double]
+    }
+
+    /// Under the lock.
+    private func loadIfNeeded() {
+        guard !loaded else { return }
+        loaded = true
+        guard
+            let fileURL,
+            let data = try? Data(contentsOf: fileURL),
+            let stored = try? PropertyListDecoder().decode(Stored.self, from: data),
+            stored.version == Self.version,
+            stored.keys.count == stored.ratios.count
+        else { return } // missing or unreadable: start empty
+        let (keys, values) = (stored.keys, stored.ratios)
+        // the file's (older) first, then whatever was set before the first read
+        let earlier = order.map { ($0, ratios[$0]) }
+        ratios = [:]
+        order = []
+        for (key, value) in zip(keys, values) where value.isFinite && value > 0 && ratios[key] == nil {
+            ratios[key] = CGFloat(value)
             order.append(key)
-            if order.count > limit {
-                ratios[order.removeFirst()] = nil
+        }
+        for case let (key, value?) in earlier {
+            if ratios.updateValue(value, forKey: key) == nil {
+                order.append(key)
             }
         }
+        trim()
+    }
+
+    /// Under the lock.
+    private func trim() {
+        if order.count > limit {
+            for key in order.prefix(order.count - limit) {
+                ratios[key] = nil
+            }
+            order.removeFirst(order.count - limit)
+        }
+    }
+
+    private func scheduleSave() {
+        guard fileURL != nil else { return }
+        let schedule: Bool = lock.withLock {
+            guard !saveScheduled else { return false }
+            saveScheduled = true
+            return true
+        }
+        guard schedule else { return }
+        writer.asyncAfter(deadline: .now() + saveDelay) { [weak self] in
+            self?.write()
+        }
+    }
+
+    /// On the writer queue.
+    private func write() {
+        guard let fileURL else { return }
+        let (keys, values): ([String], [Double]) = lock.withLock {
+            loadIfNeeded()
+            saveScheduled = false
+            return (order, order.map { Double(ratios[$0] ?? 0) })
+        }
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        guard let data = try? encoder.encode(Stored(version: Self.version, keys: keys, ratios: values)) else { return }
+        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: fileURL, options: .atomic)
     }
 }
