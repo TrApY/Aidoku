@@ -55,6 +55,7 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     }
 
     private var pageLoadTask: Task<Void, Never>?
+    private var measureTask: Task<Void, Never>?
     private var imageTask: ImageTask?
     private var imageProcessingTask: Task<UIImage?, Never>?
 
@@ -169,6 +170,11 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     override func didExitPreloadState() {
         super.didExitPreloadState()
         cancelPageLoad()
+        // a page that leaves the preload range without having shown keeps no decoded image (it kept it until it
+        // showed and went away): the decoded images stay those of Texture's ranges (SUWA-17 C)
+        if !isInDisplayState, !isVisible, image != nil, delegate?.isZooming != true {
+            clearDisplayedImage()
+        }
     }
 
     override func didEnterVisibleState() {
@@ -467,9 +473,7 @@ extension ReaderWebtoonPageNode {
             if response.container.type == .gif, let data = response.container.data {
                 imageNode.animate(withGIFData: data)
             }
-            if isNodeLoaded {
-                displayPage()
-            }
+            imageArrived()
         } catch {
             guard !Task.isCancelled else { return }
 
@@ -490,9 +494,7 @@ extension ReaderWebtoonPageNode {
                                 if result.type == .gif, let data = result.data {
                                     self.imageNode.animate(withGIFData: data)
                                 }
-                                if self.isNodeLoaded {
-                                    self.displayPage()
-                                }
+                                self.imageArrived()
                                 return
                             }
                         }
@@ -567,9 +569,7 @@ extension ReaderWebtoonPageNode {
 
         ImagePipeline.shared.cache.storeCachedImage(ImageContainer(image: image), for: request)
         self.image = image
-        if isNodeLoaded {
-            displayPage()
-        }
+        imageArrived()
     }
 
     private func loadImage(zipURL: URL, filePath: String) async {
@@ -587,6 +587,86 @@ extension ReaderWebtoonPageNode {
         if isNodeLoaded {
             displayPage()
         }
+    }
+
+    /// An image came: shown if the cell is up, and measured anyway, so a page loaded ahead (Texture's
+    /// preload range) has its height before it shows, not when it does (SUWA-17 C).
+    private func imageArrived() {
+        if isNodeLoaded {
+            displayPage()
+        } else {
+            remeasure()
+        }
+    }
+
+    /// Gives the cell the height of its ratio now, without animating (it is off the screen).
+    private func remeasure() {
+        let width = pageWidth
+        guard width > 0 else { return }
+        let ratio = if let image, image.size.width > 0 {
+            image.size.height / image.size.width
+        } else {
+            ratio ?? Self.defaultRatio
+        }
+        let size = CGSize(width: width, height: width * ratio)
+        guard abs(calculatedSize.height - size.height) >= 0.5 else { return }
+        transitionLayout(with: ASSizeRange(min: .zero, max: size), animated: false, shouldMeasureAsync: false)
+        // the scroll view outside follows the new content size (the animated transition does it when it ends)
+        if let delegate {
+            Task { @MainActor in
+                delegate.collectionNode.view.layoutIfNeeded()
+                delegate.zoomView.adjustContentSize()
+            }
+        }
+    }
+
+    /// Measures the page before it shows (the reader asks for the «pages to preload» ones after the screen and
+    /// a couple before it): from the header of the file, of the archive entry or of the data from the server,
+    /// which stays in the disk cache for when the image is loaded. Nothing is decoded (SUWA-17 C).
+    func measureAhead() {
+        guard !hasRealRatio, image == nil, text == nil, page.text == nil, measureTask == nil, let imageSettings else { return }
+        guard !imageSettings.cropsBorders else { return }
+        measureTask = Task { [weak self] in
+            guard let self else { return }
+            let ratio = await self.headerRatio()
+            self.measureTask = nil
+            guard !Task.isCancelled, let ratio, !self.hasRealRatio else { return }
+            self.ratio = ratio
+            self.hasRealRatio = true
+            if let ratioKey = self.ratioKey {
+                PageRatioMemory.shared.set(ratio, for: ratioKey)
+            }
+            self.remeasure()
+        }
+    }
+
+    func cancelMeasureAhead() {
+        measureTask?.cancel()
+        measureTask = nil
+    }
+
+    private func headerRatio() async -> CGFloat? {
+        if let zipURL = page.zipURL, let url = URL(string: zipURL), let filePath = page.imageURL {
+            guard let file = await temporaryPageStore.storeArchiveEntry(from: url, path: filePath) else { return nil }
+            return await Task.detached { PageSizeReader.ratio(fileURL: file) }.value
+        }
+        guard let urlString = page.imageURL, let url = URL(string: urlString) else { return nil }
+        if url.isFileURL {
+            return await Task.detached { PageSizeReader.ratio(fileURL: url) }.value
+        }
+        // a source that processes its pages may send something else than the image shown
+        if let source, source.features.processesPages {
+            return nil
+        }
+        let urlRequest = if let source {
+            await source.getModifiedImageRequest(url: url, context: page.context)
+        } else {
+            URLRequest(url: url)
+        }
+        guard !Task.isCancelled, let (data, _) = try? await ImagePipeline.shared.data(for: ImageRequest(urlRequest: urlRequest)) else {
+            return nil
+        }
+        return PageSizeReader.ratio(data: data)
     }
 
     func displayPage() {
@@ -723,6 +803,7 @@ extension ReaderWebtoonPageNode {
     }
 
     private func handleMemoryWarning() {
+        cancelMeasureAhead()
         cancelLiveTextAnalysis()
         cancelDictionaryTextAnalysis()
         clearDictionaryOverlays()

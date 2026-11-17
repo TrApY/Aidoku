@@ -27,11 +27,16 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
 
     // Indicates if infinite scroll is enabled
     private lazy var infinite = UserDefaults.standard.bool(forKey: "Reader.verticalInfiniteScroll")
-    // How many pages before the end of the last chapter the next one starts loading
+    // How many pages before the end of the last chapter the next one starts loading, and how many pages after the
+    // screen are loaded and measured before they show (SUWA-17 C)
     private lazy var pagesToPreload = UserDefaults.standard.integer(forKey: "Reader.pagesToPreload")
     // How many chapters we allow to be held in memory
     private let maxRetainedChapters = 3
     private var loadingPrevious = false
+    /// The last page on screen when the pages around it were last asked to be measured.
+    private var measuredAheadFrom: IndexPath?
+    /// After a memory warning nothing is measured ahead for a while.
+    private var measureAheadPausedUntil: Date?
     private var loadingNext = false
 
     // The chapters currently shown in the reader view
@@ -175,8 +180,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             self?.setLiveTextButtonHidden(true)
         }
 
-        addObserver(forName: UIApplication.didReceiveMemoryWarningNotification.rawValue) { _ in
+        addObserver(forName: UIApplication.didReceiveMemoryWarningNotification.rawValue) { [weak self] _ in
             LogManager.logger.warn("Received memory warning in webtoon reader")
+            // the pages stop being measured ahead for half a minute (each one cancels its own)
+            self?.measureAheadPausedUntil = Date().addingTimeInterval(30)
+            self?.measuredAheadFrom = nil
 
             // clear image memory cache
             ImagePipeline.shared.configuration.imageCache?.removeAll()
@@ -213,6 +221,61 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             max(pageRow + (hasStartInfo ? 0 : 1), 0),
             currentPages.count - (hasStartInfo ? 1 : 0)
         )
+    }
+
+    /// Asks the «pages to preload» pages after the last one on screen, and two before the first one, to measure
+    /// themselves before they show (SUWA-17 C). Once per change of the last page on screen.
+    func measureAhead() {
+        if let until = measureAheadPausedUntil {
+            guard until <= Date() else { return }
+            measureAheadPausedUntil = nil
+        }
+        guard
+            let last = getCurrentPagePath(pos: .bottom) ?? getCurrentPagePath(),
+            last != measuredAheadFrom
+        else { return }
+        measuredAheadFrom = last
+        let first = getCurrentPagePath(pos: .top) ?? last
+        var paths: [IndexPath] = []
+        var path = last
+        for _ in 0..<max(1, pagesToPreload) {
+            guard let next = indexPath(after: path) else { break }
+            paths.append(next)
+            path = next
+        }
+        path = first
+        for _ in 0..<2 {
+            guard let previous = indexPath(before: path) else { break }
+            paths.append(previous)
+            path = previous
+        }
+        for path in paths {
+            (collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode)?.measureAhead()
+        }
+    }
+
+    private func indexPath(after path: IndexPath) -> IndexPath? {
+        if path.item + 1 < (pages[safe: path.section]?.count ?? 0) {
+            return IndexPath(item: path.item + 1, section: path.section)
+        }
+        var section = path.section + 1
+        while section < pages.count {
+            if !pages[section].isEmpty { return IndexPath(item: 0, section: section) }
+            section += 1
+        }
+        return nil
+    }
+
+    private func indexPath(before path: IndexPath) -> IndexPath? {
+        if path.item > 0 {
+            return IndexPath(item: path.item - 1, section: path.section)
+        }
+        var section = path.section - 1
+        while section >= 0 {
+            if !pages[section].isEmpty { return IndexPath(item: pages[section].count - 1, section: section) }
+            section -= 1
+        }
+        return nil
     }
 
     /// Put the collection node back into the full preload range.
@@ -404,6 +467,7 @@ extension ReaderWebtoonViewController {
         if pageReports.shouldReport(page) {
             delegate?.setCurrentPage(page, position: nil)
         }
+        measureAhead()
     }
 
     // disable slider movement while zooming
@@ -1031,6 +1095,11 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
 
 // MARK: - Collection View Delegate
 extension ReaderWebtoonViewController: ASCollectionDelegate {
+
+    // The pages after the screen are measured as soon as the first ones show (opening, a new chapter)
+    func collectionNode(_ collectionNode: ASCollectionNode, willDisplayItemWith node: ASCellNode) {
+        measureAhead()
+    }
 
     // Refresh info pages after they move off screen
     func collectionNode(_ collectionNode: ASCollectionNode, didEndDisplayingItemWith node: ASCellNode) {
