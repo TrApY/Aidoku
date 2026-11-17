@@ -255,6 +255,25 @@ extension MangaView.ViewModel {
             }
             .store(in: &cancellables)
 
+        // the reader saves a chapter's session after its page: a completed chapter read again counts once its
+        // session is in (SUWA-17 F2b)
+        NotificationCenter.default.publisher(for: .readingSessionAdded)
+            .sink { [weak self] output in
+                Task { @MainActor in
+                    guard
+                        let self,
+                        let chapterId = output.object as? ChapterIdentifier,
+                        chapterId.mangaIdentifier == self.manga.identifier,
+                        self.readingHistory[chapterId.chapterKey]?.page == -1
+                    else {
+                        return
+                    }
+                    await self.loadHistory()
+                    self.updateReadButton()
+                }
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: .historySet)
             .sink { [weak self] output in
                 Task { @MainActor in

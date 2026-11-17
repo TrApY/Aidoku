@@ -48,6 +48,8 @@ extension HistoryManager {
 
     func addSession(chapterId: ChapterIdentifier, data: ReadingSessionData) async {
         await DataRepositories.shared.sessions.add(data, chapter: chapterId)
+        // whether a completed chapter is being read again depends on its sessions (SUWA-17 F2b)
+        NotificationCenter.default.post(name: .readingSessionAdded, object: chapterId)
     }
 
     func addHistory(

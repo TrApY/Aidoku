@@ -38,6 +38,8 @@ extension Notification.Name {
     static let historyAdded = Self("historyAdded")
     static let historyRemoved = Self("historyRemoved")
     static let historySet = Self("historySet")
+    /// A reading session was saved (object: its ChapterIdentifier; SUWA-17 F2b).
+    static let readingSessionAdded = Self("readingSessionAdded")
     // posted when the history tab is selected while already at the top of the history list
     static let historyTabReselected = Self("historyTabReselected")
 
