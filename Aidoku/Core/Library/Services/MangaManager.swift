@@ -39,11 +39,14 @@ actor MangaManager {
         // (rereading: its page) counts as not completed (SUWA-17 D2).
         var selectedChapter: AidokuRunner.Chapter?
         var selectedDate: Int = -1
+        // the last read of the manga, completed chapters included: a chapter being read again is taken up only if
+        // it is that one; if the last one read is a completed one, on as before (SUWA-17 F1)
+        let lastRead = chapters.compactMap { readingHistory[$0.id]?.date }.max() ?? -1
 
         for chapter in chapters {
             guard
                 let history = readingHistory[chapter.id],
-                resumeLastOpened || history.page != -1 || rereading[chapter.id] != nil,
+                resumeLastOpened || history.page != -1 || (rereading[chapter.id] != nil && history.date == lastRead),
                 history.date > selectedDate
             else { continue }
 
