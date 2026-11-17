@@ -637,6 +637,14 @@ extension ReaderWebtoonViewController {
         // ignore if page slider is being used
         guard !isSliding && !isZooming else { return }
 
+        // The layout or the reader putting the screen on the anchor: in between, one scroll view has the new offset
+        // and the other the old one, which, with the content above changed, is another place (another chapter). That is
+        // not the user moving, also during a drag or a deceleration (SUWA-19 revisión, hallazgo 4: pages shrinking
+        // above during a deceleration took the reader into the next chapter)
+        if applyingAnchor || (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.isPlacingTheScreen == true {
+            return
+        }
+
         guard
             let chapter = chapter,
             let chapterIndex = chapters.firstIndex(of: chapter)
@@ -651,7 +659,7 @@ extension ReaderWebtoonViewController {
         let wasAt = anchorOffsetIntoChapter()
         if movedByUser {
             writeAnchorFromScreen()
-        } else if !applyingAnchor, !zoomView.isAnimatingZoom, applyAnchor() {
+        } else if !zoomView.isAnimatingZoom, applyAnchor() {
             return
         }
         let isAt = anchorOffsetIntoChapter()

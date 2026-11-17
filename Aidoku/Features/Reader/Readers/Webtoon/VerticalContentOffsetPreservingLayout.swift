@@ -15,6 +15,9 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
     /// Where the screen goes after every pass: the reader's anchor (SUWA-19), as the item, the point of it and the
     /// height of the screen it goes at. Nil: nothing to put back this pass.
     var anchorTarget: (() -> (indexPath: IndexPath, fraction: CGFloat, screenFraction: CGFloat)?)?
+    /// The layout is putting the screen on the anchor (both scroll views are set one after the other, and the zoom
+    /// view syncs them in between): the scroll events meanwhile are not anybody moving (SUWA-19 revisión, hallazgo 4).
+    private(set) var isPlacingTheScreen = false
 
     var spacing: CGFloat {
         get { minimumLineSpacing }
@@ -118,6 +121,8 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         // the scroll view is left alone when it is already there (every pass set its offset and content size, also
         // while pinching: C3)
         if sameScale, let offset = anchorOffset(), abs(offset.y - collectionView.contentOffset.y) > 0.5 {
+            isPlacingTheScreen = true
+            defer { isPlacingTheScreen = false }
             UIView.performWithoutAnimation {
                 collectionView.contentOffset = offset
                 onOffsetPreserved?(offset)
