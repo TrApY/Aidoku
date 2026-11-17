@@ -37,6 +37,12 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private var measuredAheadFrom: IndexPath?
     /// After a memory warning nothing is measured ahead for a while.
     private var measureAheadPausedUntil: Date?
+    /// The pages that may hold a decoded image: from the first one on screen, «pages to preload» + 2 in all
+    /// counting the ones on screen (all of these if more show at once). Texture's preload range alone loads
+    /// and decodes as far as 2.5 screens below (SUWA-17 E1).
+    private let decodeWindow = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
+    /// The pages out of it that could not let go of their image yet (on screen for Texture a moment longer).
+    private let decodeLeaving = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
     private var loadingNext = false
 
     // The chapters currently shown in the reader view
@@ -223,9 +229,52 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         )
     }
 
+    /// The same pages, to be asked from the pages' own callbacks.
+    nonisolated let decodeWindowIDs = ReaderDecodeWindow()
+
+    /// Whether the page may load and decode its image now (the ones on screen always may).
+    nonisolated func mayDecode(_ node: ReaderWebtoonPageNode) -> Bool {
+        decodeWindowIDs.contains(node)
+    }
+
+    /// Moves the pages that may hold a decoded image with the screen (not while zooming: the pages keep theirs): the ones that come in load, the ones that
+    /// leave let go of their image (SUWA-17 E1).
+    private func updateDecodeWindow() {
+        guard
+            !isZooming,
+            let first = getCurrentPagePath(pos: .top) ?? getCurrentPagePath(),
+            let last = getCurrentPagePath(pos: .bottom) ?? getCurrentPagePath()
+        else { return }
+        var window: [ReaderWebtoonPageNode] = []
+        var count = 0
+        var path: IndexPath? = first
+        while let current = path, count < max(0, pagesToPreload) + 2 || current <= last {
+            if let node = collectionNode.nodeForItem(at: current) as? ReaderWebtoonPageNode {
+                window.append(node)
+            }
+            count += 1
+            path = indexPath(after: current)
+        }
+        // the ones that left (and the ones that could not let go before: still on screen for Texture)
+        let leaving = decodeWindow.allObjects + decodeLeaving.allObjects
+        decodeWindow.removeAllObjects()
+        decodeLeaving.removeAllObjects()
+        for node in window {
+            decodeWindow.add(node)
+        }
+        decodeWindowIDs.set(window)
+        for node in leaving where !decodeWindow.contains(node) && !node.decodeDisallowed() {
+            decodeLeaving.add(node)
+        }
+        for node in window {
+            node.decodeAllowed()
+        }
+    }
+
     /// Asks the «pages to preload» pages after the last one on screen, and two before the first one, to measure
     /// themselves before they show (SUWA-17 C). Once per change of the last page on screen.
     func measureAhead() {
+        updateDecodeWindow()
         if let until = measureAheadPausedUntil {
             guard until <= Date() else { return }
             measureAheadPausedUntil = nil
@@ -1178,5 +1227,21 @@ extension ReaderWebtoonViewController: ASCollectionDataSource {
                 )
             }
         }
+    }
+}
+
+/// The pages of the webtoon reader that may hold a decoded image now (SUWA-17 E1), asked by the pages from their
+/// own callbacks.
+final class ReaderDecodeWindow: @unchecked Sendable {
+    private let lock = NSLock()
+    private var nodes: Set<ObjectIdentifier> = []
+
+    func contains(_ node: AnyObject) -> Bool {
+        lock.withLock { nodes.contains(ObjectIdentifier(node)) }
+    }
+
+    func set(_ nodes: [AnyObject]) {
+        let ids = Set(nodes.map { ObjectIdentifier($0) })
+        lock.withLock { self.nodes = ids }
     }
 }

@@ -368,8 +368,35 @@ extension ReaderWebtoonPageNode {
 }
 
 extension ReaderWebtoonPageNode {
+    /// Whether the page may load and decode its image now: on screen, a text page, or within the reader's
+    /// pages to decode (SUWA-17 E1).
+    private var mayDecode: Bool {
+        isVisible || page.text != nil || (delegate?.mayDecode(self) ?? true)
+    }
+
+    /// The reader's pages to decode now include this one: it loads if it is in the preload range.
+    func decodeAllowed() {
+        guard image == nil, text == nil, isInPreloadState || isVisible else { return }
+        startPageLoad()
+    }
+
+    /// The reader's pages to decode no longer include this one: unless it is on screen, it stops loading and lets
+    /// go of its image (its height stays). False if it could not (on screen): it is asked again.
+    @discardableResult
+    func decodeDisallowed() -> Bool {
+        guard page.text == nil else { return true }
+        guard !isVisible else { return false }
+        cancelPageLoad()
+        if image != nil {
+            clearDisplayedImage()
+            imageNode.alpha = 0
+            progressNode.isHidden = false
+        }
+        return true
+    }
+
     private func startPageLoad() {
-        guard pageLoadTask == nil, image == nil, text == nil else { return }
+        guard pageLoadTask == nil, image == nil, text == nil, mayDecode else { return }
 
         pageLoadTask = Task { [weak self] in
             guard let self else { return }
