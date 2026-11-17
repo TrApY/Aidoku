@@ -30,7 +30,7 @@ enum PageSizeReader {
     static func ratio(archive archiveURL: URL, path: String) -> CGFloat? {
         struct Enough: Error {}
         guard
-            let archive = try? Archive(url: archiveURL, accessMode: .read),
+            let archive = try? Archive(url: archiveURL, accessMode: .read, pathEncoding: nil),
             let entry = archive[path]
         else { return nil }
         let source = CGImageSourceCreateIncremental(options)
