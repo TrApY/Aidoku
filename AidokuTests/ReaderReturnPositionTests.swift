@@ -559,3 +559,29 @@ extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 }
+
+// MARK: - SUWA-17 G3c: a known false «read again» between devices (documented, not changed)
+extension ImagePipelineSwappingTests.ReaderReturnPositionTests {
+    /// Completed here; on the other device it is marked unread, part of it read (its session comes in by iCloud)
+    /// and marked read again (no completion in this device's journal): here it counts as being read again and
+    /// «Continuar» takes it up at its page. Known and accepted: the journal is this device's only (SUWA-17 G3c).
+    @Test func readAgainOnTheOtherDeviceCountsAsBeingReadAgainHere() async throws {
+        let manga = manga("g3cotro", [c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        let completedAt = Date().addingTimeInterval(-120)
+        await seed(id(manga, c1), page: Self.pageCount, total: Self.pageCount)
+        await DataRepositories.shared.history.markCompleted([id(manga, c1)], date: completedAt)
+        CompletionJournal.record(id(manga, c1), reason: "test: completado", date: completedAt)
+        // from the other device
+        await DataRepositories.shared.sessions.add(
+            .init(startDate: Date().addingTimeInterval(-60), endDate: Date().addingTimeInterval(-30), pagesRead: 4),
+            chapter: id(manga, c1)
+        )
+        await seed(id(manga, c1), page: 5, total: Self.pageCount)
+        await DataRepositories.shared.history.markCompleted([id(manga, c1)], date: Date())
+        await seed(id(manga, c1), page: 5, total: Self.pageCount)
+        let (_, next) = await MangaManager.shared.getNextChapter(mangaId: manga.identifier, fallbackChapters: [c2, c1])
+        #expect(next?.key == c1.key, "the known false «read again»: \(String(describing: next?.key))")
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
