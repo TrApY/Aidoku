@@ -1064,6 +1064,7 @@ extension ReaderWebtoonViewController: ASCollectionDataSource {
         var page = pages[indexPath.section][indexPath.item]
         if page.type == .imagePage {
             // image page
+            let imageSettings = ReaderWebtoonPageNode.ImageSettings.current
             return { [weak self] in
                 guard
                     let self,
@@ -1075,7 +1076,8 @@ extension ReaderWebtoonViewController: ASCollectionDataSource {
                     source: self.viewModel.source,
                     page: page,
                     temporaryPageStore: temporaryPageStore,
-                    pillarboxLayoutState: self.pillarboxLayoutState
+                    pillarboxLayoutState: self.pillarboxLayoutState,
+                    imageSettings: imageSettings
                 )
                 cell.delegate = self
                 self.bindDictionaryOverlayTap(to: cell)

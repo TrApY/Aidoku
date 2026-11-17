@@ -25,11 +25,34 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     var image: UIImage? {
         didSet {
             guard let image, image.size.width > 0 else { return }
-            ratio = image.size.height / image.size.width
+            let ratio = image.size.height / image.size.width
+            self.ratio = ratio
+            hasRealRatio = true
+            if let ratioKey {
+                PageRatioMemory.shared.set(ratio, for: ratioKey)
+            }
         }
     }
     var text: String?
     var ratio: CGFloat?
+    /// The ratio is the image's (from the image, its header or an earlier showing), not the provisional one.
+    private(set) var hasRealRatio = false
+    /// The reader's image settings when the page was made: with them the ratios are remembered (SUWA-17 C).
+    private let imageSettings: ImageSettings?
+
+    struct ImageSettings: Sendable {
+        /// ImageProcessingSettingsKey: the same image with other settings may have another size.
+        let key: String
+        /// Cropping the borders changes the size: the header does not tell it.
+        let cropsBorders: Bool
+
+        @MainActor static var current: ImageSettings {
+            .init(
+                key: ImageProcessingSettingsKey.getProcessorSettingsKey(),
+                cropsBorders: UserDefaults.standard.bool(forKey: "Reader.cropBorders")
+            )
+        }
+    }
 
     private var pageLoadTask: Task<Void, Never>?
     private var imageTask: ImageTask?
@@ -88,13 +111,22 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
         source: AidokuRunner.Source?,
         page: Page,
         temporaryPageStore: ReaderTemporaryPageStore,
-        pillarboxLayoutState: ReaderPillarboxLayoutState
+        pillarboxLayoutState: ReaderPillarboxLayoutState,
+        imageSettings: ImageSettings? = nil
     ) {
         self.source = source
         self.page = page
         self.temporaryPageStore = temporaryPageStore
         self.pillarboxLayoutState = pillarboxLayoutState
+        self.imageSettings = imageSettings
         super.init()
+
+        // made with its real height when it is known without loading the image (SUWA-17 C): shown before in
+        // this run, a downloaded file, or in the disk cache; the header only, nothing decoded
+        if let imageSettings, let known = Self.knownRatio(of: page, source: source, settings: imageSettings) {
+            ratio = known
+            hasRealRatio = true
+        }
 
         automaticallyManagesSubnodes = true
         shouldAnimateSizeChanges = false
@@ -216,6 +248,48 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
 }
 
 extension ReaderWebtoonPageNode {
+    /// The key of the page's image with these settings, for PageRatioMemory.
+    static func ratioKey(of page: Page, settings: ImageSettings) -> String? {
+        let image: String
+        if let imageURL = page.imageURL {
+            image = (page.zipURL.map { "\($0)#" } ?? "") + imageURL
+        } else if page.base64 != nil {
+            image = "base64#\(page.key)"
+        } else {
+            return nil
+        }
+        return "\(page.sourceId)|\(image)|\(settings.key)"
+    }
+
+    private var ratioKey: String? {
+        imageSettings.flatMap { Self.ratioKey(of: page, settings: $0) }
+    }
+
+    /// The ratio of the page's image if it is known without loading it: shown before with these settings, or
+    /// from the header of the file (downloaded) or of its copy in the disk cache.
+    static func knownRatio(of page: Page, source: AidokuRunner.Source?, settings: ImageSettings) -> CGFloat? {
+        if let key = ratioKey(of: page, settings: settings), let ratio = PageRatioMemory.shared[key] {
+            return ratio
+        }
+        guard
+            !settings.cropsBorders,
+            page.zipURL == nil,
+            let urlString = page.imageURL,
+            let url = URL(string: urlString)
+        else { return nil }
+        if url.isFileURL {
+            return PageSizeReader.ratio(fileURL: url)
+        }
+        // a source that processes its pages may send something else than the image shown
+        guard
+            source?.features.processesPages != true,
+            let cache = ImagePipeline.shared.configuration.dataCache as? DataCache,
+            let file = cache.url(for: ImagePipeline.shared.cache.makeDataCacheKey(for: ImageRequest(url: url))),
+            FileManager.default.fileExists(atPath: file.path)
+        else { return nil }
+        return PageSizeReader.ratio(fileURL: file)
+    }
+
     func getPillarboxHeight(percent: CGFloat, maxWidth: CGFloat) -> CGFloat {
         guard let image, image.size.width > 0 else { return 0 }
         let width = maxWidth * percent
