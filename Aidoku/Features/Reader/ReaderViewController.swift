@@ -49,6 +49,10 @@ class ReaderViewController: BaseObservingViewController {
     /// The chapters this reader already tried to complete: once each (entering the transition and then going
     /// on to the next chapter is one completion, not two; SUWA-17 C2).
     private var completionAttempted: Set<String> = []
+    /// The chapter was entered from below by scrolling (the reader went back up into it from the next one): nothing
+    /// of it is saved or completed until the user goes up into its pages (SUWA-17 D4, D5). Opening a chapter
+    /// (loadCurrentChapter: the chapter list, the buttons) is not entering it from below.
+    private var enteredFromBelow = false
     private var forceStartPage: Int?
     private(set) var currentPage = 1
     /// The app in front (page changes and completions only then). Replaced in tests. SUWA-12 I1
@@ -486,7 +490,8 @@ class ReaderViewController: BaseObservingViewController {
             }
         }
 
-        guard currentPage >= 1 else {
+        // nothing of a chapter entered from below and not gone up into (SUWA-17 D4)
+        guard currentPage >= 1, !enteredFromBelow else {
             readPositionSaver.cancel()
             return
         }
@@ -704,6 +709,7 @@ extension ReaderViewController {
     }
 
     func loadCurrentChapter() {
+        enteredFromBelow = false
         if chapterList.isEmpty {
             Task {
                 await loadChapterList()
@@ -1202,6 +1208,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
 
     func setChapter(_ chapter: AidokuRunner.Chapter) {
         guard chapter != self.chapter else { return }
+        let leftEnteredFromBelow = enteredFromBelow
 
         // to the next chapter from the last page: the chapter left is completed (SUWA-17), right after its page
         // is saved below (two saves of the same history row at once: one of them failed). The list is the
@@ -1212,6 +1219,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         var leftCompleted: (chapters: [AidokuRunner.Chapter], reason: String)?
         if
             !isTextReader,
+            !leftEnteredFromBelow,
             !completionAttempted.contains(self.chapter.key),
             let oldIndex = chapterList.firstIndex(of: self.chapter),
             let newIndex = chapterList.firstIndex(of: chapter),
@@ -1237,10 +1245,15 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         // the old chapter is saved right away below, unless it is at the page it opened at or was saved at (another
         // device may have saved a newer one); nothing delayed may write it later, and from now on the saver knows this
         // page as saved (a chapter change by scrolling has no chapterOpened: what it knew was the old opening page)
-        let needsSave = readPositionSaver.claimImmediateSave(
+        // a chapter entered from below and never gone up into: nothing of it is saved (the page is the other
+        // chapter's)
+        let needsSave = !leftEnteredFromBelow && readPositionSaver.claimImmediateSave(
             pageKey: ReadPosition.pageKey(chapter: self.chapter, page: currentPage, position: currentPosition),
             trackerKey: ReadPosition.pageKey(chapter: self.chapter, page: currentPage, position: nil)
         )
+        if leftEnteredFromBelow {
+            readPositionSaver.cancel()
+        }
 
         // store current history data since it will change when new chapter loads
         let currentPage = currentPage
@@ -1249,7 +1262,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         Task { [manga, leftCompleted] in
             if needsSave {
                 await updateReadPosition(currentPage: currentPage, totalPages: totalPages, chapter: oldChapter)
-            } else if !AppSettings.general.incognitoMode.get() {
+            } else if !leftEnteredFromBelow, !AppSettings.general.incognitoMode.get() {
                 await saveReadingSession(chapter: oldChapter)
             }
             if let leftCompleted {
@@ -1260,6 +1273,10 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             sessionLastInteraction = nil
         }
 
+        // back to an earlier chapter (the list is the source's, newest first) by scrolling: entered from below
+        let fromIndex = chapterList.firstIndex(of: oldChapter)
+        let toIndex = chapterList.firstIndex(of: chapter)
+        enteredFromBelow = if let fromIndex, let toIndex { toIndex > fromIndex } else { false }
         self.chapter = chapter
         self.chaptersToMark = [chapter]
         configureBarToggleTapGestures()
@@ -1280,6 +1297,11 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         // nothing from a reader while the app isn't in front: not the page, not a save, not «seen» (SUWA-12 I1)
         guard appActivity.isActive else { return }
         guard let totalPages = toolbarView.totalPages else { return }
+        // a chapter entered from below: the user went up into it (a text reader only reports once in its text)
+        let reportsFromText = reader is ReaderTextViewController || reader is ReaderPagedTextViewController
+        if enteredFromBelow, reportsFromText || pages.upperBound < totalPages {
+            enteredFromBelow = false
+        }
         let previousPage = currentPage
 
         updateDescriptionButton(pages: pages)
