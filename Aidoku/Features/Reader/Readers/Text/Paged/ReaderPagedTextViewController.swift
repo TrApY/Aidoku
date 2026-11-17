@@ -321,7 +321,10 @@ class ReaderPagedTextViewController: BaseObservingViewController {
             mangaKey: viewModel.manga.key,
             chapterKey: chapterKey
         )
-        return await DataRepositories.shared.history.record(of: chapterId)?.scrollPosition.map { CGFloat($0) }
+        // the text readers' position is 0...1 into the chapter; the webtoon's is page + fraction, from 1 on (SUWA-19
+        // D12): that one is not a text position (it took a chapter past its end and completed it)
+        let position = await DataRepositories.shared.history.record(of: chapterId)?.scrollPosition
+        return position.flatMap { $0 < 1 ? CGFloat($0) : nil }
     }
 
     private func getCurrentText() -> String? {

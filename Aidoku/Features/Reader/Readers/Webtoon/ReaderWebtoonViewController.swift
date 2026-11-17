@@ -301,7 +301,10 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             anchor.chapterKey == chapter.key,
             anchorPage() == page,
             let chapterIndex = chapters.firstIndex(of: chapter),
-            pages[safe: chapterIndex]?[safe: anchor.item]?.type == .imagePage
+            let shown = pages[safe: chapterIndex]?[safe: anchor.item],
+            shown.type == .imagePage,
+            // not a text page: a text reader reads scrollPosition as its 0...1 progress (hallazgo 3)
+            !shown.isTextPage
         else { return nil }
         return Double(page) + min(floor(Double(anchor.fraction) * 10) / 10, 0.9)
     }
