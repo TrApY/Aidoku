@@ -51,3 +51,15 @@ import Testing
         }
     }
 }
+
+// MARK: - SUWA-17 G3a: the tests' journal is not the app's
+extension CompletionJournalTests {
+    /// Running the tests, the journal is a temporary file: what they record never goes into the app's own one.
+    @Test func theTestsJournalIsATemporaryFile() throws {
+        let real = FileManager.default.applicationSupportDirectory.appendingPathComponent("completados.log")
+        let before = try? Data(contentsOf: real)
+        #expect(CompletionJournal.defaultUrl.path.hasPrefix(FileManager.default.temporaryDirectory.path), "\(CompletionJournal.defaultUrl.path)")
+        CompletionJournal.record(.init(sourceKey: "diariopruebas", mangaKey: "m", chapterKey: "c"), reason: "test")
+        #expect((try? Data(contentsOf: real)) == before, "written in the app's journal")
+    }
+}
