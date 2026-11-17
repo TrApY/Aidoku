@@ -326,3 +326,26 @@ extension ReaderReturnPositionTests {
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
     }
 }
+
+// MARK: - D6: the last page seen counts for the visit
+extension ReaderReturnPositionTests {
+    /// The last page of chapter 2 seen, «previous» to chapter 1, back to chapter 2 and «next» from its page 3:
+    /// chapter 2 is not completed (its last page was seen in an earlier visit).
+    @Test func theLastPageSeenInAnEarlierVisitDoesNotCount() async throws {
+        let manga = manga("visita", [c3, c2, c1])
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        let reader = await paged(manga, on: c2)
+        reader.setCurrentPage(37, position: nil)
+        reader.setCurrentPage(38, position: nil)
+        reader.setChapter(c1)
+        reader.setPages(pages(manga, c1))
+        reader.setCurrentPage(1, position: nil)
+        reader.setChapter(c2)
+        reader.setPages(pages(manga, c2))
+        reader.setCurrentPage(3, position: nil)
+        reader.setChapter(c3)
+        try await Task.sleep(for: .seconds(2))
+        #expect(await storedProgress(id(manga, c2)).completed == false)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+}
