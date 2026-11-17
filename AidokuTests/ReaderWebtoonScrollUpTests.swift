@@ -507,3 +507,24 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-18 U1 (upstream #1116): a new reader takes the reader's size
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// The reading mode changes while the reader is not at the screen's size (split view, a window, iPhone Duo):
+    /// the new reader's view takes the reader's size, and keeps following it when the window changes again.
+    @Test func aNewReaderTakesTheReadersSize() async throws {
+        let opened = try await open(mangaKey: "tamanolector", startPage: 2)
+        try await resize(opened, width: 600, height: 874)
+        opened.reader.setReadingMode("vertical")
+        try await Task.sleep(for: .milliseconds(500))
+        let paged: UIViewController = try #require(opened.reader.reader, "no reader")
+        #expect(paged.view.frame == opened.reader.view.bounds, "paged: \(paged.view.frame) in \(opened.reader.view.bounds)")
+        opened.reader.setReadingMode("webtoon")
+        try await Task.sleep(for: .seconds(1))
+        let webtoon = try #require(opened.reader.reader as? ReaderWebtoonViewController, "not the webtoon reader")
+        #expect(webtoon.view.frame == opened.reader.view.bounds, "webtoon: \(webtoon.view.frame) in \(opened.reader.view.bounds)")
+        try await resize(opened, width: 500, height: 874)
+        #expect(webtoon.view.frame == opened.reader.view.bounds, "after resizing: \(webtoon.view.frame) in \(opened.reader.view.bounds)")
+        await opened.close()
+    }
+}
