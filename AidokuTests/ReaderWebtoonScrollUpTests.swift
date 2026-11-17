@@ -254,3 +254,116 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-17 G1: going up into the previous chapter and back down does not read it
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// Chapter N ("c2") open, with chapter N-1 ("c1") of `smallPages` pages and a last one much taller than the
+    /// screen, gone in above.
+    private func openWithATallLastPage(mangaKey: String, smallPages: Int) async throws -> Opened {
+        let opened = try await open(mangaKey: mangaKey, startPage: 3)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        var pages: [Aidoku.Page] = []
+        for index in 0...smallPages {
+            let tall = index == smallPages
+            let size = CGSize(width: 300, height: tall ? 3000 : 500)
+            let data = UIGraphicsImageRenderer(size: size, format: format).pngData { context in
+                for band in 0..<Int(size.height / 100) {
+                    UIColor(hue: CGFloat(band % 30) / 30, saturation: 0.6, brightness: tall ? 0.9 : 0.6, alpha: 1).setFill()
+                    context.fill(CGRect(x: 0, y: CGFloat(band) * 100, width: 300, height: 100))
+                }
+            }
+            let url = opened.directory.appendingPathComponent("c1-\(index).png")
+            try data.write(to: url)
+            pages.append(Aidoku.Page(sourceId: "lectorsubir", chapterId: "c1", index: index, imageURL: url.absoluteString))
+        }
+        opened.webtoon.viewModel.preloadedPages = pages
+        try userScrolls(opened, toRow: 0, section: opened.lastSection)
+        try await waitForThePreviousChapter(opened)
+        try #require(opened.lastSection == 1, "chapter 1 did not go in above")
+        return opened
+    }
+
+    private func frame(_ opened: Opened, row: Int, section: Int) throws -> CGRect {
+        try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: row, section: section))?.frame)
+    }
+
+    /// The user goes down from `y` (middle of the screen) to the middle of chapter N's first page, 300 points a drag.
+    private func dragDown(_ opened: Opened, from y: CGFloat) async throws {
+        let firstOfN = try frame(opened, row: 1, section: 1)
+        var y = y
+        while y < firstOfN.midY {
+            y = min(y + 300, firstOfN.midY)
+            drag(opened, middleAt: y)
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        try await Task.sleep(for: .seconds(3))
+    }
+
+    /// Up from N into the end of N-1's tall last page, half a screen and a bit further up inside it, and back down
+    /// to N: N-1 is not completed and nothing of it is saved (JoTa, 17-nov).
+    @Test func goingUpInsideATallLastPageAndBackDownDoesNotComplete() async throws {
+        let opened = try await openWithATallPreviousChapter(mangaKey: "asomaralto")
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        await removeTestHistory(previousId)
+        let page = try frame(opened, row: 1, section: 0)
+        drag(opened, middleAt: page.maxY - 150)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.chapterKey == "c1", "not in chapter 1")
+        let up = page.maxY - 150 - opened.webtoon.collectionNode.bounds.height * 0.6
+        drag(opened, middleAt: up)
+        try await Task.sleep(for: .milliseconds(500))
+        try await dragDown(opened, from: up)
+        #expect(opened.chapterKey == "c2")
+        let stored = await storedProgress(previousId)
+        #expect(stored.completed == false, "chapter 1 completed going up and back down")
+        #expect(stored.progress == nil, "chapter 1 saved at \(String(describing: stored.progress))")
+        await removeTestHistory(previousId)
+        await opened.close()
+    }
+
+    /// The same with N-1 completed and being read again (at its page 2): its page stays.
+    @Test func goingUpInsideTheLastPageOfAChapterReadAgainKeepsItsPage() async throws {
+        let opened = try await openWithATallLastPage(mangaKey: "asomarreleido", smallPages: 3)
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        await removeTestHistory(previousId)
+        await DataRepositories.shared.history.savePage(PageSave(chapter: previousId, page: 4, totalPages: 4, scrollPosition: nil))
+        await DataRepositories.shared.history.markCompleted([previousId], date: Date())
+        await DataRepositories.shared.history.savePage(PageSave(chapter: previousId, page: 2, totalPages: 4, scrollPosition: nil))
+        let seeded = await storedProgress(previousId)
+        try #require(seeded.completed && seeded.progress == 2, "seeded \(seeded)")
+        let last = try frame(opened, row: 4, section: 0)
+        drag(opened, middleAt: last.maxY - 150)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.chapterKey == "c1", "not in chapter 1")
+        let up = last.maxY - 150 - opened.webtoon.collectionNode.bounds.height * 0.6
+        drag(opened, middleAt: up)
+        try await Task.sleep(for: .milliseconds(500))
+        try await dragDown(opened, from: up)
+        #expect(opened.chapterKey == "c2")
+        let stored = await storedProgress(previousId)
+        #expect(stored.progress == 2, "chapter 1's page while reading it again: \(String(describing: stored.progress))")
+        #expect(stored.completed == true)
+        await removeTestHistory(previousId)
+        await opened.close()
+    }
+
+    /// Up from N into N-1, further up to its page 2 and read down from there to N: N-1 is completed.
+    @Test func readingThePreviousChapterDownFromAnEarlierPageCompletesIt() async throws {
+        let opened = try await openWithATallLastPage(mangaKey: "leerbajando", smallPages: 3)
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        await removeTestHistory(previousId)
+        let last = try frame(opened, row: 4, section: 0)
+        drag(opened, middleAt: last.maxY - 150)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.chapterKey == "c1", "not in chapter 1")
+        let second = try frame(opened, row: 2, section: 0)
+        drag(opened, middleAt: second.midY)
+        try await Task.sleep(for: .seconds(1))
+        try await dragDown(opened, from: second.midY)
+        #expect(opened.chapterKey == "c2")
+        #expect(await storedProgress(previousId).completed == true, "chapter 1 read down from its page 2")
+        await removeTestHistory(previousId)
+        await opened.close()
+    }
+}
