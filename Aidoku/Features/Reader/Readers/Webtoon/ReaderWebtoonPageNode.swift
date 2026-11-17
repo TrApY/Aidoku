@@ -675,6 +675,7 @@ extension ReaderWebtoonPageNode {
             guard self.measureGeneration == generation else { return }
             self.measureTask = nil
             guard !Task.isCancelled, let ratio, !self.hasRealRatio else { return }
+            Self.measurementApplied?(pthread_main_np() != 0)
             self.ratio = ratio
             self.hasRealRatio = true
             if let ratioKey = self.ratioKey {
@@ -683,6 +684,9 @@ extension ReaderWebtoonPageNode {
             self.remeasure()
         }
     }
+
+    /// Tests: told, for each measuring ahead applied, whether it was on the main thread (SUWA-17 E3).
+    nonisolated(unsafe) static var measurementApplied: (@Sendable (Bool) -> Void)?
 
     /// Whether the page is measuring itself ahead now.
     var isMeasuringAhead: Bool { measureTask != nil }

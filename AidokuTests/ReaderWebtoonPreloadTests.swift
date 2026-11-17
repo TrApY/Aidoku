@@ -496,3 +496,27 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-17 E3: what a measuring changes, on the main thread
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    final class Threads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [Bool] = []
+        func add(_ value: Bool) { lock.withLock { values.append(value) } }
+        var all: [Bool] { lock.withLock { values } }
+    }
+
+    /// The page's height, its ratio and its measuring state are changed on the main thread (the layout is
+    /// Texture's and the main thread's).
+    @Test func measuringsAreAppliedOnTheMainThread() async throws {
+        let threads = Threads()
+        ReaderWebtoonPageNode.measurementApplied = { threads.add($0) }
+        defer { ReaderWebtoonPageNode.measurementApplied = nil }
+        let opened = try await open(.remote(delay: 0.3), mangaKey: "hilo", preload: 6)
+        try await watch(opened, seconds: 4) { _ in }
+        await opened.close()
+        let all = threads.all
+        try #require(!all.isEmpty, "no page measured ahead")
+        #expect(all.allSatisfy { $0 }, "\(all.filter { !$0 }.count) of \(all.count) applied off the main thread")
+    }
+}
