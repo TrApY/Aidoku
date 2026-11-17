@@ -85,3 +85,42 @@ extension CompletionJournalTests {
                 "its completion was pushed out of the journal")
     }
 }
+
+// MARK: - SUWA-17 G3d: reading the journal on the main thread
+extension CompletionJournalTests {
+    /// What the reader and the manga page do on the main thread to decide a chapter: the completions of a full
+    /// journal (300 lines) and a full file of latest completions (2000), read once and then kept in memory.
+    @Test @MainActor func decidingAChapterOnTheMainThreadIsQuick() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("lleno-\(UUID().uuidString).log")
+        let latest = CompletionJournal.latestUrl(for: url)
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: latest)
+        }
+        let date = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-600))
+        let journal = (1...CompletionJournal.maxLines).map {
+            "\(date)\tlleno\tm\($0 % 20)\tc\($0)\tlector: página 38...38 de 38 (Optional<ReaderReader>)\tabajo 1/38, capítulo 0 de 2 con 40"
+        }
+        try (journal.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+        let latestLines = (1...CompletionJournal.maxLatest).map { "\(date)\tlleno\tm\($0 % 50)\tl\($0)\tlector: test" }
+        try (latestLines.joined(separator: "\n") + "\n").write(to: latest, atomically: true, encoding: .utf8)
+        let chapter = ChapterIdentifier(sourceKey: "lleno", mangaKey: "m7", chapterKey: "c7")
+        let coldStart = ContinuousClock.now
+        #expect(RereadRule.isRereading(chapter: chapter, sessionStart: Date(), completions: CompletionJournal.latestCompletions(fileUrl: url)))
+        let cold = ContinuousClock.now - coldStart
+        var times: [Duration] = []
+        for _ in 0..<20 {
+            let start = ContinuousClock.now
+            _ = RereadRule.isRereading(chapter: chapter, sessionStart: Date(), completions: CompletionJournal.latestCompletions(fileUrl: url))
+            times.append(ContinuousClock.now - start)
+        }
+        times.sort()
+        let report = "decidir un capítulo con el diario lleno: primera vez \(cold), después mediana \(times[times.count / 2]), máximo \(times.last!)\n"
+        if let out = ProcessInfo.processInfo.environment["SUWA13_OUT"] {
+            try FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
+            try report.write(to: URL(fileURLWithPath: out).appendingPathComponent("lectura-diario.txt"), atomically: true, encoding: .utf8)
+        }
+        print("SUWA17G3D " + report)
+        #expect(times[times.count / 2] < .milliseconds(5))
+    }
+}
