@@ -249,17 +249,8 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
             }
             context.completeTransition(true)
         }
-
-        // handle inserting cell above
-        guard
-            let indexPath,
-            let collectionNode = owningNode as? ASCollectionNode,
-            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
-            let yOffset = collectionNode.collectionViewLayout.layoutAttributesForItem(at: indexPath)?.frame.origin.y
-        else { return }
-        if yOffset < collectionNode.contentOffset.y {
-            layout.preserveOffsetAcrossChangeAbove()
-        }
+        // a cell growing above the screen moves nothing: the layout puts the screen back on the reader's anchor
+        // (SUWA-19; before, the cell asked the layout to keep what was below it)
     }
 }
 

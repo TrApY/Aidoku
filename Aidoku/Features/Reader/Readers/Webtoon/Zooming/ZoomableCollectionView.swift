@@ -18,6 +18,10 @@ class ZoomableCollectionView: ASDisplayNode {
     private let dummyZoomView: UIView
 
     var onZoomScaleChanged: ((CGFloat) -> Void)?
+    /// A double tap's zoom ended (the user moved: SUWA-19).
+    var onZoomAnimationEnded: (() -> Void)?
+    /// A double tap's zoom is going on.
+    var isAnimatingZoom: Bool { zoomTimer?.isValid == true }
     var doubleTapEnabled: Bool {
         get { zoomingTap.isEnabled }
         set { zoomingTap.isEnabled = newValue }
@@ -268,6 +272,9 @@ extension ZoomableCollectionView {
         }
         if info.value > info.total {
             timer.invalidate()
+            Task { @MainActor in
+                self.onZoomAnimationEnded?()
+            }
             return
         }
         let scale = info.scales[info.value]

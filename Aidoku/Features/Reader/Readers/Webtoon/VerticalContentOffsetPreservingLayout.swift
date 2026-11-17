@@ -11,12 +11,10 @@ import AsyncDisplayKit
 
 class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
-    private(set) var isChangingCellsAbove: Bool = false
     var onOffsetPreserved: ((CGPoint) -> Void)?
-
-    func preserveOffsetAcrossChangeAbove() {
-        isChangingCellsAbove = true
-    }
+    /// Where the screen goes after every pass of the same geometry: the reader's anchor (SUWA-19), as the item, the
+    /// point of it and the height of the screen it goes at. Nil: nothing to put back this pass.
+    var anchorTarget: (() -> (indexPath: IndexPath, fraction: CGFloat, screenFraction: CGFloat)?)?
 
     var spacing: CGFloat {
         get { minimumLineSpacing }
@@ -136,11 +134,11 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
     override func prepare() {
         guard let collectionView else { return }
 
-        // Anchor the cell in the middle of the screen (the one being read) using the previous layout, and not only
-        // when asked: whatever changed above it (a chapter put in, cells grown as their images load, several at
-        // once, the top cell itself) must not move what is being read. The old anchor was the top visible cell:
-        // when only its bottom showed and it grew, everything under it slid down by its growth (into the previous
-        // chapter, SUWA-17); and a growing cell asked after the pass that applied its growth (SUWA-16)
+        // Between two layouts of the same geometry, the screen goes back on the reader's anchor (SUWA-19): whatever
+        // changed (a chapter put in or trimmed, cells grown as their images load, several at once, the anchor's own
+        // cell, a row reloaded) does not move what is being read, nor does the content moving without the user.
+        // Before, it was the cell in the middle of the screen in the previous layout (SUWA-17), which followed
+        // wherever the content had been moved to
         let sameGeometry = !currentAttributes.isEmpty && lastWidth == collectionView.bounds.size.width && lastScale == scale
         // The width changing with nothing else asked (iPadOS lays the app out again at other sizes: the app
         // switcher, Stage Manager, a window; a rotation has its own anchor from viewWillTransition): every height
@@ -157,16 +155,7 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         if widthChanged {
             widthChanges += 1
         }
-        let middleY = collectionView.contentOffset.y + collectionView.bounds.size.height / 2
-        let middleCell = currentAttributes.values.first { $0.frame.minY <= middleY && $0.frame.maxY > middleY }
-        let anchor = proportional == nil && (isChangingCellsAbove || sameGeometry) ? middleCell ?? currentAttributes.values
-            .filter { $0.frame.maxY > collectionView.contentOffset.y }
-            .min { $0.frame.minY < $1.frame.minY } : nil
-        let anchorPath = anchor?.indexPath
-        let anchorIdentifier = anchorPath.flatMap { itemIdentifiers[$0] }
-        let oldAnchorY = anchor?.frame.minY
         let oldItemCounts = itemCounts
-        isChangingCellsAbove = false
 
         // calculate collection view size
         currentAttributes = [:]
@@ -246,25 +235,28 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
             }
         }
 
-        // Only movement of the anchor counts, not resizing of cells; and the scroll view is left alone when
-        // there is nothing to make up for (every pass set its offset and content size, also while pinching)
-        // The anchor is found by its node; a reloaded row (refreshInfoPages reloads the transitions) gets a new
-        // node, so then by its place, as long as no row came or went (SUWA-17 C4)
+        // The reader's anchor, between two layouts of the same geometry; the scroll view is left alone when it is
+        // already there (every pass set its offset and content size, also while pinching: C3)
         if
-            let anchorPath, let oldAnchorY,
-            let newIndexPath = anchorIdentifier.flatMap({ identifier in
-                itemIdentifiers.first(where: { $0.value == identifier })?.key
-            }) ?? (oldItemCounts == itemCounts ? anchorPath : nil),
-            let newAnchorY = currentAttributes[newIndexPath]?.frame.minY,
-            abs(newAnchorY - oldAnchorY) > 0.01
+            proportional == nil,
+            sameGeometry,
+            let target = anchorTarget?(),
+            let frame = currentAttributes[target.indexPath]?.frame,
+            frame.height > 0
         {
-            UIView.performWithoutAnimation {
-                let offset = CGPoint(
-                    x: collectionView.contentOffset.x,
-                    y: collectionView.contentOffset.y + newAnchorY - oldAnchorY
-                )
-                collectionView.contentOffset = offset
-                onOffsetPreserved?(offset)
+            let y = ReadingAnchorGeometry.offset(
+                frame: frame,
+                fraction: target.fraction,
+                screenFraction: target.screenFraction,
+                viewportHeight: collectionView.bounds.size.height,
+                contentHeight: contentSize.height
+            )
+            if abs(y - collectionView.contentOffset.y) > 0.5 {
+                UIView.performWithoutAnimation {
+                    let offset = CGPoint(x: collectionView.contentOffset.x, y: y)
+                    collectionView.contentOffset = offset
+                    onOffsetPreserved?(offset)
+                }
             }
         }
     }

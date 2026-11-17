@@ -173,6 +173,13 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         zoomView.onZoomScaleChanged = { [weak self] scale in
             self?.setLiveTextButtonHidden(scale != 1)
         }
+        // a double tap's zoom is the user moving; the layout puts the screen on the anchor (SUWA-19)
+        zoomView.onZoomAnimationEnded = { [weak self] in
+            self?.writeAnchorFromScreen()
+        }
+        (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.anchorTarget = { [weak self] in
+            self?.anchorTarget()
+        }
 
         // set initial portrait state before view presentation
         let isPortrait = view.bounds.size.height >= view.bounds.size.width
@@ -259,13 +266,15 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
                 frames: [(item: path.item, frame: frame)]
             )
         else { return nil }
+        // measured: the cell has another height than the provisional one (what the layout sees, not the node:
+        // the node may know its ratio a pass before its cell has it)
         let node = collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode
         return ReadingAnchor(
             chapterKey: chapter.key,
             item: found.item,
             fraction: found.fraction,
             screenFraction: 0.5,
-            measured: node.map { $0.hasRealRatio || $0.image != nil } ?? true
+            measured: node.map { abs(frame.height - $0.provisionalHeight(forWidth: frame.width)) > 0.5 } ?? true
         )
     }
 
@@ -274,6 +283,37 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private func writeAnchorFromScreen() {
         guard delegate?.appActivity.isActive ?? true, let new = anchorAtScreen() else { return }
         anchor = new
+    }
+
+    /// Where the layout puts the screen: the anchor's item and point (SUWA-19). Nothing while a zoom goes on (the
+    /// gesture moves the content), nor while the collection does not have the reader's chapters yet (a batch not
+    /// applied: the section would be another chapter's). An anchor taken on a page with its provisional height
+    /// keeps its distance to the top of the page once the page has its real one (D6).
+    private func anchorTarget() -> (indexPath: IndexPath, fraction: CGFloat, screenFraction: CGFloat)? {
+        guard
+            !isZooming,
+            !zoomView.isAnimatingZoom,
+            var anchor,
+            let section = chapters.firstIndex(where: { $0.key == anchor.chapterKey }),
+            collectionNode.view.numberOfSections == pages.count,
+            let sectionPages = pages[safe: section],
+            collectionNode.view.numberOfItems(inSection: section) == sectionPages.count,
+            anchor.item < sectionPages.count
+        else { return nil }
+        let path = IndexPath(item: anchor.item, section: section)
+        if
+            !anchor.measured,
+            let node = collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode,
+            let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
+            frame.height > 0
+        {
+            let provisional = node.provisionalHeight(forWidth: frame.width)
+            if abs(frame.height - provisional) > 0.5 {
+                anchor = ReadingAnchorGeometry.measured(anchor, provisionalHeight: provisional, realHeight: frame.height)
+                self.anchor = anchor
+            }
+        }
+        return (path, anchor.fraction, anchor.screenFraction)
     }
 
     /// The page of the anchor, counted as getCurrentPage() counts them, when it is in the current chapter.
@@ -1005,10 +1045,7 @@ extension ReaderWebtoonViewController {
         chapters.insert(prevChapter, at: 0)
         pages.insert(chapterPages, at: 0)
 
-        let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout
-        layout?.preserveOffsetAcrossChangeAbove()
-
-        // disable animations and adjust offset before re-enabling
+        // disable animations and adjust offset before re-enabling (the layout keeps the anchor: SUWA-19)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         CATransaction.setAnimationDuration(0)
@@ -1079,9 +1116,7 @@ extension ReaderWebtoonViewController {
         collectionNode.view.layoutIfNeeded()
 
         if !loadingPrevious, canTrimSection(at: 0) {
-            // preserve the visible cell as its section index changes
-            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout
-            layout?.preserveOffsetAcrossChangeAbove()
+            // the anchor is by chapter: its section index changing moves nothing (SUWA-19)
             chapters.removeFirst()
             pages.removeFirst()
             await collectionNode.performBatch(animated: false) {

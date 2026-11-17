@@ -390,8 +390,15 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         let moved = page.maxY - 150 - 2 * height
         opened.webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: moved - height / 2), animated: false)
         try await Task.sleep(for: .milliseconds(500))
+        // SUWA-19: the move is not the user's, so the screen is back on the anchor (it neither stays two screens up
+        // nor counts as going up); the user then goes down from where the screen is
+        let middle = opened.webtoon.collectionNode.contentOffset.y + height / 2
+        let anchor = try #require(opened.webtoon.anchor, "no anchor")
+        let anchored = try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: anchor.item, section: 0))?.frame)
+        let expected = anchored.minY + anchored.height * anchor.fraction
+        #expect(abs(middle - expected) < 1, "the screen is not back on the anchor: \(middle) for \(expected)")
         let firstOfN = try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 1, section: 1))?.frame)
-        var y = moved
+        var y = middle
         while y < firstOfN.midY {
             y = min(y + 300, firstOfN.midY)
             drag(opened, middleAt: y)
