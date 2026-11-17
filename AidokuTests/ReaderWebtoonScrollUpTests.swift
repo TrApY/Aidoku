@@ -367,3 +367,35 @@ extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
         await opened.close()
     }
 }
+
+// MARK: - SUWA-17 G2: only the user's own scrolling counts as going up
+extension ImagePipelineSwappingTests.ReaderWebtoonScrollUpTests {
+    /// Entered from below into a one-page chapter; the layout moves the content up two screens (a page above
+    /// shrinking as it's measured), and the user goes down to N: not completed.
+    @Test func aLayoutAdjustmentUpIsNotTheUserGoingUp() async throws {
+        let opened = try await openWithATallPreviousChapter(mangaKey: "reajuste")
+        let previousId = ChapterIdentifier(sourceKey: opened.chapterId.sourceKey, mangaKey: opened.chapterId.mangaKey, chapterKey: "c1")
+        await removeTestHistory(previousId)
+        let page = try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 1, section: 0))?.frame)
+        let height = opened.webtoon.collectionNode.bounds.height
+        drag(opened, middleAt: page.maxY - 150)
+        try await Task.sleep(for: .seconds(1))
+        try #require(opened.chapterKey == "c1", "not in chapter 1")
+        // not the user: no drag
+        let moved = page.maxY - 150 - 2 * height
+        opened.webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: moved - height / 2), animated: false)
+        try await Task.sleep(for: .milliseconds(500))
+        let firstOfN = try #require(opened.webtoon.collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(row: 1, section: 1))?.frame)
+        var y = moved
+        while y < firstOfN.midY {
+            y = min(y + 300, firstOfN.midY)
+            drag(opened, middleAt: y)
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        try await Task.sleep(for: .seconds(3))
+        #expect(opened.chapterKey == "c2")
+        #expect(await storedProgress(previousId).completed == false, "completed by a layout adjustment")
+        await removeTestHistory(previousId)
+        await opened.close()
+    }
+}
