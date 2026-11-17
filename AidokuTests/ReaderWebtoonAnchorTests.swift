@@ -63,12 +63,14 @@ extension ImagePipelineSwappingTests {
     }
 
     /// Opens chapter "c1" in the webtoon reader at the stored page `startPage`; `wait` seconds for the images.
-    private func open(mangaKey: String, startPage: Int, wait: Double = 5) async throws -> Opened {
+    private func open(mangaKey: String, startPage: Int, position: Double? = nil, wait: Double = 5) async throws -> Opened {
         let manga = AidokuRunner.Manga(sourceKey: "lectorancla", key: mangaKey, title: "Webtoon")
         let chapter = AidokuRunner.Chapter(key: "c1", chapterNumber: 1)
         let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
         await removeTestHistory(chapterId)
-        await DataRepositories.shared.history.savePage(PageSave(chapter: chapterId, page: startPage, totalPages: Self.pageCount))
+        await DataRepositories.shared.history.savePage(PageSave(
+            chapter: chapterId, page: startPage, totalPages: Self.pageCount, scrollPosition: position
+        ))
         let modeKey = "Reader.readingMode.\(manga.identifier)"
         UserDefaults.standard.set("webtoon", forKey: modeKey)
         let (pages, directory) = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key)
@@ -238,6 +240,55 @@ extension ImagePipelineSwappingTests {
         let distance = try distanceFromTheAnchor(opened)
         #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
         #expect(opened.reader.currentPage == 7)
+        await opened.close()
+    }
+
+    // MARK: - Paso 7: the fraction in History.scrollPosition (D12/D13)
+
+    /// The user reads page 7 at 43 %: the history keeps page 7 and 7.4 (the page plus its fraction, rounded down to
+    /// a tenth).
+    @Test func theWebtoonSavesThePagePlusItsFractionRounded() async throws {
+        let opened = try await open(mangaKey: "fraccionguardar", startPage: 5)
+        try userScrolls(opened, toRow: 7, at: 0.43)
+        try await Task.sleep(for: .seconds(7))
+        let record = try #require(await DataRepositories.shared.history.record(of: opened.chapterId), "nothing saved")
+        #expect(record.progress == 7)
+        let position = try #require(record.scrollPosition, "no scroll position saved")
+        #expect(abs(position - 7.4) < 0.001, "saved \(position)")
+        await opened.close()
+    }
+
+    /// Page 7 saved at 60 %: the chapter opens with that point of page 7 in the middle of the screen.
+    @Test func reopeningPutsTheSavedFractionInTheMiddle() async throws {
+        let opened = try await open(mangaKey: "fraccionabrir", startPage: 7, position: 7.6)
+        let anchor = try #require(opened.webtoon.anchor, "no anchor after opening")
+        #expect(anchor.item == 7)
+        #expect(abs(anchor.fraction - 0.6) < 0.001, "fraction \(anchor.fraction)")
+        #expect(anchor.screenFraction == 0.5)
+        let distance = try distanceFromTheAnchor(opened)
+        #expect(abs(distance) < 1, "the anchor's point is \(distance) pt from its place")
+        #expect(opened.reader.currentPage == 7)
+        await opened.close()
+    }
+
+    /// A position saved for another page (an old version, another device that saved a page without one): the
+    /// chapter opens at the top of the stored page.
+    @Test func aFractionSavedForAnotherPageIsIgnored() async throws {
+        let opened = try await open(mangaKey: "fraccionotra", startPage: 7, position: 5.6)
+        let anchor = try #require(opened.webtoon.anchor, "no anchor after opening")
+        #expect(anchor.item == 7)
+        #expect(anchor.fraction == 0)
+        #expect(anchor.screenFraction == 0)
+        await opened.close()
+    }
+
+    /// A text reader's position (0 to 1 into the chapter) is not a webtoon fraction: the top of the stored page.
+    @Test func theTextReadersPositionIsNotReadAsAFraction() async throws {
+        let opened = try await open(mangaKey: "fracciontexto", startPage: 7, position: 0.6)
+        let anchor = try #require(opened.webtoon.anchor, "no anchor after opening")
+        #expect(anchor.item == 7)
+        #expect(anchor.fraction == 0)
+        #expect(anchor.screenFraction == 0)
         await opened.close()
     }
 }
