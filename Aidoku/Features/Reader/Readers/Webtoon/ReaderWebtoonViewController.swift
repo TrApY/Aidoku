@@ -640,10 +640,9 @@ extension ReaderWebtoonViewController {
         // The layout or the reader putting the screen on the anchor: in between, one scroll view has the new offset
         // and the other the old one, which, with the content above changed, is another place (another chapter). That is
         // not the user moving, also during a drag or a deceleration (SUWA-19 revisión, hallazgo 4: pages shrinking
-        // above during a deceleration took the reader into the next chapter)
-        if applyingAnchor || (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.isPlacingTheScreen == true {
-            return
-        }
+        // above during a deceleration took the reader into the next chapter). The anchor's page is still told
+        let placing = applyingAnchor
+            || (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.isPlacingTheScreen == true
 
         guard
             let chapter = chapter,
@@ -654,12 +653,12 @@ extension ReaderWebtoonViewController {
         // anchor, with the app in front and a page in the middle of the screen (SUWA-17 H, SUWA-19); the content
         // moved by anything else (a layout pass, UIKit scaling the offset after a width change, the zoom's scroll
         // view putting back an old offset) goes back on it (D5)
-        let movedByUser = userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
-            || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage
+        let movedByUser = !placing && (userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
+            || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage)
         let wasAt = anchorOffsetIntoChapter()
         if movedByUser {
             writeAnchorFromScreen()
-        } else if !zoomView.isAnimatingZoom, applyAnchor() {
+        } else if !placing, !zoomView.isAnimatingZoom, applyAnchor() {
             return
         }
         let isAt = anchorOffsetIntoChapter()
@@ -679,7 +678,7 @@ extension ReaderWebtoonViewController {
 
         // up inside a chapter entered from below (SUWA-17 F3, G1): nothing is told; reading it going down is. Up
         // and down are the anchor's moves inside the chapter, not the offset's (a layout moves the offset: G2)
-        let byDrag = userIsScrolling || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+        let byDrag = !placing && (userIsScrolling || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating)
         if
             byDrag,
             let wasAt,

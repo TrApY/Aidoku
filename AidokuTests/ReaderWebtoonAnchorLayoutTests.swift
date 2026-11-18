@@ -82,13 +82,13 @@ extension ImagePipelineSwappingTests {
     private static let pageCount = 12
 
     /// Chapter 2's pages are tall (300×900 and 300×860: about 1200 pt on screen, the provisional height is ~577);
-    /// chapter 1's are short (300×200: ~268 pt), so they shrink when they come.
+    /// chapter 1's are short (300×100: ~134 pt), so they shrink when they come (by more than a screen, three of them).
     private static func pages(sourceKey: String, chapterKey: String, in directory: URL) throws -> [Aidoku.Page] {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         var pages: [Aidoku.Page] = []
         for index in 0..<pageCount {
-            let size = CGSize(width: 300, height: chapterKey == "c1" ? 200 : (index % 2 == 0 ? 900 : 860))
+            let size = CGSize(width: 300, height: chapterKey == "c1" ? 100 : (index % 2 == 0 ? 900 : 860))
             let data = UIGraphicsImageRenderer(size: size, format: format).pngData { context in
                 UIColor(hue: CGFloat(index) / CGFloat(pageCount), saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
                 context.fill(CGRect(origin: .zero, size: size))
@@ -418,7 +418,7 @@ extension ImagePipelineSwappingTests {
     }
 
     /// F3/G1 against a real relayout: up into chapter 1's last page from below (entered from below), then, during
-    /// a deceleration, chapter 1's pages above come and shrink: the content moves up by more than half a screen,
+    /// a deceleration, chapter 1's pages above come and shrink: the content moves up by more than a screen,
     /// but the user did not go up inside the chapter. Back down into chapter 2: chapter 1 is not completed (it was
     /// only peeked at from below). With the direction taken from the offset (before step 5), the shrinking counted
     /// as going up and reading down completed it.
@@ -427,7 +427,8 @@ extension ImagePipelineSwappingTests {
         try await putThePreviousChapterIn(opened)
         let webtoon = opened.webtoon
         let last = webtoon.collectionNode.numberOfItems(inSection: 0) - 1
-        try userScrolls(opened, toRow: last, section: 0, at: 0.5)
+        // near the top of the page: once it shrinks, the anchor is still inside it (D6 keeps the distance to its top)
+        try userScrolls(opened, toRow: last, section: 0, at: 0.15)
         try await Task.sleep(for: .seconds(1))
         try #require(opened.reader.chapter.key == "c1", "not in chapter 1")
         webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
@@ -435,16 +436,17 @@ extension ImagePipelineSwappingTests {
         let offset = webtoon.collectionNode.contentOffset.y
         opened.loader.release()
         try await Task.sleep(for: .seconds(2))
-        try #require(offset - webtoon.collectionNode.contentOffset.y > webtoon.collectionNode.bounds.height / 2,
-                     "the content did not move up by half a screen: \(offset) → \(webtoon.collectionNode.contentOffset.y)")
+        // more than a screen: taken as the user going up, it would make reading down count (G1)
+        try #require(offset - webtoon.collectionNode.contentOffset.y > webtoon.collectionNode.bounds.height + 100,
+                     "the content did not move up by a screen: \(offset) → \(webtoon.collectionNode.contentOffset.y)")
         webtoon.scrollViewDidEndDecelerating(webtoon.scrollView)
         try await Task.sleep(for: .seconds(1))
         #expect(opened.reader.chapter.key == "c1")
-        // back down into chapter 2's first page, 300 points a drag
+        // back down into chapter 2's first page, 100 points a drag
         let target = try opened.frame(row: 1, section: 1).midY
         var y = webtoon.collectionNode.contentOffset.y + webtoon.collectionNode.bounds.height / 2
         while y < target {
-            y = min(y + 300, target)
+            y = min(y + 100, target)
             webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
             webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: y - webtoon.collectionNode.bounds.height / 2), animated: false)
             webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
@@ -452,7 +454,10 @@ extension ImagePipelineSwappingTests {
         }
         try await Task.sleep(for: .seconds(3))
         #expect(opened.reader.chapter.key == "c2")
-        #expect(await storedProgress(opened.ids[0]).completed == false, "chapter 1 completed: it was only peeked at from below")
+        // only peeked at from below: nothing of chapter 1 is saved, nor completed (SUWA-17 D4, F3)
+        let previous = await storedProgress(opened.ids[0])
+        #expect(previous.progress == nil, "chapter 1 saved at page \(String(describing: previous.progress)): it was only peeked at from below")
+        #expect(previous.completed == false, "chapter 1 completed: it was only peeked at from below")
         await opened.close()
     }
 
