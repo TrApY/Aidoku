@@ -114,17 +114,43 @@ enum SuwayomiRecs {
     /// A meta value: `v` other than 1, broken JSON or no `items` = empty; extra fields are ignored and
     /// incomplete elements (no manga id or no source id) skipped; a repeated manga keeps its first place.
     static func decode(_ value: String?) -> List {
-        return .empty // pendiente[A1#1]
+        guard
+            let data = value?.data(using: .utf8),
+            let raw = try? JSONDecoder().decode(RawList.self, from: data),
+            raw.v == 1,
+            let rawItems = raw.items
+        else {
+            return .empty
+        }
+        var seen = Set<Int>()
+        var items: [Item] = []
+        for item in rawItems {
+            guard
+                let mangaId = item.m, mangaId > 0,
+                let sourceId = item.s, !sourceId.isEmpty, sourceId.allSatisfy(\.isNumber),
+                seen.insert(mangaId).inserted
+            else { continue }
+            items.append(.init(mangaId: mangaId, serverSourceId: sourceId, score: item.p, reason: item.r ?? ""))
+        }
+        return .init(at: raw.at, items: items)
     }
 
     /// `suwa.recs.estado.v1` (nil if missing or not valid).
     static func decodeStatus(_ value: String?) -> Status? {
-        return nil // pendiente[A1#2]
+        guard
+            let data = value?.data(using: .utf8),
+            let raw = try? JSONDecoder().decode(RawStatus.self, from: data),
+            raw.v == 1,
+            let ok = raw.ok
+        else {
+            return nil
+        }
+        return .init(at: raw.at, ok: ok, message: raw.msg)
     }
 
     /// The child source of a server source id, as the app keys it (`SuwayomiServerSourceConfig.key`).
     static func childKey(parentKey: String, serverSourceId: String) -> String {
-        "" // pendiente[A1#3]
+        SuwayomiServerSourceConfig.key(parentKey: parentKey, serverSourceId: serverSourceId)
     }
 
     /// The entries in the meta's order: ids the server doesn't have anymore are skipped, and so are manga
@@ -137,7 +163,24 @@ enum SuwayomiRecs {
         excluding: Int? = nil,
         sourceName: (String) -> String? = { SuwayomiConnections.shared.child($0)?.name }
     ) -> [Entry] {
-        return [] // pendiente[A1#4]
+        let byId = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return items.compactMap { item -> Entry? in
+            guard
+                item.mangaId != excluding,
+                let node = byId[item.mangaId],
+                node.inLibrary != true,
+                let title = node.title, !title.isEmpty
+            else { return nil }
+            let key = childKey(parentKey: parentKey, serverSourceId: item.serverSourceId)
+            return Entry(
+                mangaId: item.mangaId,
+                sourceKey: key,
+                title: title,
+                cover: node.thumbnailUrl.flatMap { URL(string: $0, relativeTo: baseUrl)?.absoluteString },
+                reason: item.reason,
+                sourceName: sourceName(key) ?? node.source?.displayName ?? ""
+            )
+        }
     }
 
     // MARK: Manga page (A2)
@@ -326,7 +369,14 @@ struct SuwayomiRecsReader: Sendable {
     }
 
     func forYou() async throws -> SuwayomiRecs.ForYouResult {
-        return .init(at: nil, entries: [], status: nil) // pendiente[A1#9]
+        try await SuwayomiRecs.withDeadline(deadline) { [self] in
+            let baseUrl = try helper.getConfiguredServer()
+            let response: SuwayomiRecs.ForYouResponse = try await helper.request(body: ForYouPayload(), timeout: deadline)
+            let list = SuwayomiRecs.decode(response.data?.recs?.nodes?.first?.value)
+            let status = SuwayomiRecs.decodeStatus(response.data?.estado?.nodes?.first?.value)
+            let entries = try await resolve(list.items, baseUrl: baseUrl, excluding: nil)
+            return .init(at: list.at, entries: entries, status: status)
+        }
     }
 
     func related(mangaId: Int) async throws -> [SuwayomiRecs.Entry] {
