@@ -207,6 +207,17 @@ extension ImagePipelineSwappingTests {
         webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: decelerating)
     }
 
+    /// Waits (up to `seconds`) until `condition` holds: the held pages come when the reader asks for them again,
+    /// which under the whole suite's load can take longer than a fixed wait.
+    private func waitUntil(seconds: Double = 8, _ condition: () throws -> Bool) async throws {
+        let start = ContinuousClock.now
+        while try !condition(), ContinuousClock.now - start < .milliseconds(Int(seconds * 1000)) {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        // and the layout settles
+        try await Task.sleep(for: .milliseconds(500))
+    }
+
     /// Up to chapter 2's transition: chapter 1 goes in above (its pages as `open` held them).
     private func putThePreviousChapterIn(_ opened: Opened) async throws {
         if opened.sections < 2 {
@@ -232,7 +243,7 @@ extension ImagePipelineSwappingTests {
         let opened = try await open(mangaKey: "reabrirarriba", startPage: 8, holding: Self.c2(0..<7))
         let before = try opened.frame(row: 7, section: 0).height
         opened.loader.release()
-        try await Task.sleep(for: .seconds(3))
+        try await waitUntil { try opened.frame(row: 7, section: 0).height > before + 100 }
         try #require(try opened.frame(row: 7, section: 0).height > before + 100, "page 7 did not grow")
         let top = try opened.frame(row: 8, section: 0).minY - opened.webtoon.collectionNode.contentOffset.y
         #expect(abs(top) < 0.5, "the top of page 8 is \(top) pt from the top of the screen")
@@ -249,7 +260,7 @@ extension ImagePipelineSwappingTests {
         let anchor = try #require(opened.webtoon.anchor)
         let before = try opened.frame(row: 7, section: 0).height
         opened.loader.release()
-        try await Task.sleep(for: .seconds(3))
+        try await waitUntil { try opened.frame(row: 7, section: 0).height > before + 100 }
         try #require(try opened.frame(row: 7, section: 0).height > before + 100, "page 7 did not grow")
         #expect(opened.webtoon.anchor == anchor)
         let distance = try opened.distanceFromTheAnchor()
@@ -271,7 +282,7 @@ extension ImagePipelineSwappingTests {
         let line = webtoon.collectionNode.contentOffset.y + webtoon.collectionNode.bounds.height / 2
         let intoBefore = line - (try opened.frame(row: 10, section: 0).minY)
         opened.loader.release()
-        try await Task.sleep(for: .seconds(3))
+        try await waitUntil { try opened.frame(row: 10, section: 0).height > 1000 }
         let real = try opened.frame(row: 10, section: 0)
         try #require(real.height > 1000, "page 10 did not grow: \(real.height)")
         let lineAfter = webtoon.collectionNode.contentOffset.y + webtoon.collectionNode.bounds.height / 2
@@ -296,7 +307,7 @@ extension ImagePipelineSwappingTests {
         let last = opened.webtoon.collectionNode.numberOfItems(inSection: 0) - 1
         let before = try opened.frame(row: last, section: 0).height
         opened.loader.release()
-        try await Task.sleep(for: .seconds(3))
+        try await waitUntil { try opened.frame(row: last, section: 0).height < before - 100 }
         try #require(try opened.frame(row: last, section: 0).height < before - 100, "chapter 1's last page did not shrink")
         #expect(opened.webtoon.anchor == anchor)
         distance = try opened.distanceFromTheAnchor()
@@ -406,7 +417,7 @@ extension ImagePipelineSwappingTests {
         let last = webtoon.collectionNode.numberOfItems(inSection: 0) - 1
         let before = try opened.frame(row: last, section: 0).height
         opened.loader.release()
-        try await Task.sleep(for: .seconds(2))
+        try await waitUntil { try opened.frame(row: last, section: 0).height < before - 100 }
         try #require(try opened.frame(row: last, section: 0).height < before - 100, "chapter 1's pages did not shrink")
         webtoon.scrollViewDidEndDecelerating(webtoon.scrollView)
         try await Task.sleep(for: .seconds(1))
@@ -435,7 +446,7 @@ extension ImagePipelineSwappingTests {
         webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: true)
         let offset = webtoon.collectionNode.contentOffset.y
         opened.loader.release()
-        try await Task.sleep(for: .seconds(2))
+        try await waitUntil { offset - webtoon.collectionNode.contentOffset.y > webtoon.collectionNode.bounds.height + 100 }
         // more than a screen: taken as the user going up, it would make reading down count (G1)
         try #require(offset - webtoon.collectionNode.contentOffset.y > webtoon.collectionNode.bounds.height + 100,
                      "the content did not move up by a screen: \(offset) → \(webtoon.collectionNode.contentOffset.y)")
