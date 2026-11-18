@@ -193,12 +193,13 @@ enum SuwayomiRecs {
         inLibrary: Bool,
         child: (String) -> SuwayomiServerSourceConfig? = { SuwayomiConnections.shared.child($0) }
     ) -> (parentKey: String, mangaId: Int)? {
-        return nil // pendiente[A2#5]
+        guard inLibrary, let config = child(sourceKey), let mangaId = Int(mangaKey) else { return nil }
+        return (config.parentKey, mangaId)
     }
 
     /// The section is drawn only with entries (no gap and no loading text otherwise).
     static func showsRelated(_ entries: [Entry]) -> Bool {
-        false // pendiente[A2#6]
+        !entries.isEmpty
     }
 
     /// «Relacionados» of a manga page: memory cache of the session unless `force` (pull to refresh); a
@@ -215,7 +216,19 @@ enum SuwayomiRecs {
         guard let target = relatedTarget(sourceKey: sourceKey, mangaKey: mangaKey, inLibrary: inLibrary, child: child) else {
             return []
         }
-        return [] // pendiente[A2#7]
+        let key = "\(target.parentKey)|related|\(target.mangaId)"
+        if !force, let cached: [Entry] = await cache.memory(key) {
+            return cached
+        }
+        let reader = SuwayomiRecsReader(parentKey: target.parentKey, transport: transport)
+        do {
+            let entries = try await reader.related(mangaId: target.mangaId)
+            await cache.set(entries, for: key)
+            return entries
+        } catch {
+            LogManager.logger.warn("Relacionados de \(target.mangaId) no leídos: \(error)")
+            return await cache.stored(key) ?? []
+        }
     }
 
     // MARK: Explorar › Para ti (A3)
@@ -380,7 +393,16 @@ struct SuwayomiRecsReader: Sendable {
     }
 
     func related(mangaId: Int) async throws -> [SuwayomiRecs.Entry] {
-        return [] // pendiente[A2#10]
+        try await SuwayomiRecs.withDeadline(deadline) { [self] in
+            let baseUrl = try helper.getConfiguredServer()
+            let response: SuwayomiRecs.RelatedResponse = try await helper.request(
+                body: RelatedPayload(variables: .init(mangaId: mangaId)),
+                timeout: deadline
+            )
+            let value = response.data?.manga?.meta?.first { $0.key == SuwayomiRecs.relatedKey }?.value
+            let list = SuwayomiRecs.decode(value)
+            return try await resolve(list.items, baseUrl: baseUrl, excluding: mangaId)
+        }
     }
 
     /// Titles and covers of the items, in one query (none when there are no items).
