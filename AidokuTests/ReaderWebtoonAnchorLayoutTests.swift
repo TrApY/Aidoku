@@ -402,12 +402,14 @@ extension ImagePipelineSwappingTests {
 
     // MARK: - Paso 5
 
-    /// Risk 6: in chapter 2 near its top, the user lets go with speed (decelerating) while chapter 1's pages above
+    /// Risk 6: in chapter 2 at its top, the user lets go with speed (decelerating) while chapter 1's pages above
     /// come and shrink: the chapter and the anchor stay.
     @Test func aLayoutChangeDuringADecelerationDoesNotChangeTheChapter() async throws {
         let opened = try await open(mangaKey: "inerciacapitulo", startPage: 2, holding: Self.allOfC1)
         try await putThePreviousChapterIn(opened)
-        try userScrolls(opened, toRow: 1, section: 1, at: 0.2)
+        // the middle of the screen near the top of chapter 2's transition: chapter 1's last page is on screen above it
+        // (so the reader asks for its image; just above the screen it may not, under the suite's load)
+        try userScrolls(opened, toRow: 0, section: 1, at: 0.2)
         try await Task.sleep(for: .seconds(1))
         try #require(opened.reader.chapter.key == "c2")
         let webtoon = opened.webtoon
