@@ -642,7 +642,7 @@ extension MangaView {
                 if DownloadAheadPlanner.canQueue(onlyOnWifi: onlyOnWifi, connection: Reachability.getConnectionType()) {
                     Task {
                         // chosen by hand: fill up to N now, also in the batch mode
-                        await DownloadManager.shared.ensureAheadDownloaded(manga: viewModel.manga) // pendiente[B2#7]
+                        await DownloadManager.shared.ensureAheadDownloaded(manga: viewModel.manga, ignoringBatches: true)
                     }
                 } else {
                     // chosen by hand: say why nothing is downloading yet (automatic triggers stay silent)

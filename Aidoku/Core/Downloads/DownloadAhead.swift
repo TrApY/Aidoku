@@ -52,7 +52,13 @@ enum DownloadAheadSetting {
     /// `target` ahead); in the batch mode, the global «download again when … left» (0...4) but at most `target - 1`,
     /// so a manga whose `target` isn't above it downloads as in the continuous mode (which is threshold `target - 1`).
     static func batchRefillAt(target: Int, defaults: UserDefaults = .standard) -> Int? {
-        return nil // pendiente[B2#3]
+        let batches = AppSettings.downloads.downloadAheadBatches
+        guard (defaults.object(forKey: batches.key) as? NSNumber)?.boolValue ?? batches.defaultValue else { return nil }
+        let refillAt = AppSettings.downloads.downloadAheadRefillAt
+        // the settings stepper stores a Double
+        let stored = (defaults.object(forKey: refillAt.key) as? NSNumber)?.intValue ?? refillAt.defaultValue
+        let value = min(max(stored, refillAtRange.lowerBound), refillAtRange.upperBound)
+        return max(min(value, target - 1), 0)
     }
 
     static func key(for manga: MangaIdentifier) -> String {
@@ -280,7 +286,7 @@ extension DownloadManager {
             guard target > 0, !chapters.isEmpty else { continue }
             let readingHistory = await DataRepositories.shared.history.readingHistory(of: mangaId).pagesAndDates
             let filters = await DataRepositories.shared.manga.chapterFilters(mangaId)
-            let refillAt: Int? = nil // pendiente[B2#6]
+            let refillAt = ignoringBatches ? nil : DownloadAheadSetting.batchRefillAt(target: target, defaults: downloadAheadDefaults)
             // the download status (files on disk) only of the chapters in the window
             let toQueue = DownloadAheadPlanner.chaptersToQueue(
                 chapters: chapters,
