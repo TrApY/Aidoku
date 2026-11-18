@@ -937,11 +937,13 @@ extension Settings {
                 )
             )
         }
-        return [
+        var groups: [Setting] = [
             .init(
                 title: NSLocalizedString("SETTINGS"),
                 value: .group(.init(items: baseItems))
             )
         ]
+         // pendiente[B3#8]
+        return groups
     }()
 }

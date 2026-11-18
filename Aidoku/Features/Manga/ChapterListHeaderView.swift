@@ -26,6 +26,8 @@ struct ChapterListHeaderView: View {
     private var mangaId: MangaIdentifier
     /// «Descarga adelantada» of this manga (follows the setting as it changes).
     @AppStorage private var downloadAhead: Int
+    /// Global «por tandas» mode, shown next to the number (follows Ajustes › Descargas as it changes).
+    @AppStorage(AppSettings.downloads.downloadAheadBatches.key) private var downloadAheadBatches = false
     /// The setting is offered for this manga (library manga of a source that can download).
     private let downloadAheadAvailable: Bool
 
@@ -91,11 +93,12 @@ struct ChapterListHeaderView: View {
                     .font(.headline)
                     .transition(.scale) // for some reason this makes it animate correctly
                     .id("chapters")
-                if let downloadAhead = DownloadAheadSetting.indicator(setting: downloadAhead, available: downloadAheadAvailable) {
-                    Label(
-                        String(format: NSLocalizedString("DOWNLOAD_AHEAD_ACTIVE"), downloadAhead),
-                        systemImage: "arrow.down.circle"
-                    )
+                if let downloadAheadText = DownloadAheadSetting.indicatorText(
+                    setting: downloadAhead,
+                    available: downloadAheadAvailable,
+                    batches: downloadAheadBatches
+                ) {
+                    Label(downloadAheadText, systemImage: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }

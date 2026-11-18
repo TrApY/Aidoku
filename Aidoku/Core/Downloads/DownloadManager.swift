@@ -52,8 +52,13 @@ actor DownloadManager {
     private var lastCacheUpdate: Date = .distantPast
     private let cacheValidityDuration: TimeInterval = 60 // 1 minute
 
+    /// Where «descarga adelantada» reads its global settings (the batch mode); tests pass their own.
+    let downloadAheadDefaults: UserDefaults
+
     /// - queueStateKey: where the queue is saved (nil: not saved, for tests).
-    init(queueStateKey: String? = "Data.downloadQueueState") {
+    /// - downloadAheadDefaults: where the «descarga adelantada» global settings are read (tests: their own).
+    init(queueStateKey: String? = "Data.downloadQueueState", downloadAheadDefaults: UserDefaults = .standard) {
+        self.downloadAheadDefaults = downloadAheadDefaults
         self.queue = DownloadQueue(cache: cache, stateKey: queueStateKey)
         // also marks a directory created by an older version
         Self.prepareDirectory()

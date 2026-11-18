@@ -641,7 +641,8 @@ extension MangaView {
                 let onlyOnWifi = AppSettings.downloads.downloadOnlyOnWifi.get()
                 if DownloadAheadPlanner.canQueue(onlyOnWifi: onlyOnWifi, connection: Reachability.getConnectionType()) {
                     Task {
-                        await DownloadManager.shared.ensureAheadDownloaded(manga: viewModel.manga)
+                        // chosen by hand: fill up to N now, also in the batch mode
+                        await DownloadManager.shared.ensureAheadDownloaded(manga: viewModel.manga) // pendiente[B2#7]
                     }
                 } else {
                     // chosen by hand: say why nothing is downloading yet (automatic triggers stay silent)

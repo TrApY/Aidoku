@@ -757,6 +757,11 @@
 "DOWNLOAD_AHEAD_ONE" = "1 capítulo";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i capítulos";
 "DOWNLOAD_AHEAD_ACTIVE" = "Descarga adelantada: %i";
+"DOWNLOAD_AHEAD_ACTIVE_BATCHES" = "Descarga adelantada: %i · por tandas";
+"DOWNLOAD_AHEAD_BATCHES" = "Por tandas";
+"DOWNLOAD_AHEAD_REFILL_AT" = "Volver a descargar cuando queden";
+"DOWNLOAD_AHEAD_REFILL_AT_VALUE" = "%i sin leer";
+"DOWNLOAD_AHEAD_BATCHES_TEXT" = "Los capítulos adelantados se eligen en cada manga. Por tandas, solo se vuelve a descargar cuando quedan estos sin leer; si el número es igual o mayor que los de un manga, ese manga descarga como siempre.";
 
 // Pillarbox per orientation
 "PILLARBOX_AMOUNT_PORTRAIT" = "Margen en vertical";

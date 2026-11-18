@@ -884,6 +884,11 @@
 "DOWNLOAD_AHEAD_ONE" = "1 chapter";
 "DOWNLOAD_AHEAD_CHAPTERS" = "%i chapters";
 "DOWNLOAD_AHEAD_ACTIVE" = "Download ahead: %i";
+"DOWNLOAD_AHEAD_ACTIVE_BATCHES" = "Download ahead: %i · in batches";
+"DOWNLOAD_AHEAD_BATCHES" = "In batches";
+"DOWNLOAD_AHEAD_REFILL_AT" = "Download again when";
+"DOWNLOAD_AHEAD_REFILL_AT_VALUE" = "%i left";
+"DOWNLOAD_AHEAD_BATCHES_TEXT" = "The chapters to download ahead are chosen in each manga. In batches, chapters are downloaded again only when this many unread are left; if the number is equal to or greater than a manga's, that manga downloads as usual.";
 
 // Pillarbox per orientation
 "PILLARBOX_AMOUNT_PORTRAIT" = "Portrait Margin";

@@ -34,6 +34,27 @@ enum DownloadAheadSetting {
         available && setting > 0 ? setting : nil
     }
 
+    /// The chapter list header's text: «Descarga adelantada: N», with «· por tandas» in the batch mode; nil = nothing.
+    static func indicatorText(setting: Int, available: Bool, batches: Bool) -> String? {
+        guard let value = indicator(setting: setting, available: available) else { return nil }
+        return String(format: NSLocalizedString("DOWNLOAD_AHEAD_ACTIVE"), value) // pendiente[B3#1]
+    }
+
+    /// «Por tandas» (global setting, Ajustes › Descargas): values the «download again when … left» stepper offers.
+    static let refillAtRange = 0...4
+
+    /// The value shown next to the «download again when» stepper («1 sin leer»).
+    static func refillAtText(_ value: Int) -> String {
+        String(value) // pendiente[B3#2]
+    }
+
+    /// The planner's refill threshold for a manga with `target` chapters ahead: nil in the continuous mode (always
+    /// `target` ahead); in the batch mode, the global «download again when … left» (0...4) but at most `target - 1`,
+    /// so a manga whose `target` isn't above it downloads as in the continuous mode (which is threshold `target - 1`).
+    static func batchRefillAt(target: Int, defaults: UserDefaults = .standard) -> Int? {
+        return nil // pendiente[B2#3]
+    }
+
     static func key(for manga: MangaIdentifier) -> String {
         "DownloadAhead.\(manga.sourceKey).\(manga.mangaKey)"
     }
@@ -109,6 +130,8 @@ enum DownloadAheadPlanner {
     ///   - readingHistory: by chapter key; `page == -1` is completed.
     ///   - downloaded, queued: chapter keys already downloaded / in the download queue.
     ///   - language, scanlators: the manga's chapter filters, as the manga page applies them.
+    ///   - refillAt: batch mode: nothing is queued while more than this many chapters of the window are downloaded
+    ///     or queued; at or below it, the window is filled up. nil = continuous (same as `target - 1`).
     static func chaptersToQueue(
         chapters: [AidokuRunner.Chapter],
         readingHistory: [String: (page: Int, date: Int)],
@@ -116,7 +139,8 @@ enum DownloadAheadPlanner {
         queued: Set<String>,
         target: Int,
         language: String? = nil,
-        scanlators: [String] = []
+        scanlators: [String] = [],
+        refillAt: Int? = nil
     ) -> [AidokuRunner.Chapter] {
         guard target > 0 else { return [] }
         let isCompleted: (AidokuRunner.Chapter) -> Bool = { readingHistory[$0.key]?.page == -1 }
@@ -128,7 +152,9 @@ enum DownloadAheadPlanner {
             window.append(chapter)
             if window.count == target { break }
         }
-        return window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
+        let missing = window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
+         // pendiente[B1#4]
+        return missing
     }
 
     /// Same, asking the download status only of the chapters in the window (at most `target`), not of
@@ -140,6 +166,7 @@ enum DownloadAheadPlanner {
         retried: Set<String>,
         language: String? = nil,
         scanlators: [String] = [],
+        refillAt: Int? = nil,
         status: (String) -> DownloadStatus
     ) -> [AidokuRunner.Chapter] {
         // the window doesn't depend on the download status: find it first
@@ -153,7 +180,9 @@ enum DownloadAheadPlanner {
             scanlators: scanlators
         )
         let (downloaded, queued) = split(statuses: window.map { ($0.key, status($0.key)) }, retried: retried)
-        return window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
+        let missing = window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
+         // pendiente[B1#5]
+        return missing
     }
 
     /// Same language and scanlator filter as the manga page's chapter list.
@@ -208,9 +237,12 @@ extension DownloadManager {
     /// reading history and chapter filters of the (library) manga. Returns the queued chapters.
     /// Without Wi-Fi, when downloads require it, it queues nothing and doesn't ask. A paused queue
     /// stays paused. A failed chapter is queued again, at most once per trigger.
+    /// In the batch mode (Ajustes › Descargas) it refills only when few enough are left, unless `ignoringBatches`
+    /// (the user has just chosen the number of chapters in the manga page: fill up now).
     @discardableResult
     func ensureAheadDownloaded(
         manga: AidokuRunner.Manga,
+        ignoringBatches: Bool = false,
         connection: NetworkDataType? = nil,
         onlyOnWifi: Bool? = nil,
         connectionProvider: (@Sendable () -> NetworkDataType)? = nil,
@@ -244,6 +276,7 @@ extension DownloadManager {
             guard target > 0, !chapters.isEmpty else { continue }
             let readingHistory = await DataRepositories.shared.history.readingHistory(of: mangaId).pagesAndDates
             let filters = await DataRepositories.shared.manga.chapterFilters(mangaId)
+            let refillAt: Int? = nil // pendiente[B2#6]
             // the download status (files on disk) only of the chapters in the window
             let toQueue = DownloadAheadPlanner.chaptersToQueue(
                 chapters: chapters,
@@ -251,7 +284,8 @@ extension DownloadManager {
                 target: target,
                 retried: retried,
                 language: filters.language,
-                scanlators: filters.scanlators ?? []
+                scanlators: filters.scanlators ?? [],
+                refillAt: refillAt
             ) {
                 getDownloadStatus(for: .init(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: $0))
             }

@@ -12,7 +12,9 @@ struct DownloadsSettings: Sendable {
             parallel,
             background,
             downloadOnlyOnWifi,
-            deleteDownloadAfterReading
+            deleteDownloadAfterReading,
+            downloadAheadBatches,
+            downloadAheadRefillAt
         ]
     }
 
@@ -22,4 +24,10 @@ struct DownloadsSettings: Sendable {
 
     let downloadOnlyOnWifi = SettingsKey<Bool>("Library.downloadOnlyOnWifi", default: false)
     let deleteDownloadAfterReading = SettingsKey<Bool>("Library.deleteDownloadAfterReading", default: false)
+
+    /// «Descarga adelantada» por tandas (global; the number of chapters ahead is per manga): see
+    /// `DownloadAheadSetting.batchRefillAt(target:)`.
+    let downloadAheadBatches = SettingsKey<Bool>("Downloads.downloadAheadBatches", default: false)
+    /// Batch mode: download again when this many (0...4) of the window are left.
+    let downloadAheadRefillAt = SettingsKey<Int>("Downloads.downloadAheadRefillAt", default: 1)
 }

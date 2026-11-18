@@ -598,12 +598,13 @@ extension SettingView {
 extension SettingView {
     @ContentBuilder
     func stepperView(value: StepperSetting) -> some View {
+        let valueText = Self.stepperValueText(key: setting.key, value: doubleBinding)
         HStack {
             Text(setting.title)
-                .lineLimit(1)
+                .lineLimit(valueText == nil ? 1 : 2)
             Spacer()
             if value.maximumValue >= value.minimumValue {
-                Text(String(format: "%g", doubleBinding))
+                Text(valueText ?? String(format: "%g", doubleBinding))
                     .foregroundStyle(Color.secondaryLabel)
                     .lineLimit(1)
                 Stepper(
@@ -620,6 +621,18 @@ extension SettingView {
         .opacity(disabled ? disabledOpacity : 1)
         .disabled(disabled)
         .transition(.opacity)
+    }
+}
+
+extension SettingView {
+    /// Text next to a stepper whose value needs words («1 sin leer»); nil = the plain number.
+    static func stepperValueText(key: String, value: Double) -> String? {
+        switch key {
+            case AppSettings.downloads.downloadAheadRefillAt.key:
+                DownloadAheadSetting.refillAtText(Int(value.rounded()))
+            default:
+                nil
+        }
     }
 }
 
