@@ -58,6 +58,9 @@ class ReaderViewController: BaseObservingViewController {
     }
     /// The user went up inside the chapter entered from below (SUWA-17 G1): its next page report counts.
     private var movedUpInsideEnteredChapter = false
+    /// The chapter and page the reader opened at, until it reports another page or chapter (SUWA-19 revisión,
+    /// hallazgo 2).
+    private var openedAt: (chapterKey: String, page: Int)?
     private var forceStartPage: Int?
     private(set) var currentPage = 1
     /// The app in front (page changes and completions only then). Replaced in tests. SUWA-12 I1
@@ -571,10 +574,14 @@ extension ReaderViewController {
             UIApplication.shared.endBackgroundTask(backgroundTask)
             backgroundTask = .invalid
         }
+        let onlyWhere = isOnlyWhereInTheOpeningPage(page: page, chapter: chapter)
         return Task {
             if needsSave {
                 await updateReadPosition(currentPage: page, chapter: chapter, updateTrackers: false)
-                await updateTrackerProgress(page: page, chapter: chapter)
+                // the trackers have this page already (hallazgo 2)
+                if !onlyWhere {
+                    await updateTrackerProgress(page: page, chapter: chapter)
+                }
             } else {
                 await saveReadingSession(chapter: chapter)
             }
@@ -651,6 +658,17 @@ extension ReaderViewController {
             return
         }
 
+        // only where in the page it opened at (webtoon): its fraction, not a read (hallazgo 2)
+        if isOnlyWhereInTheOpeningPage(page: currentPage, chapter: chapter) {
+            if let position = scrollPosition ?? currentPosition {
+                await DataRepositories.shared.history.savePosition(PageSave(chapter: chapterId, page: currentPage, scrollPosition: position))
+            }
+            if saveSession {
+                await saveReadingSession(chapter: chapter)
+            }
+            return
+        }
+
         await HistoryManager.shared.setProgress(
             chapterId: chapterId,
             chapter: chapter,
@@ -663,6 +681,14 @@ extension ReaderViewController {
         if saveSession {
             await saveReadingSession(chapter: chapter)
         }
+    }
+
+    /// The webtoon still at the page the chapter opened at, the user only moved inside it: what is saved is where in
+    /// the page (scrollPosition), not a read: the read date, the manga's last read and «Continuar» stay (SUWA-19
+    /// revisión, hallazgo 2; SUWA-17 F4).
+    private func isOnlyWhereInTheOpeningPage(page: Int, chapter: AidokuRunner.Chapter) -> Bool {
+        guard reader is ReaderWebtoonViewController, let openedAt else { return false }
+        return openedAt.chapterKey == chapter.key && openedAt.page == page
     }
 
     private func saveReadingSession(chapter: AidokuRunner.Chapter? = nil) async {
@@ -767,12 +793,32 @@ extension ReaderViewController {
         // the position is the one it opens at, not the last chapter's: leaving before the reader tells anything
         // is not a change either (SUWA-17 F4)
         currentPosition = openingPosition()
+        // moving inside the page it opens at is not reading either (hallazgo 2, JoTa 17-nov)
+        openedAt = (chapter.key, max(1, currentPage))
         // the page it opens at is not a change: nothing is saved until the user turns a page
         readPositionSaver.chapterOpened(
             pageKey: openingPageKey(),
             trackerKey: ReadPosition.pageKey(chapter: chapter, page: max(1, currentPage), position: nil)
         )
+        (reader as? ReaderWebtoonViewController)?.openingFraction = webtoonOpeningFraction()
         reader?.setChapter(chapter, startPage: currentPage)
+    }
+
+    /// Where in the page it opens at the webtoon reader goes (SUWA-19 D12): the history's scrollPosition is the
+    /// page plus its fraction; it counts only for the page it opens at (an old version, another device or a text
+    /// reader, whose position is from 0 to 1, leave values for another page, and nil does not clear it).
+    private func webtoonOpeningFraction() -> Double? {
+        guard reader is ReaderWebtoonViewController, currentPage >= 1 else { return nil }
+        let chapterId = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key)
+        guard
+            let history = DataRepositories.shared.mainActorReads.record(of: chapterId),
+            !history.completed || isRereading(history),
+            history.progress == currentPage,
+            let position = history.scrollPosition,
+            position >= 1,
+            floor(position) == Double(currentPage)
+        else { return nil }
+        return position - floor(position)
     }
 
     func loadNavbarTitle() {
@@ -1362,6 +1408,10 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         }
 
         let page = max(1, min(pages.lowerBound, totalPages))
+        // another page, or another chapter: from now on it is reading (hallazgo 2)
+        if let openedAt, openedAt.chapterKey != chapter.key || openedAt.page != page {
+            self.openedAt = nil
+        }
         currentPage = page
         currentPosition = position
         readPositionSaver.pageChanged(.init(chapter: chapter, page: page, totalPages: totalPages, scrollPosition: position))

@@ -12,6 +12,11 @@ protocol HeightQueryable {
 }
 
 extension ReaderWebtoonPageNode: HeightQueryable {
+    /// The height the page has before its ratio is known, at `width` (SUWA-19 D6).
+    func provisionalHeight(forWidth width: CGFloat) -> CGFloat {
+        width * (pillarboxPercent() ?? 1) * Self.defaultRatio
+    }
+
     func getHeight(for size: CGSize) -> CGFloat {
         guard size.width > 0 else { return 0 }
 

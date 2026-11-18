@@ -105,6 +105,20 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
     }
 
     @discardableResult
+    func savePosition(_ save: PageSave) async -> Bool {
+        await container.performBackgroundTask { context in
+            guard
+                let scrollPosition = save.scrollPosition,
+                let object = CoreDataManager.shared.getHistory(chapterId: save.chapter, context: context),
+                Int(object.progress) == save.page
+            else { return false }
+            guard object.scrollPosition?.doubleValue != scrollPosition else { return true }
+            object.scrollPosition = NSNumber(value: scrollPosition)
+            return context.saveLogging("HistoryManager.setPosition")
+        }
+    }
+
+    @discardableResult
     func markCompleted(_ chapters: [ChapterIdentifier], date: Date) async -> Bool? {
         await container.performBackgroundTask { context in
             guard CoreDataManager.shared.setCompleted(chapterIds: chapters, date: date, context: context) else {

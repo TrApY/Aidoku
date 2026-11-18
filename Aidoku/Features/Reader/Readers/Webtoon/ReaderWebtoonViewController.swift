@@ -61,8 +61,8 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     private var isScrolling = false
     // Indicates if an info refresh should be done if info pages are off screen
     private var needsInfoRefresh = false
-    // How many size transitions haven't completed yet, so overlapping ones share the first anchor (upstream #1116)
-    private var pendingSizeTransitions = 0
+    /// The screen is being put on the anchor (its own scrolls are not the user's nor to be put back).
+    private var applyingAnchor = false
     private(set) var isContentScrolling = false {
         didSet {
             guard isContentScrolling != oldValue else { return }
@@ -73,11 +73,19 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     // Stores the last calculated page number
     /// Reports only real page changes, and the first page of each chapter.
     private var pageReports = PageReportFilter()
-    /// The page the chapter opened at, reported as the current page until the user moves (drag, slider, tap or
-    /// key navigation, auto scroll, zoom). Opening puts that page at the top; the pages above it then grow as
-    /// their images load and move the content, and the page in the middle of the screen becomes the one
-    /// before: that is not the user reading, so it is neither reported nor saved. SUWA-16
-    private var openingPageHold: Int?
+    /// Where the user is reading (SUWA-19): this point of this item at this height of the screen. Only the user
+    /// moves it (dragging and its deceleration, the auto scroll, turning a page, the slider, a zoom that ends) and
+    /// opening a chapter, which puts the top of its page at the top of the screen; the page reported is the
+    /// anchor's. Before, the page was the one in the middle of the screen, and the pages above growing as their
+    /// images loaded made it the one before (SUWA-16: openingPageHold held the opening page until the user moved).
+    private(set) var anchor: ReadingAnchor?
+    /// The anchor was written by the user (not the opening one): only then is its fraction reported (SUWA-19 D12).
+    private var anchorIsTheUsers = false
+    /// The position last reported with a page (page + fraction), to report a new fraction of the same page.
+    private var reportedPosition: Double?
+    /// Where in its start page the next chapter opened with setChapter goes (0 its top, 1 its bottom), in the
+    /// middle of the screen; nil: the top of the page at the top of the screen (SUWA-19 D12, D14).
+    var openingFraction: Double?
     /// Entering the previous chapter from below by scrolling: how far into its section the screen was. Once the
     /// user goes half a screen further up inside it, they are reading it (SUWA-17 F3: a chapter of one page, or a
     /// last page taller than the screen, has no page before the last to report).
@@ -85,14 +93,10 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// After going up inside it: where the user entered and the highest point they went up to. Going down after
     /// going a whole screen above where they entered is reading it: its page is told again (SUWA-17 G1).
     private var wentUpInside: (entry: CGFloat, highest: CGFloat)?
-    private var lastScrollOffset: CGFloat = 0
     /// The user is dragging the content, or it decelerates after their drag: not the layout moving it (SUWA-17 G2).
     private var userIsScrolling = false
     /// Turning a page (tap, key): its scroll may take the reader into another chapter (SUWA-17 H).
     private var turningPage = false
-    /// Out of front: the page in the middle of the screen when the app left, where in it the middle was and the
-    /// layout's width changes then; back in front after the width changed, it is put back (SUWA-17 H).
-    private var leftFront: (chapter: AidokuRunner.Chapter, item: Int, fraction: CGFloat, widthChanges: Int)?
     /// Chapters whose end this reader already wrote to the completion journal (once each).
     private var journaledEnds = Set<String>()
 
@@ -172,6 +176,16 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         zoomView.onZoomScaleChanged = { [weak self] scale in
             self?.setLiveTextButtonHidden(scale != 1)
         }
+        // a double tap's zoom is the user moving; the layout puts the screen on the anchor (SUWA-19)
+        zoomView.onZoomAnimationEnded = { [weak self] in
+            guard let self else { return }
+            self.writeAnchorFromScreen()
+            // the chapter follows the anchor now, not at the next scroll event (hallazgo 5)
+            self.scrollViewDidScroll(self.collectionNode.view)
+        }
+        (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.anchorTarget = { [weak self] in
+            self?.anchorTarget()
+        }
 
         // set initial portrait state before view presentation
         let isPortrait = view.bounds.size.height >= view.bounds.size.width
@@ -243,6 +257,104 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         let hasStartInfo = currentPages.first?.type != .imagePage
         return min(
             max(pageRow + (hasStartInfo ? 0 : 1), 0),
+            currentPages.count - (hasStartInfo ? 1 : 0)
+        )
+    }
+
+    /// The anchor at the middle of the screen now: the item there and where in it (SUWA-19).
+    func anchorAtScreen() -> ReadingAnchor? {
+        guard
+            let path = getCurrentPagePath(),
+            let chapter = chapters[safe: path.section],
+            let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
+            let found = ReadingAnchorGeometry.locate(
+                lineY: collectionNode.contentOffset.y + collectionNode.bounds.height / 2,
+                frames: [(item: path.item, frame: frame)]
+            )
+        else { return nil }
+        // measured: the cell has another height than the provisional one (what the layout sees, not the node:
+        // the node may know its ratio a pass before its cell has it)
+        let node = collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode
+        return ReadingAnchor(
+            chapterKey: chapter.key,
+            item: found.item,
+            fraction: found.fraction,
+            screenFraction: 0.5,
+            measured: node.map { abs(frame.height - $0.provisionalHeight(forWidth: frame.width)) > 0.5 } ?? true
+        )
+    }
+
+    /// The user moved: the anchor is where the middle of the screen is now (nothing there: it stays). Not with the
+    /// app out of front (SUWA-19 I7).
+    private func writeAnchorFromScreen() {
+        guard delegate?.appActivity.isActive ?? true, let new = anchorAtScreen() else { return }
+        anchor = new
+        anchorIsTheUsers = true
+    }
+
+    /// The position saved with `page` (D12): the page plus the anchor's fraction rounded down to a tenth, when the
+    /// user put the anchor on that page (an image page); nil otherwise (the history keeps what it had). The anchor's
+    /// page, as anchorPage() counts it: a chapter put in below starts with its first page, not with a transition
+    /// (SUWA-19 revisión, hallazgo 1).
+    private func positionToReport(page: Int) -> Double? {
+        guard
+            anchorIsTheUsers,
+            let anchor,
+            let chapter,
+            anchor.chapterKey == chapter.key,
+            anchorPage() == page,
+            let chapterIndex = chapters.firstIndex(of: chapter),
+            let shown = pages[safe: chapterIndex]?[safe: anchor.item],
+            shown.type == .imagePage,
+            // not a text page: a text reader reads scrollPosition as its 0...1 progress (hallazgo 3)
+            !shown.isTextPage
+        else { return nil }
+        return Double(page) + min(floor(Double(anchor.fraction) * 10) / 10, 0.9)
+    }
+
+    /// Where the layout puts the screen: the anchor's item and point (SUWA-19). Nothing while a zoom goes on (the
+    /// gesture moves the content), nor while the collection does not have the reader's chapters yet (a batch not
+    /// applied: the section would be another chapter's). An anchor taken on a page with its provisional height
+    /// keeps its distance to the top of the page once the page has its real one (D6).
+    private func anchorTarget() -> (indexPath: IndexPath, fraction: CGFloat, screenFraction: CGFloat)? {
+        guard
+            !isZooming,
+            !zoomView.isAnimatingZoom,
+            var anchor,
+            let section = chapters.firstIndex(where: { $0.key == anchor.chapterKey }),
+            collectionNode.view.numberOfSections == pages.count,
+            let sectionPages = pages[safe: section],
+            collectionNode.view.numberOfItems(inSection: section) == sectionPages.count,
+            anchor.item < sectionPages.count
+        else { return nil }
+        let path = IndexPath(item: anchor.item, section: section)
+        if
+            !anchor.measured,
+            let node = collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode,
+            let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
+            frame.height > 0
+        {
+            let provisional = node.provisionalHeight(forWidth: frame.width)
+            if abs(frame.height - provisional) > 0.5 {
+                anchor = ReadingAnchorGeometry.measured(anchor, provisionalHeight: provisional, realHeight: frame.height)
+                self.anchor = anchor
+            }
+        }
+        return (path, anchor.fraction, anchor.screenFraction)
+    }
+
+    /// The page of the anchor, counted as getCurrentPage() counts them, when it is in the current chapter.
+    private func anchorPage() -> Int? {
+        guard
+            let anchor,
+            let chapter,
+            anchor.chapterKey == chapter.key,
+            let chapterIndex = chapters.firstIndex(of: chapter),
+            let currentPages = pages[safe: chapterIndex]
+        else { return nil }
+        let hasStartInfo = currentPages.first?.type != .imagePage
+        return min(
+            max(anchor.item + (hasStartInfo ? 0 : 1), 0),
             currentPages.count - (hasStartInfo ? 1 : 0)
         )
     }
@@ -430,7 +542,6 @@ extension ReaderWebtoonViewController {
 
     private func startAutoScroll() {
         guard !isAutoScrolling else { return }
-        openingPageHold = nil
 
         isAutoScrolling = true
         resumeAutoScroll()
@@ -510,7 +621,6 @@ extension ReaderWebtoonViewController {
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         userIsScrolling = true
         turningPage = false
-        openingPageHold = nil
         super.scrollViewWillBeginDragging(scrollView)
         restorePreloadRange()
         pauseAutoScroll()
@@ -527,53 +637,58 @@ extension ReaderWebtoonViewController {
         // ignore if page slider is being used
         guard !isSliding && !isZooming else { return }
 
+        // The layout or the reader putting the screen on the anchor: in between, one scroll view has the new offset
+        // and the other the old one, which, with the content above changed, is another place (another chapter). That is
+        // not the user moving, also during a drag or a deceleration (SUWA-19 revisión, hallazgo 4: pages shrinking
+        // above during a deceleration took the reader into the next chapter). The anchor's page is still told
+        let placing = applyingAnchor
+            || (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.isPlacingTheScreen == true
+
         guard
             let chapter = chapter,
             let chapterIndex = chapters.firstIndex(of: chapter)
         else { return }
 
-        // UIKit scales the offset by the content's size right after a width change, on top of the layout keeping
-        // the middle page: back to where the layout put it (SUWA-17 H)
-        if
-            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
-            let kept = layout.widthChangeOffset,
-            abs(collectionNode.contentOffset.y - kept.y) > 0.5
-        {
-            collectionNode.contentOffset = kept
-            self.scrollView.contentOffset = kept
+        // The user moving the content (dragging and its deceleration, the auto scroll, turning a page) moves the
+        // anchor, with the app in front and a page in the middle of the screen (SUWA-17 H, SUWA-19); the content
+        // moved by anything else (a layout pass, UIKit scaling the offset after a width change, the zoom's scroll
+        // view putting back an old offset) goes back on it (D5)
+        let movedByUser = !placing && (userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
+            || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage)
+        let wasAt = anchorOffsetIntoChapter()
+        if movedByUser {
+            writeAnchorFromScreen()
+        } else if !placing, !zoomView.isAnimatingZoom, applyAnchor() {
             return
         }
+        let isAt = anchorOffsetIntoChapter()
 
-        let pagePath = getCurrentPagePath()
-
-        // The chapter changes only when the user moves the content (dragging and its deceleration, the auto
-        // scroll, turning a page), with the app in front and a page in the middle of the screen: never by a layout
-        // pass (the window's width changing: iPadOS lays the app out again out of front, for the app switcher or
-        // Stage Manager), nor by nothing being in the middle (that was section 0) (SUWA-17 H)
-        let movedByUser = userIsScrolling || self.scrollView.isTracking || self.scrollView.isDragging
-            || self.scrollView.isDecelerating || (isAutoScrolling && !autoScrollPausedForUserInteraction) || turningPage
-        if infinite, let pageSection = pagePath?.section, movedByUser, delegate?.appActivity.isActive ?? true {
-            // check if we need to switch chapters
-            if chapterIndex > 0 && pageSection < chapterIndex {
+        // the chapter is the anchor's: only the user moves it, so a layout never changes the chapter (SUWA-19)
+        if infinite, let key = anchor?.chapterKey, let anchorIndex = chapters.firstIndex(where: { $0.key == key }) {
+            if chapterIndex > 0 && anchorIndex < chapterIndex {
                 movePreviousChapter()
                 needsInfoRefresh = true
                 pageReports.reset()
-            } else if chapterIndex < chapters.count - 1 {
-                if pageSection > chapterIndex {
-                    moveNextChapter()
-                    needsInfoRefresh = true
-                    pageReports.reset()
-                }
+            } else if chapterIndex < chapters.count - 1 && anchorIndex > chapterIndex {
+                moveNextChapter()
+                needsInfoRefresh = true
+                pageReports.reset()
             }
         }
 
-        // up inside a chapter entered from below (SUWA-17 F3, G1): nothing is told; reading it going down is
-        let offsetY = collectionNode.contentOffset.y
-        let goingUp = offsetY < lastScrollOffset
-        let goingDown = offsetY > lastScrollOffset
-        lastScrollOffset = offsetY
-        let byUser = userIsScrolling || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
-        if byUser, let offset = offsetIntoChapter() {
+        // up inside a chapter entered from below (SUWA-17 F3, G1): nothing is told; reading it going down is. Up
+        // and down are the anchor's moves inside the chapter, not the offset's (a layout moves the offset: G2)
+        let byDrag = !placing && (userIsScrolling || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating)
+        if
+            byDrag,
+            let wasAt,
+            let isAt,
+            wasAt.chapterKey == isAt.chapterKey,
+            isAt.chapterKey == self.chapter?.key
+        {
+            let offset = isAt.offset
+            let goingUp = isAt.offset < wasAt.offset
+            let goingDown = isAt.offset > wasAt.offset
             let height = collectionNode.bounds.height
             if let entry = enteredFromBelowAt, goingUp, offset < entry - height / 2 {
                 enteredFromBelowAt = nil
@@ -589,9 +704,23 @@ extension ReaderWebtoonViewController {
             }
         }
 
-        // update page number (the opening page until the user moves); nothing in the middle of the screen: no page
-        if let page = openingPageHold ?? (pagePath == nil ? nil : getCurrentPage()), pageReports.shouldReport(page) {
-            delegate?.setCurrentPage(page, position: nil)
+        // the page is the anchor's: the content moving without the user tells nothing (SUWA-19); with it, where in
+        // the page (D12), also when only that changes, but not inside a chapter entered from below (F3, G1: what
+        // counts there is the next page)
+        if let page = anchorPage() {
+            let position = positionToReport(page: page)
+            if pageReports.shouldReport(page) {
+                reportedPosition = position
+                delegate?.setCurrentPage(page, position: position)
+            } else if
+                let position,
+                position != reportedPosition,
+                enteredFromBelowAt == nil,
+                wentUpInside == nil
+            {
+                reportedPosition = position
+                delegate?.setCurrentPage(page, position: position)
+            }
         }
         measureAhead()
     }
@@ -599,29 +728,25 @@ extension ReaderWebtoonViewController {
     // disable slider movement while zooming
     // zooming sometimes causes page count to jitter between two pages
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
-        openingPageHold = nil
         isZooming = true
         stopAutoScroll()
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
         isZooming = false
+        writeAnchorFromScreen()
         scrollViewDidScroll(scrollView)
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
-        // Stop active scroll deceleration before capturing the rotation anchor.
+        // Stop active scroll deceleration: the anchor is where the user was (SUWA-19; it is not taken here, so two
+        // transitions one on top of the other keep the same one, as upstream #1116 wanted)
         let offset = scrollView.contentOffset
         scrollView.setContentOffset(offset, animated: false)
         collectionNode.contentOffset = offset
-
-        let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout
-        // a transition that starts before the last one completes would capture an in-between position
-        // (switching apps on iPhone Duo resizes twice in quick succession)
-        if pendingSizeTransitions == 0 {
-            layout?.preserveVisiblePosition()
-        }
-        pendingSizeTransitions += 1
+        // the deceleration is cut without scrollViewDidEndDecelerating: the user is not scrolling any more, or what
+        // UIKit moves after the size change would be taken as the user's (hallazgo 8)
+        userIsScrolling = false
 
         super.viewWillTransition(to: size, with: coordinator)
 
@@ -637,17 +762,11 @@ extension ReaderWebtoonViewController {
         } completion: { [weak self] _ in
             guard let self else { return }
 
-            // restore the anchor against the final bounds, rather than relying on the collection view
-            // to have asked for a target offset (it may not, or may ask before the size settles)
+            // on the anchor against the final bounds, rather than relying on the collection view to have asked for a
+            // target offset (it may not, or may ask before the size settles)
             collectionNode.view.layoutIfNeeded()
-            let offset = layout?.preservedContentOffset() ?? collectionNode.contentOffset
-            pendingSizeTransitions -= 1
-            if pendingSizeTransitions == 0 {
-                layout?.clearPreservedPosition()
-            }
             zoomView.adjustContentSize()
-            scrollView.contentOffset = offset
-            collectionNode.contentOffset = offset
+            applyAnchor()
         }
     }
 }
@@ -958,10 +1077,7 @@ extension ReaderWebtoonViewController {
         chapters.insert(prevChapter, at: 0)
         pages.insert(chapterPages, at: 0)
 
-        let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout
-        layout?.preserveOffsetAcrossChangeAbove()
-
-        // disable animations and adjust offset before re-enabling
+        // disable animations and adjust offset before re-enabling (the layout keeps the anchor: SUWA-19)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         CATransaction.setAnimationDuration(0)
@@ -1032,9 +1148,7 @@ extension ReaderWebtoonViewController {
         collectionNode.view.layoutIfNeeded()
 
         if !loadingPrevious, canTrimSection(at: 0) {
-            // preserve the visible cell as its section index changes
-            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout
-            layout?.preserveOffsetAcrossChangeAbove()
+            // the anchor is by chapter: its section index changing moves nothing (SUWA-19)
             chapters.removeFirst()
             pages.removeFirst()
             await collectionNode.performBatch(animated: false) {
@@ -1060,52 +1174,51 @@ extension ReaderWebtoonViewController {
         delegate?.setChapter(chapter)
         delegate?.setPages(pages.filter({ $0.type == .imagePage }))
         viewModel.setPages(chapter: chapter, pages: pages)
-        enteredFromBelowAt = offsetIntoChapter()
+        enteredFromBelowAt = anchorOffsetIntoChapter().flatMap { $0.chapterKey == chapter.key ? $0.offset : nil }
         wentUpInside = nil
     }
 
     /// The app going out of front and coming back (SUWA-17 H). Out of front, iPadOS lays the app out again at
-    /// other sizes (the app switcher, Stage Manager, a window): back in front after the width changed, the page
-    /// that was in the middle of the screen is put back there, at the same place inside it.
+    /// other sizes (the app switcher, Stage Manager, a window) and the anchor does not move (only the user moves
+    /// it, with the app in front): back in front, the screen is put on it (SUWA-19).
     func appActivityChanged(active: Bool) {
-        guard let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout else { return }
-        guard active else {
-            guard
-                let path = getCurrentPagePath(),
-                let chapter = chapters[safe: path.section],
-                let frame = layout.layoutAttributesForItem(at: path)?.frame, frame.height > 0
-            else {
-                leftFront = nil
-                return
-            }
-            let middle = collectionNode.contentOffset.y + collectionNode.bounds.height / 2
-            leftFront = (chapter, path.item, (middle - frame.minY) / frame.height, layout.widthChanges)
-            return
-        }
-        guard let left = leftFront else { return }
-        leftFront = nil
-        guard
-            left.widthChanges != layout.widthChanges,
-            let section = chapters.firstIndex(of: left.chapter),
-            let frame = layout.layoutAttributesForItem(at: IndexPath(item: left.item, section: section))?.frame
-        else { return }
-        zoomView.adjustContentSize()
-        let height = collectionNode.bounds.height
-        let maxY = max(0, layout.collectionViewContentSize.height - height)
-        let y = min(max(frame.minY + frame.height * left.fraction - height / 2, 0), maxY)
-        guard abs(y - collectionNode.contentOffset.y) > 0.5 else { return }
-        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: y), animated: false)
-        collectionNode.contentOffset = scrollView.contentOffset
+        guard active else { return }
+        collectionNode.view.layoutIfNeeded()
+        applyAnchor()
     }
 
-    /// How far the top of the screen is into the current chapter's section.
-    private func offsetIntoChapter() -> CGFloat? {
+    /// Puts the screen (both scroll views) where the anchor goes with the layout as it is. False if it was there
+    /// already or there is no anchor to put it on.
+    @discardableResult
+    func applyAnchor() -> Bool {
         guard
-            let chapter,
-            let section = chapters.firstIndex(of: chapter),
-            let top = collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(item: 0, section: section))?.frame.minY
+            !applyingAnchor,
+            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
+            let target = layout.anchorOffset()
+        else { return false }
+        guard abs(target.y - collectionNode.contentOffset.y) > 0.5 || abs(target.y - scrollView.contentOffset.y) > 0.5 else {
+            return false
+        }
+        applyingAnchor = true
+        defer { applyingAnchor = false }
+        zoomView.adjustContentSize()
+        let offset = CGPoint(x: scrollView.contentOffset.x, y: target.y)
+        scrollView.setContentOffset(offset, animated: false)
+        collectionNode.contentOffset = offset
+        return true
+    }
+
+    /// How far the top of the screen is into the anchor's chapter when the screen is on the anchor, with the
+    /// layout as it is (SUWA-19; before, the screen's own offset into the current chapter).
+    private func anchorOffsetIntoChapter() -> (chapterKey: String, offset: CGFloat)? {
+        guard
+            let anchor,
+            let section = chapters.firstIndex(where: { $0.key == anchor.chapterKey }),
+            let top = collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(item: 0, section: section))?.frame.minY,
+            let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: IndexPath(item: anchor.item, section: section))?.frame
         else { return nil }
-        return collectionNode.contentOffset.y - top
+        let point = frame.minY + frame.height * anchor.fraction
+        return (anchor.chapterKey, point - anchor.screenFraction * collectionNode.bounds.height - top)
     }
 
     /// Switch current chapter to next
@@ -1151,7 +1264,6 @@ extension ReaderWebtoonViewController {
 // MARK: - Reader Delegate
 extension ReaderWebtoonViewController: ReaderReaderDelegate {
     func moveLeft() {
-        openingPageHold = nil
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: max(
@@ -1168,7 +1280,6 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func moveRight() {
-        openingPageHold = nil
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: min(
@@ -1185,7 +1296,6 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func sliderMoved(value: CGFloat) {
-        openingPageHold = nil
         isSliding = true
 
         // get slider area
@@ -1221,12 +1331,15 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
             animated: false
         )
 
+        // the slider is the user moving (SUWA-19)
+        writeAnchorFromScreen()
         let page = getCurrentPage()
         delegate?.displayPage(page)
     }
 
     func sliderStopped(value: CGFloat) {
         isSliding = false
+        writeAnchorFromScreen()
         scrollViewDidScroll(collectionNode.view)
     }
 
@@ -1248,7 +1361,11 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         pageReports.reset()
         enteredFromBelowAt = nil
         wentUpInside = nil
-        openingPageHold = nil
+        anchor = nil
+        anchorIsTheUsers = false
+        reportedPosition = nil
+        let openingFraction = openingFraction
+        self.openingFraction = nil
         updateDoubleTapZoomSetting()
         chapters = [chapter]
 
@@ -1284,7 +1401,13 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 startPage = viewModel.pages.count
             }
 
-            openingPageHold = startPage
+            // the top of the page it opens at, at the top of the screen (SUWA-19 D4); with a saved fraction, that
+            // point of the page in the middle of the screen (D12)
+            anchor = if let openingFraction {
+                ReadingAnchor(chapterKey: chapter.key, item: startPage, fraction: CGFloat(openingFraction), screenFraction: 0.5, measured: true)
+            } else {
+                ReadingAnchor(chapterKey: chapter.key, item: startPage, fraction: 0, screenFraction: 0, measured: true)
+            }
             await collectionNode.reloadData()
             zoomView.adjustContentSize()
 
@@ -1295,6 +1418,9 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
                 animated: false
             )
             scrollView.contentOffset = collectionNode.contentOffset
+            if openingFraction != nil {
+                applyAnchor()
+            }
         }
     }
 }

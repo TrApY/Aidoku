@@ -249,17 +249,8 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
             }
             context.completeTransition(true)
         }
-
-        // handle inserting cell above
-        guard
-            let indexPath,
-            let collectionNode = owningNode as? ASCollectionNode,
-            let layout = collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout,
-            let yOffset = collectionNode.collectionViewLayout.layoutAttributesForItem(at: indexPath)?.frame.origin.y
-        else { return }
-        if yOffset < collectionNode.contentOffset.y {
-            layout.preserveOffsetAcrossChangeAbove()
-        }
+        // a cell growing above the screen moves nothing: the layout puts the screen back on the reader's anchor
+        // (SUWA-19; before, the cell asked the layout to keep what was below it)
     }
 }
 
@@ -283,8 +274,13 @@ extension ReaderWebtoonPageNode {
 
     /// The ratio of the page's image if it is known without loading it: shown before with these settings, or
     /// from the header of the file (downloaded) or of its copy in the disk cache.
-    static func knownRatio(of page: Page, source: AidokuRunner.Source?, settings: ImageSettings) -> CGFloat? {
-        if let key = ratioKey(of: page, settings: settings), let ratio = PageRatioMemory.shared[key] {
+    static func knownRatio(
+        of page: Page,
+        source: AidokuRunner.Source?,
+        settings: ImageSettings,
+        memory: PageRatioMemory = .shared
+    ) -> CGFloat? {
+        if let key = ratioKey(of: page, settings: settings), let ratio = memory[key] {
             return ratio
         }
         guard !settings.cropsBorders, let urlString = page.imageURL else { return nil }
