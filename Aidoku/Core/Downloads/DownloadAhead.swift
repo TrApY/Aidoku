@@ -153,7 +153,9 @@ enum DownloadAheadPlanner {
             if window.count == target { break }
         }
         let missing = window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
-         // pendiente[B1#4]
+        if let refillAt, window.count - missing.count > refillAt {
+            return []
+        }
         return missing
     }
 
@@ -181,7 +183,9 @@ enum DownloadAheadPlanner {
         )
         let (downloaded, queued) = split(statuses: window.map { ($0.key, status($0.key)) }, retried: retried)
         let missing = window.filter { !downloaded.contains($0.key) && !queued.contains($0.key) }
-         // pendiente[B1#5]
+        if let refillAt, window.count - missing.count > refillAt {
+            return []
+        }
         return missing
     }
 
