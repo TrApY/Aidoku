@@ -31,6 +31,9 @@ struct MangaView: View {
 
     @State private var openChapter: AidokuRunner.Chapter?
 
+    /// SUWA-18: «Relacionados» of a library manga of a Suwayomi server source (empty = no section).
+    @State private var related: [SuwayomiRecs.Entry] = []
+
     @StateObject private var refreshController = RefreshController()
 
     private var path: NavigationCoordinator
@@ -113,7 +116,21 @@ struct MangaView: View {
             .transition(.opacity)
             .listStyle(.plain)
             .refreshable {
+                async let relatedAgain = SuwayomiRecs.loadRelated(
+                    sourceKey: viewModel.manga.sourceKey,
+                    mangaKey: viewModel.manga.key,
+                    inLibrary: viewModel.bookmarked,
+                    force: true
+                )
                 await viewModel.refresh()
+                related = await relatedAgain
+            }
+            .task(id: viewModel.bookmarked) {
+                related = await SuwayomiRecs.loadRelated(
+                    sourceKey: viewModel.manga.sourceKey,
+                    mangaKey: viewModel.manga.key,
+                    inLibrary: viewModel.bookmarked
+                )
             }
             .introspect(.list, on: .iOS(.v27)) { list in
                 refreshController.list = list
@@ -301,7 +318,8 @@ extension MangaView {
                     if let nextChapter = viewModel.nextChapter {
                         openChapter = nextChapter
                     }
-                }
+                },
+                belowReadButton: SuwayomiRecs.showsRelated(related) ? AnyView(relatedSection) : nil
             )
             .environmentObject(path)
             .frame(minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
@@ -309,6 +327,52 @@ extension MangaView {
         .listRowInsets(.zero)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
+    }
+
+    /// SUWA-18: a row of covers (title in 2 lines, reason in 1 grey line); opens the manga page.
+    var relatedSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("MANGA_RELATED"))
+                .font(.headline)
+                .padding(.horizontal, 20)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 12) {
+                    ForEach(related) { entry in
+                        relatedCard(entry)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+        .padding(.bottom, 20)
+    }
+
+    func relatedCard(_ entry: SuwayomiRecs.Entry) -> some View {
+        let source = SourceManager.shared.store.source(for: entry.sourceKey)
+        let open: () -> Void = {
+            path.push(MangaViewController(source: source, manga: entry.manga, parent: path.rootViewController))
+        }
+        return Button(action: open) {
+            VStack(alignment: .leading, spacing: 4) {
+                MangaCoverView(
+                    source: source,
+                    coverImage: entry.cover ?? "",
+                    width: 100,
+                    height: 150,
+                    downsampleWidth: 200
+                )
+                Text(entry.title)
+                    .font(.footnote)
+                    .lineLimit(2, reservesSpace: true)
+                    .multilineTextAlignment(.leading)
+                Text(entry.reason)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: 100, alignment: .leading)
+        }
+        .buttonStyle(.plain)
     }
 
     var bottomSeparator: some View {

@@ -41,6 +41,8 @@ struct MangaDetailsHeaderView: View {
     var onTitlePressed: (() -> Void)?
     var onTrackerButtonPressed: (() -> Void)?
     var onReadButtonPressed: (() -> Void)?
+    /// SUWA-18: a row shown between the read button and the chapter list header («Relacionados»).
+    var belowReadButton: AnyView?
 
     @EnvironmentObject private var path: NavigationCoordinator
 
@@ -78,7 +80,8 @@ struct MangaDetailsHeaderView: View {
         transitionNamespace: Namespace.ID,
         onTitlePressed: (() -> Void)? = nil,
         onTrackerButtonPressed: (() -> Void)? = nil,
-        onReadButtonPressed: (() -> Void)? = nil
+        onReadButtonPressed: (() -> Void)? = nil,
+        belowReadButton: AnyView? = nil
     ) {
         self._source = source
         self._manga = manga
@@ -103,6 +106,7 @@ struct MangaDetailsHeaderView: View {
         self.onTitlePressed = onTitlePressed
         self.onTrackerButtonPressed = onTrackerButtonPressed
         self.onReadButtonPressed = onReadButtonPressed
+        self.belowReadButton = belowReadButton
 
         self._isTracking = State(initialValue: TrackerManager.shared.isTracking(
             mangaId: manga.wrappedValue.identifier
@@ -230,6 +234,10 @@ struct MangaDetailsHeaderView: View {
             .padding(.bottom, 20)
             .padding(.horizontal, 20)
             .allowsHitTesting(!readButtonDisabled)
+
+            if let belowReadButton {
+                belowReadButton
+            }
 
             // hide the chapter list header if there are no chapters and the other downloads header is shown
             if !(manga.chapters ?? chapters).isEmpty || !hasOtherDownloads {

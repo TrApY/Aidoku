@@ -802,6 +802,12 @@
 "EXPLORE_SOURCES" = "Fuentes";
 "EXPLORE_EXTENSIONS" = "Extensiones";
 "EXPLORE_MIGRATE" = "Migrar";
+"EXPLORE_FOR_YOU" = "Para ti";
+"FOR_YOU_UPDATED" = "Actualizado: %@";
+"FOR_YOU_EMPTY" = "Aún no hay recomendaciones: se calculan cada noche";
+"FOR_YOU_NO_SERVER" = "Conecta el servidor Suwayomi en Ajustes";
+"FOR_YOU_ERROR" = "No se han podido leer las recomendaciones del servidor.";
+"MANGA_RELATED" = "Relacionados";
 "RECENTLY_USED" = "Usado recientemente";
 "EXTENSIONS_UPDATES" = "Actualizaciones pendientes";
 "EXTENSIONS_UPDATE_ALL" = "Actualizar todo";

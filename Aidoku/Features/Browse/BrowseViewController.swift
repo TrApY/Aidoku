@@ -19,13 +19,9 @@ class BrowseViewController: BaseTableViewController {
 
     private var hasAppliedInitialSnapshot = false
 
-    // SUWA-12: Fuentes / Extensiones / Migrar
+    // SUWA-12: Fuentes / Extensiones / Migrar; SUWA-18: Para ti
     private let tabHeader = UIView()
-    private lazy var tabControl = UISegmentedControl(items: [
-        NSLocalizedString("EXPLORE_SOURCES"),
-        NSLocalizedString("EXPLORE_EXTENSIONS"),
-        NSLocalizedString("EXPLORE_MIGRATE")
-    ])
+    private lazy var tabControl = UISegmentedControl(items: BrowseTab.shown.map { NSLocalizedString($0.titleKey) })
     private var tabChildren: [Int: UIViewController] = [:]
     private var sourcesSearchController: UISearchController?
     private static let tabHeaderHeight: CGFloat = 48
@@ -826,9 +822,17 @@ extension BrowseViewController {
     private func showTab(_ index: Int) {
         guard tabChildren[index] == nil else { return }
         let path = NavigationCoordinator(rootViewController: self)
-        let child: UIViewController = index == 1
-            ? UIHostingController(rootView: ServerExtensionsView().environmentObject(path))
-            : UIHostingController(rootView: MigrateSourcesView(embedded: true).environmentObject(path))
+        let child: UIViewController
+        switch BrowseTab(rawValue: index) {
+            case .extensions:
+                child = UIHostingController(rootView: ServerExtensionsView().environmentObject(path))
+            case .migrate:
+                child = UIHostingController(rootView: MigrateSourcesView(embedded: true).environmentObject(path))
+            case .forYou:
+                child = UIHostingController(rootView: ForYouView().environmentObject(path))
+            case .sources, nil:
+                return
+        }
         addChild(child)
         child.view.translatesAutoresizingMaskIntoConstraints = false
         view.insertSubview(child.view, belowSubview: tabHeader)
