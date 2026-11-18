@@ -240,7 +240,16 @@ enum SuwayomiRecs {
         locale: Locale = .current,
         timeZone: TimeZone = .current
     ) -> String? {
-        return nil // pendiente[A3#8]
+        guard let at else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime]
+        guard let date = parser.date(from: at) else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return String(format: format, formatter.string(from: date))
     }
 
     // MARK: Server answers

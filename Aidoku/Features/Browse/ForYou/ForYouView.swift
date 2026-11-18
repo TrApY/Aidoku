@@ -19,7 +19,7 @@ enum BrowseTab: Int, CaseIterable {
 
     /// The tabs shown, in order (their index is the segment index).
     static var shown: [BrowseTab] {
-        [.sources, .extensions, .migrate] // pendiente[A3#11]
+        allCases
     }
 
     var titleKey: String {
@@ -53,7 +53,14 @@ enum ForYouState: Equatable {
         shown: SuwayomiRecs.ForYouResult?,
         updatedText: (String?) -> String? = { SuwayomiRecs.updatedText(at: $0) }
     ) -> ForYouState {
-        return .loading // pendiente[A3#12]
+        guard hasConnection else { return .noServer }
+        if let result {
+            return result.entries.isEmpty ? .empty : .loaded(updated: updatedText(result.at), entries: result.entries)
+        }
+        if let shown, !shown.entries.isEmpty {
+            return .loaded(updated: updatedText(shown.at), entries: shown.entries)
+        }
+        return failed ? .error : .loading
     }
 
     /// Localization key of the message of a state without a list.
