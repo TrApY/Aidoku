@@ -37,7 +37,8 @@ enum DownloadAheadSetting {
     /// The chapter list header's text: «Descarga adelantada: N», with «· por tandas» in the batch mode; nil = nothing.
     static func indicatorText(setting: Int, available: Bool, batches: Bool) -> String? {
         guard let value = indicator(setting: setting, available: available) else { return nil }
-        return String(format: NSLocalizedString("DOWNLOAD_AHEAD_ACTIVE"), value) // pendiente[B3#1]
+        let key = batches ? "DOWNLOAD_AHEAD_ACTIVE_BATCHES" : "DOWNLOAD_AHEAD_ACTIVE"
+        return String(format: NSLocalizedString(key), value)
     }
 
     /// «Por tandas» (global setting, Ajustes › Descargas): values the «download again when … left» stepper offers.
@@ -45,7 +46,7 @@ enum DownloadAheadSetting {
 
     /// The value shown next to the «download again when» stepper («1 sin leer»).
     static func refillAtText(_ value: Int) -> String {
-        String(value) // pendiente[B3#2]
+        String(format: NSLocalizedString("DOWNLOAD_AHEAD_REFILL_AT_VALUE"), value)
     }
 
     /// The planner's refill threshold for a manga with `target` chapters ahead: nil in the continuous mode (always

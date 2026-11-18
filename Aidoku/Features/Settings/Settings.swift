@@ -943,7 +943,30 @@ extension Settings {
                 value: .group(.init(items: baseItems))
             )
         ]
-         // pendiente[B3#8]
+        // «Descarga adelantada» por tandas: global mode and threshold (the number of chapters ahead is per manga)
+        groups.append(Setting(
+            title: NSLocalizedString("DOWNLOAD_AHEAD"),
+            value: .group(.init(
+                footer: NSLocalizedString("DOWNLOAD_AHEAD_BATCHES_TEXT"),
+                items: [
+                    .init(
+                        key: AppSettings.downloads.downloadAheadBatches.key,
+                        title: NSLocalizedString("DOWNLOAD_AHEAD_BATCHES"),
+                        value: .toggle(.init())
+                    ),
+                    .init(
+                        key: AppSettings.downloads.downloadAheadRefillAt.key,
+                        title: NSLocalizedString("DOWNLOAD_AHEAD_REFILL_AT"),
+                        requires: AppSettings.downloads.downloadAheadBatches.key,
+                        value: .stepper(.init(
+                            minimumValue: Double(DownloadAheadSetting.refillAtRange.lowerBound),
+                            maximumValue: Double(DownloadAheadSetting.refillAtRange.upperBound),
+                            stepValue: 1
+                        ))
+                    )
+                ]
+            ))
+        ))
         return groups
     }()
 }
