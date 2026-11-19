@@ -908,7 +908,7 @@ extension Setting {
     /// Identity in a list of settings (Ajustes › Descargas shows its groups with a ForEach): groups have no key,
     /// so two groups with the same empty key would show the first one twice; their title tells them apart.
     var listID: String {
-        key // pendiente[B4#1]
+        key.isEmpty ? "group:\(title)" : key
     }
 }
 
