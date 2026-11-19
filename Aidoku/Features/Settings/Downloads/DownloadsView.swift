@@ -49,7 +49,7 @@ struct DownloadsView: View {
                 .padding(.vertical, 4)
             }
 
-            ForEach(Settings.downloadSettings, id: \.key) { setting in
+            ForEach(Settings.downloadSettings, id: \.listID) { setting in
                 SettingView(setting: setting)
             }
 
