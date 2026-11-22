@@ -60,6 +60,9 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
     private var waiting: [Int: String] = [:]
     private var lastRequest = 0
     var pending: [String] { lock.withLock { Array(waiting.values) } }
+    /// Every request it got, in order (their file paths).
+    private var asked: [String] = []
+    var requested: [String] { lock.withLock { asked } }
 
     private func ended(_ number: Int) {
         lock.lock()
@@ -91,6 +94,7 @@ final class SlowImageLoader: DataLoading, @unchecked Sendable {
         lastRequest += 1
         let number = lastRequest
         waiting[number] = request.url?.path ?? "?"
+        asked.append(request.url?.path ?? "?")
         lock.unlock()
         let item = DispatchWorkItem { [weak self] in
             self?.ended(number)

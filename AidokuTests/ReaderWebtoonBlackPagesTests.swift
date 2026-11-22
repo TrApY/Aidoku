@@ -169,3 +169,64 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 }
+
+// MARK: - C: the data of the pages coming, on the disk before they load
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// The server address of page `index` of chapter 1.
+    private func serverURL(_ opened: Opened, _ index: Int) throws -> URL {
+        try #require(URL(string: SlowImageLoader.serverURL(opened.directory.appendingPathComponent("c1-\(index).jpg"))))
+    }
+
+    /// From the server, still on the first page: the data of the 10 pages after the screen is asked for and
+    /// stays in the disk cache, also for the pages too far down to be loaded or decoded yet (before, only the
+    /// «pages to preload» ones measured ahead and the ones in Texture's preload range were asked for).
+    @Test func fromTheServerTheDataOfTheTenNextPagesComesAheadWithoutDecodingThem() async throws {
+        let opened = try await open(.remote(delay: 0.3), mangaKey: "adelantados", preload: 2)
+        let loader = try #require(opened.loader)
+        let dataCache = try #require(opened.dataCache)
+        try await watch(opened, seconds: 0.5) { _ in }
+        let last = try #require(opened.lastVisibleRow)
+        // row r is page r - 1
+        let wanted = Array(last...min(last + 9, Self.pageCount - 1))
+        var asked: [Int] = []
+        for _ in 0..<80 {
+            asked = wanted.filter { index in loader.requested.contains { $0.hasSuffix("/c1-\(index).jpg") } }
+            if asked.count == wanted.count { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(asked == wanted, "pages \(Set(wanted).subtracting(asked).sorted()) after the screen never asked for")
+        // the furthest ones, never within the 4 screens below the screen (from page 9 on, even at the provisional
+        // height): on the disk, not decoded
+        try await watch(opened, seconds: 1) { _ in }
+        let screen = opened.webtoon.collectionNode.bounds.height
+        let far = wanted.filter { $0 >= 8 }
+        try #require(!far.isEmpty && far.allSatisfy { (opened.frame($0 + 1)?.minY ?? 0) > opened.bottom + 4 * screen + 1 }, "pages \(far) not further than 4 screens below")
+        let notOnDisk = try far.filter { index in
+            let key = ImagePipeline.shared.cache.makeDataCacheKey(for: ImageRequest(url: try serverURL(opened, index)))
+            return !dataCache.containsData(for: key)
+        }
+        #expect(notOnDisk.isEmpty, "pages \(notOnDisk) not in the disk cache")
+        let decoded = far.filter { (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0 + 1, section: 0)) as? ReaderWebtoonPageNode)?.image != nil }
+        #expect(decoded.isEmpty, "pages \(decoded), further than 4 screens below, decoded")
+        await opened.close()
+    }
+
+    /// From the server: leaving the reader while the data of the pages after the screen is coming stops it (the
+    /// server, from page 10 on, sends nothing until it is let go).
+    @Test func leavingTheReaderStopsTheDataComingAhead() async throws {
+        let opened = try await open(.remote(delay: 0.05), mangaKey: "salir", preload: 2, heldFrom: 9)
+        let loader = try #require(opened.loader)
+        let far: (String) -> Bool = { path in (9..<Self.pageCount).contains { path.hasSuffix("/c1-\($0).jpg") } }
+        for _ in 0..<40 where !loader.pending.contains(where: far) {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try #require(loader.pending.contains(where: far), "nothing from page 10 on asked for")
+        opened.reader.beginAppearanceTransition(false, animated: false)
+        opened.reader.endAppearanceTransition()
+        try await watch(opened, seconds: 0.5) { _ in }
+        let still = loader.pending.filter(far)
+        #expect(still.isEmpty, "\(still.map { URL(fileURLWithPath: $0).lastPathComponent }.sorted()) still asked for after leaving")
+        loader.release()
+        await opened.close()
+    }
+}

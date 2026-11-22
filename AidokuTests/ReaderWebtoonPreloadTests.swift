@@ -158,7 +158,7 @@ extension ImagePipelineSwappingTests {
         }
     }
 
-    func open(_ kind: Kind, mangaKey: String, preload: Int = 2) async throws -> Opened {
+    func open(_ kind: Kind, mangaKey: String, preload: Int = 2, heldFrom: Int = .max) async throws -> Opened {
         let first = AidokuRunner.Chapter(key: "c1", chapterNumber: 1)
         let second = AidokuRunner.Chapter(key: "c2", chapterNumber: 2)
         let manga = AidokuRunner.Manga(sourceKey: "lectorprecarga", key: mangaKey, title: "Webtoon", chapters: [second, first])
@@ -191,6 +191,7 @@ extension ImagePipelineSwappingTests {
                 }
             case .remote(let delay):
                 let loader = SlowImageLoader(delay: delay)
+                loader.heldFrom = heldFrom
                 loaders.append(loader)
                 // as the app's pipeline: the server's data stays in a disk cache (this test's own, emptied after)
                 let dataCache = try DataCache(name: "precarga-\(UUID().uuidString)")
