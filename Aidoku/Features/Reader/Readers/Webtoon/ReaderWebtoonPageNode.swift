@@ -696,6 +696,12 @@ extension ReaderWebtoonPageNode {
     /// Whether the page is measuring itself ahead now.
     var isMeasuringAhead: Bool { measureTask != nil }
 
+    /// The priority of its image's load while it goes on (nil: nothing loading).
+    var loadPriority: ImageRequest.Priority? {
+        guard let imageTask, imageTask.state == .running else { return nil }
+        return imageTask.priority
+    }
+
     /// Another chapter is opened: the page stops loading and being measured (SUWA-17 E2).
     func stopLoading() {
         cancelPageLoad()
