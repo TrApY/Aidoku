@@ -12,6 +12,10 @@ import AsyncDisplayKit
 class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
 
     var onOffsetPreserved: ((CGPoint) -> Void)?
+    /// The content size changed in a pass with the same zoom: the scroll view the user moves takes it in the same
+    /// pass (SUWA-29). Before, it took it when the transition of the cell that grew ended (0.3 s later, the fade), and
+    /// with nothing ending after the layout had it (a page shown at once) it was left a page short for seconds.
+    var onContentSizeChanged: ((CGSize) -> Void)?
     /// Where the screen goes after every pass: the reader's anchor (SUWA-19), as the item, the point of it and the
     /// height of the screen it goes at. Nil: nothing to put back this pass.
     var anchorTarget: (() -> (indexPath: IndexPath, fraction: CGFloat, screenFraction: CGFloat)?)?
@@ -89,6 +93,7 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         // scale for zoom
         let size = CGSize(width: width, height: origin)
         let transform = CGAffineTransform(scaleX: scale, y: scale)
+        let previousContentSize = contentSize
         contentSize = size.applying(transform)
 
         if scale != 1 {
@@ -117,6 +122,11 @@ class VerticalContentOffsetPreservingLayout: UICollectionViewFlowLayout {
         }
 
         lastScale = scale
+
+        // (a pass that changes the zoom: the zoom view sizes its content itself)
+        if sameScale, contentSize != previousContentSize {
+            onContentSizeChanged?(contentSize)
+        }
 
         // the scroll view is left alone when it is already there (every pass set its offset and content size, also
         // while pinching: C3)

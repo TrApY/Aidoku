@@ -54,6 +54,9 @@ class ZoomableCollectionView: ASDisplayNode {
                 self.adjustContentSize()
                 self.scrollNode.view.contentOffset = offset
             }
+            layout.onContentSizeChanged = { [weak self] _ in
+                self?.adjustContentSize()
+            }
         }
 
         // remove gesture recognizers from the collection view (in order to use scroll view's)
