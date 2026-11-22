@@ -20,6 +20,8 @@ class ZoomableCollectionView: ASDisplayNode {
     var onZoomScaleChanged: ((CGFloat) -> Void)?
     /// A double tap's zoom ended (the user moved: SUWA-19).
     var onZoomAnimationEnded: (() -> Void)?
+    /// The pages' content size changed, after the scroll view took it (SUWA-29 B).
+    var onContentSizeChanged: (() -> Void)?
     /// A double tap's zoom is going on.
     var isAnimatingZoom: Bool { zoomTimer?.isValid == true }
     var doubleTapEnabled: Bool {
@@ -56,6 +58,7 @@ class ZoomableCollectionView: ASDisplayNode {
             }
             layout.onContentSizeChanged = { [weak self] _ in
                 self?.adjustContentSize()
+                self?.onContentSizeChanged?()
             }
         }
 

@@ -188,17 +188,24 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     override func didEnterVisibleState() {
         super.didEnterVisibleState()
         // on screen: its image before the ones ahead (SUWA-17 E2)
-        imageTask?.priority = .high
+        updateLoadPriority()
         displayPage()
+    }
+
+    override func didExitVisibleState() {
+        super.didExitVisibleState()
+        updateLoadPriority()
     }
 
     override func didEnterDisplayState() {
         super.didEnterDisplayState()
+        updateLoadPriority()
         displayPage()
     }
 
     override func didExitDisplayState() {
         super.didExitDisplayState()
+        updateLoadPriority()
         guard !isVisible else { return }
 
         // don't hide images if zooming in/out
@@ -485,8 +492,8 @@ extension ReaderWebtoonPageNode {
             processors: processors,
             userInfo: [.processesKey: usePageProcessor]
         )
-        // the pages on screen first (SUWA-17 E2)
-        request.priority = isVisible ? .high : .normal
+        // the pages on screen first (SUWA-17 E2), then the ones nearer (SUWA-29 B)
+        request.priority = wantedLoadPriority
 
         // Store current image request for reload functionality
         self.currentImageRequest = request
@@ -692,6 +699,19 @@ extension ReaderWebtoonPageNode {
 
     /// Whether the page is measuring itself ahead now.
     var isMeasuringAhead: Bool { measureTask != nil }
+
+    /// How soon its image is wanted (SUWA-29 B): on screen before anything, then the ones about to show (Texture's
+    /// display range, 2 screens below), then the ones loading ahead (preload). The measuring ahead goes after all of
+    /// them (low) and the data of the pages further down after that (very low).
+    private var wantedLoadPriority: ImageRequest.Priority {
+        isVisible ? .veryHigh : (isInDisplayState ? .high : .normal)
+    }
+
+    /// Its image's load follows the page: on screen, about to show, ahead.
+    private func updateLoadPriority() {
+        guard let imageTask, imageTask.priority != wantedLoadPriority else { return }
+        imageTask.priority = wantedLoadPriority
+    }
 
     /// The priority of its image's load while it goes on (nil: nothing loading).
     var loadPriority: ImageRequest.Priority? {

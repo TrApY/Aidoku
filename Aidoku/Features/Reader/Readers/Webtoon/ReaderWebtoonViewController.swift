@@ -38,10 +38,15 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// After a memory warning nothing is measured ahead for a while.
     /// Until when nothing is measured ahead, after a memory warning (internal for the tests).
     var measureAheadPausedUntil: Date?
-    /// The pages that may hold a decoded image: from the first one on screen, «pages to preload» + 2 in all
-    /// counting the ones on screen (all of these if more show at once). Texture's preload range alone loads
-    /// and decodes as far as 2.5 screens below (SUWA-17 E1).
+    /// The pages that may hold a decoded image (SUWA-29 B): the one right above the screen, the ones on screen and the
+    /// ones that start within the 4 screens below it (Texture's preload range), at least «pages to preload» + 2
+    /// from the first one on screen and at most `decodeMaxPages` from it. After a memory warning, for as long as
+    /// nothing is measured ahead, only «pages to preload» + 2 from the first one on screen, as before (SUWA-17 E1).
     private let decodeWindow = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
+    /// How many screens below the screen the pages may hold a decoded image.
+    static let decodeScreensBelow: CGFloat = 4
+    /// At most this many pages from the first one on screen (pages much shorter than the screen).
+    static let decodeMaxPages = 24
     /// The pages out of it that could not let go of their image yet (on screen for Texture a moment longer).
     private let decodeLeaving = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
     private var loadingNext = false
@@ -138,11 +143,22 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
 //        collectionNode.view.prefetchDataSource = self
 //        collectionNode.isPrefetchingEnabled = true
 
+        // More ahead than Texture's own ranges, in screens (SUWA-29 B): the pages are put in their cells (display) from 2
+        // screens below the screen (before, 1) and load from 4 screens below (preload; before, 2.5), so a quick scroll
+        // does not get to a page that is still black. Texture's own ranges with little memory, as before. «Leading» is
+        // below the screen: the collection inside never scrolls itself (the zoom view's scroll view does), so Texture
+        // keeps the direction it starts with, down.
+        let textureDisplay = collectionNode.tuningParameters(for: .display)
+        let texturePreload = collectionNode.tuningParameters(for: .preload)
+        let display = ASRangeTuningParameters(leadingBufferScreenfuls: 2, trailingBufferScreenfuls: 0.75)
+        let preload = ASRangeTuningParameters(leadingBufferScreenfuls: 4, trailingBufferScreenfuls: 1.5)
+        collectionNode.setTuningParameters(display, for: .display)
+        collectionNode.setTuningParameters(preload, for: .preload)
         // override texture's automatic decreased preloading range
-        collectionNode.setTuningParameters(collectionNode.tuningParameters(for: .display), for: .minimum, rangeType: .display)
-        collectionNode.setTuningParameters(collectionNode.tuningParameters(for: .preload), for: .minimum, rangeType: .preload)
-        collectionNode.setTuningParameters(collectionNode.tuningParameters(for: .display), for: .lowMemory, rangeType: .display)
-        collectionNode.setTuningParameters(collectionNode.tuningParameters(for: .preload), for: .lowMemory, rangeType: .preload)
+        collectionNode.setTuningParameters(display, for: .minimum, rangeType: .display)
+        collectionNode.setTuningParameters(preload, for: .minimum, rangeType: .preload)
+        collectionNode.setTuningParameters(textureDisplay, for: .lowMemory, rangeType: .display)
+        collectionNode.setTuningParameters(texturePreload, for: .lowMemory, rangeType: .preload)
 
         scrollView.contentInset = .zero
         scrollView.showsVerticalScrollIndicator = false
@@ -185,6 +201,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         }
         (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.anchorTarget = { [weak self] in
             self?.anchorTarget()
+        }
+        // pages that grow or shrink with the screen still move the ones below in or out of the pages to decode
+        // (SUWA-29 B): those follow at the next turn, not only when the screen moves
+        zoomView.onContentSizeChanged = { [weak self] in
+            self?.scheduleDecodeWindowUpdate()
         }
 
         // set initial portrait state before view presentation
@@ -384,11 +405,29 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             let first = getCurrentPagePath(pos: .top) ?? getCurrentPagePath(),
             let last = getCurrentPagePath(pos: .bottom) ?? getCurrentPagePath()
         else { return }
+        // after a memory warning, as few as before (the pause of the measuring ahead)
+        let reduced = measureAheadPausedUntil.map { $0 > Date() } ?? false
+        let layout = collectionNode.collectionViewLayout
+        let limitY = collectionNode.contentOffset.y + collectionNode.bounds.height * (1 + Self.decodeScreensBelow)
         var window: [ReaderWebtoonPageNode] = []
+        // only pages of the chapters shown: after another chapter is opened, the old ones are there until its pages come
+        let shown = Set(chapters.map(\.key))
+        func pageNode(at path: IndexPath) -> ReaderWebtoonPageNode? {
+            (collectionNode.nodeForItem(at: path) as? ReaderWebtoonPageNode).flatMap { shown.contains($0.page.chapterId) ? $0 : nil }
+        }
+        // the page right above the screen keeps its image: going back up a little shows it at once
+        if !reduced, let above = indexPath(before: first), let node = pageNode(at: above) {
+            window.append(node)
+        }
         var count = 0
         var path: IndexPath? = first
-        while let current = path, count < max(0, pagesToPreload) + 2 || current <= last {
-            if let node = collectionNode.nodeForItem(at: current) as? ReaderWebtoonPageNode {
+        while let current = path {
+            let startsWithin = !reduced && (layout.layoutAttributesForItem(at: current)?.frame.minY ?? .infinity) < limitY
+            guard
+                current <= last
+                    || (count < Self.decodeMaxPages && (count < max(0, pagesToPreload) + 2 || startsWithin))
+            else { break }
+            if let node = pageNode(at: current) {
                 window.append(node)
             }
             count += 1
@@ -407,6 +446,19 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         }
         for node in window {
             node.decodeAllowed()
+        }
+    }
+
+    private var decodeWindowUpdateScheduled = false
+
+    /// The pages to decode follow the layout at the next turn of the main queue (once, however many passes).
+    private func scheduleDecodeWindowUpdate() {
+        guard !decodeWindowUpdateScheduled else { return }
+        decodeWindowUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.decodeWindowUpdateScheduled = false
+            self.updateDecodeWindow()
         }
     }
 
