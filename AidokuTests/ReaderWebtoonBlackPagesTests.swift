@@ -268,3 +268,47 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         }
     }
 }
+
+// MARK: - Review: the memory of the pages decoded beyond the ones of before
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// Wide and short pages (2800 × 2000 pixels, 22 MB each decoded, a third of the screen each on an iPhone):
+    /// many fit in the 4 screens below the screen. Still and scrolled down, the decoded images of the pages beyond
+    /// the ones of before (on screen and «pages to preload» + 2 from the first one on it) stay within 150 MB and one
+    /// page more (the one that went over), in two looks in a row.
+    @Test func wideShortPagesDecodedAheadStayWithinTheirMemory() async throws {
+        let preload = 2
+        let opened = try await open(.downloaded, mangaKey: "anchas", preload: preload) { _ in CGSize(width: 2800, height: 2000) }
+        let budget = 150 * 1024 * 1024
+        let page = 2800 * 2000 * 4
+        var over: [String] = []
+        var most = 0
+        var overBefore = false
+        let look: (String) -> Void = { when in
+            let firstOnScreen = opened.pageRows.first { (opened.frame($0)?.maxY ?? 0) > opened.top + 0.5 } ?? 1
+            var extra = 0
+            for row in opened.pageRows {
+                guard
+                    let node = opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: row, section: 0)) as? ReaderWebtoonPageNode,
+                    let image = node.image?.cgImage,
+                    let frame = opened.frame(row)
+                else { continue }
+                let onScreen = (frame.maxY > opened.top + 0.5 && frame.minY < opened.bottom - 0.5) || node.isVisible
+                let asBefore = onScreen || (row >= firstOnScreen && row - firstOnScreen < preload + 2)
+                if !asBefore {
+                    extra += image.bytesPerRow * image.height
+                }
+            }
+            most = max(most, extra)
+            let isOver = extra > budget + page
+            if isOver, overBefore, over.count < 6 {
+                over.append("\(when): \(extra / 1_048_576) MB")
+            }
+            overBefore = isOver
+        }
+        try await watch(opened, seconds: 3, every: look)
+        try await scroll(opened, seconds: 3, velocity: 1500, every: look)
+        try await watch(opened, seconds: 2, every: look)
+        #expect(over.isEmpty, "most \(most / 1_048_576) MB beyond the pages of before: \(over)")
+        await opened.close()
+    }
+}

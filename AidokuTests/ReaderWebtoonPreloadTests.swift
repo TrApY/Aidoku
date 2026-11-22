@@ -40,12 +40,14 @@ extension ImagePipelineSwappingTests {
         return width * size.height / size.width
     }
 
-    private static func pages(sourceKey: String, chapterKey: String, in directory: URL, remote: Bool) throws -> [Aidoku.Page] {
+    private static func pages(
+        sourceKey: String, chapterKey: String, in directory: URL, remote: Bool, pageSize: (Int) -> CGSize = ReaderWebtoonPreloadTests.size(of:)
+    ) throws -> [Aidoku.Page] {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         var pages: [Aidoku.Page] = []
         for index in 0..<pageCount {
-            let size = size(of: index)
+            let size = pageSize(index)
             let data = UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.7) { context in
                 for band in 0..<Int(size.height / 100) + 1 {
                     UIColor(hue: CGFloat((index * 29 + band) % 97) / 97, saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
@@ -158,7 +160,9 @@ extension ImagePipelineSwappingTests {
         }
     }
 
-    func open(_ kind: Kind, mangaKey: String, preload: Int = 2, heldFrom: Int = .max) async throws -> Opened {
+    func open(
+        _ kind: Kind, mangaKey: String, preload: Int = 2, heldFrom: Int = .max, pageSize: (Int) -> CGSize = ReaderWebtoonPreloadTests.size(of:)
+    ) async throws -> Opened {
         let first = AidokuRunner.Chapter(key: "c1", chapterNumber: 1)
         let second = AidokuRunner.Chapter(key: "c2", chapterNumber: 2)
         let manga = AidokuRunner.Manga(sourceKey: "lectorprecarga", key: mangaKey, title: "Webtoon", chapters: [second, first])
@@ -173,8 +177,8 @@ extension ImagePipelineSwappingTests {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("precarga-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let remote = if case .remote = kind { true } else { false }
-        var pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: first.key, in: directory, remote: remote)
-        var nextPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: second.key, in: directory, remote: remote)
+        var pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: first.key, in: directory, remote: remote, pageSize: pageSize)
+        var nextPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: second.key, in: directory, remote: remote, pageSize: pageSize)
         if case .downloadedArchive = kind {
             pages = try Self.archived(pages, as: directory.appendingPathComponent("\(first.key).cbz"))
             nextPages = try Self.archived(nextPages, as: directory.appendingPathComponent("\(second.key).cbz"))
