@@ -50,3 +50,39 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 }
+
+// MARK: - A: no fade from black
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// A downloaded chapter, opened and scrolled down quickly: a page on screen holding its image is shown whole,
+    /// never partly see-through on the black reader (it faded in for 0.3 s each time its cell got it, the moment it
+    /// came on screen, although it was decoded long before).
+    @Test func aPageWithItsImageIsNeverSeenFadingIn() async throws {
+        let opened = try await open(.downloaded, mangaKey: "sinfundido", preload: 2)
+        var fading: [String] = []
+        var seen = 0
+        let look: (String) -> Void = { when in
+            for row in opened.pageRows {
+                guard
+                    let node = opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: row, section: 0)) as? ReaderWebtoonPageNode,
+                    node.image != nil,
+                    node.imageNode.isNodeLoaded,
+                    let frame = opened.frame(row),
+                    frame.maxY > opened.top + 0.5,
+                    frame.minY < opened.bottom - 0.5
+                else { continue }
+                seen += 1
+                let layer = node.imageNode.layer
+                let shown = layer.presentation()?.opacity ?? layer.opacity
+                if shown < 0.99, fading.count < 6 {
+                    fading.append("\(when): fila \(row) opacidad \(String(format: "%.2f", shown))")
+                }
+            }
+        }
+        try await watch(opened, seconds: 2, every: look)
+        try await scroll(opened, seconds: 4, velocity: 3000, every: look)
+        try await watch(opened, seconds: 1, every: look)
+        try #require(seen > 100, "only \(seen) looks at a page with its image on screen")
+        #expect(fading.isEmpty, "\(fading)")
+        await opened.close()
+    }
+}
