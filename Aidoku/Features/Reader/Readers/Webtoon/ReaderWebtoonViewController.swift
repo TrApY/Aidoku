@@ -47,6 +47,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     static let decodeScreensBelow: CGFloat = 4
     /// At most this many pages from the first one on screen (pages much shorter than the screen).
     static let decodeMaxPages = 24
+    /// At most this many bytes of decoded images in the pages beyond the ones there were before (on screen and
+    /// «pages to preload» + 2 from the first one on it): wide and short pages fit many more in 4 screens.
+    static let decodeExtraBytes = 150 * 1024 * 1024
+    /// The widest image decoded in this reader, in pixels: what the next pages are guessed to be decoded at.
+    private var widestImagePixels: CGFloat = 0
     /// The pages out of it that could not let go of their image yet (on screen for Texture a moment longer).
     private let decodeLeaving = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
     private var loadingNext = false
@@ -452,16 +457,21 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         if !reduced, let above = indexPath(before: first), let node = pageNode(at: above) {
             window.append(node)
         }
+        // the pages beyond the ones of before, up to decodeExtraBytes decoded (the page above among them)
+        var extraBytes = window.reduce(0) { $0 + decodedBytes(of: $1) }
         var count = 0
         var path: IndexPath? = first
         while let current = path {
             let startsWithin = !reduced && (layout.layoutAttributesForItem(at: current)?.frame.minY ?? .infinity) < limitY
+            let asBefore = current <= last || count < max(0, pagesToPreload) + 2
             guard
-                current <= last
-                    || (count < Self.decodeMaxPages && (count < max(0, pagesToPreload) + 2 || startsWithin))
+                asBefore || (count < Self.decodeMaxPages && startsWithin && extraBytes < Self.decodeExtraBytes)
             else { break }
             if let node = pageNode(at: current) {
                 window.append(node)
+                if !asBefore {
+                    extraBytes += decodedBytes(of: node)
+                }
             }
             count += 1
             path = indexPath(after: current)
@@ -483,6 +493,23 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     }
 
     private var decodeWindowUpdateScheduled = false
+
+    /// The bytes of the page's decoded image: its image's, or, not decoded yet, its ratio at the widest image
+    /// decoded in this reader (at least the screen's width in pixels).
+    private func decodedBytes(of node: ReaderWebtoonPageNode) -> Int {
+        if let cgImage = node.image?.cgImage {
+            return cgImage.bytesPerRow * cgImage.height
+        }
+        let width = max(widestImagePixels, collectionNode.bounds.width * (view.window?.screen.scale ?? 3))
+        return Int(width * width * (node.ratio ?? ReaderWebtoonPageNode.defaultRatio) * 4)
+    }
+
+    /// A page got its decoded image: wider than the ones before, the pages to decode are counted again with it.
+    func imageDecoded(_ node: ReaderWebtoonPageNode) {
+        guard let width = node.image?.cgImage?.width, CGFloat(width) > widestImagePixels else { return }
+        widestImagePixels = CGFloat(width)
+        scheduleDecodeWindowUpdate()
+    }
 
     /// The pages to decode follow the layout at the next turn of the main queue (once, however many passes).
     private func scheduleDecodeWindowUpdate() {

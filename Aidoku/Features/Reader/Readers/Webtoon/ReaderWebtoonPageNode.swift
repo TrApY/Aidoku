@@ -638,6 +638,8 @@ extension ReaderWebtoonPageNode {
     /// An image came: shown if the cell is up, and measured anyway, so a page loaded ahead (Texture's
     /// preload range) has its height before it shows, not when it does (SUWA-17 C).
     private func imageArrived() {
+        // the reader counts the memory of the pages it lets decode with the size of the images that come (SUWA-29)
+        delegate?.imageDecoded(self)
         if isNodeLoaded {
             displayPage()
         } else {
