@@ -22,8 +22,16 @@ class GIFImageNode: ASControlNode {
 
     var image: UIImage? {
         didSet {
-            Task { @MainActor in
-                imageView?.image = image
+            // on the main thread, at once: the page shows it in the same pass it becomes opaque (SUWA-29; with the
+            // fade gone, a turn later is a frame of black)
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    imageView?.image = image
+                }
+            } else {
+                Task { @MainActor in
+                    imageView?.image = image
+                }
             }
         }
     }
