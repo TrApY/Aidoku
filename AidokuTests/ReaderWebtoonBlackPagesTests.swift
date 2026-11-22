@@ -230,3 +230,41 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 }
+
+// MARK: - F1: nothing downloaded ahead for a chapter no longer shown or after leaving the reader
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// In one turn of the main thread, the user goes two screens down (the data of the pages after them is asked
+    /// for: their requests are made ready first, the source's are awaited) and something else happens; a second
+    /// later, none of the pages of chapter 1 that only the downloading ahead asks for (from page 12 on: the nearer
+    /// ones may be loading to show) is still asked for.
+    private func movedDownAndThen(_ key: String, _ then: (Opened) -> Void) async throws {
+        let opened = try await open(.remote(delay: 1.0), mangaKey: key, preload: 2)
+        let loader = try #require(opened.loader)
+        try await watch(opened, seconds: 1) { _ in }
+        let scrollView = opened.webtoon.scrollView
+        opened.webtoon.scrollViewWillBeginDragging(scrollView)
+        scrollView.contentOffset = CGPoint(x: 0, y: scrollView.contentOffset.y + 2 * scrollView.bounds.height)
+        opened.webtoon.scrollViewDidEndDragging(scrollView, willDecelerate: false)
+        then(opened)
+        try await watch(opened, seconds: 1) { _ in }
+        let old = loader.pending.filter { path in (11..<Self.pageCount).contains { path.hasSuffix("/c1-\($0).jpg") } }
+        #expect(old.isEmpty, "\(old.count) pages of chapter 1 still asked for: \(old.map { URL(fileURLWithPath: $0).lastPathComponent }.sorted())")
+        await opened.close()
+    }
+
+    /// … another chapter is opened, one whose pages do not come (the source failed: no pages take the place of the
+    /// ones of chapter 1 after the screen).
+    @Test func aChapterOpenedWhileTheNextPagesAreMadeReadyStartsNoneOfThem() async throws {
+        try await movedDownAndThen("carrera-capitulo") { opened in
+            opened.webtoon.setChapter(AidokuRunner.Chapter(key: "c3", chapterNumber: 3), startPage: 1)
+        }
+    }
+
+    /// … the user leaves the reader.
+    @Test func leavingTheReaderWhileTheNextPagesAreMadeReadyStartsNoneOfThem() async throws {
+        try await movedDownAndThen("carrera-salir") { opened in
+            opened.reader.beginAppearanceTransition(false, animated: false)
+            opened.reader.endAppearanceTransition()
+        }
+    }
+}
