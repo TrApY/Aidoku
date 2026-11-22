@@ -61,6 +61,9 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     }()
     /// What it is downloading now, by address.
     private var prefetching: [URL: ImageRequest] = [:]
+    /// Which downloading ahead is the current one (SUWA-29 F1): the requests made ready for a chapter no longer shown,
+    /// or after leaving the reader (the source's request is awaited first), start nothing.
+    private var downloadAheadGeneration = 0
     /// How many pages after the last one on screen have their data downloaded ahead.
     static let pagesToDownloadAhead = 10
     /// The reader is shown (between viewWillAppear and viewWillDisappear): only then is anything downloaded ahead.
@@ -568,6 +571,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         let new = wanted.filter { prefetching[$0.url] == nil }
         guard !new.isEmpty else { return }
         let source = viewModel.source
+        let generation = downloadAheadGeneration
         Task { @MainActor [weak self] in
             var requests: [URL: ImageRequest] = [:]
             for (url, context) in new {
@@ -579,7 +583,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
                 }
                 requests[url] = ImageRequest(urlRequest: urlRequest)
             }
-            guard let self else { return }
+            guard let self, self.downloadAheadGeneration == generation else { return }
             for (url, request) in requests {
                 self.prefetching[url] = request
             }
@@ -589,6 +593,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
 
     /// Nothing more is downloaded ahead and what was going stops (another chapter, leaving the reader).
     private func stopDownloadingAhead() {
+        downloadAheadGeneration += 1
         pagePrefetcher.stopPrefetching()
         prefetching = [:]
         // when the reader comes back, the next scroll asks again
@@ -1498,7 +1503,8 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         decodeWindowIDs.set([])
         measureWanted.removeAllObjects()
         measureWantedIDs.set([])
-        measuredAheadFrom = nil
+        // and the data of its pages coming (SUWA-29 F1): the next chapter's pages may never come to take their place
+        stopDownloadingAhead()
         self.chapter = chapter
         // a new chapter: its first page is reported even if it has the number the last one had
         pageReports.reset()
