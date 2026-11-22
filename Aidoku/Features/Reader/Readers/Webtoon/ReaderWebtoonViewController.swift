@@ -50,6 +50,21 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// The pages out of it that could not let go of their image yet (on screen for Texture a moment longer).
     private let decodeLeaving = NSHashTable<ReaderWebtoonPageNode>.weakObjects()
     private var loadingNext = false
+    /// The data of the pages coming from the network, to the disk cache without decoding them (SUWA-29 C): when they get
+    /// into the preload range their image comes from the disk. Leaving the reader stops it, and the pages that are no
+    /// longer among the next ones stop.
+    private lazy var pagePrefetcher: ImagePrefetcher = {
+        let prefetcher = ImagePrefetcher(pipeline: .shared, destination: .diskCache, maxConcurrentRequestCount: 2)
+        // after the pages loading to show and the measuring ahead
+        prefetcher.priority = .veryLow
+        return prefetcher
+    }()
+    /// What it is downloading now, by address.
+    private var prefetching: [URL: ImageRequest] = [:]
+    /// How many pages after the last one on screen have their data downloaded ahead.
+    static let pagesToDownloadAhead = 10
+    /// The reader is shown (between viewWillAppear and viewWillDisappear): only then is anything downloaded ahead.
+    private var isInFront = true
 
     // The chapters currently shown in the reader view
     private var chapters: [AidokuRunner.Chapter] = []
@@ -133,6 +148,21 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
 
     deinit {
         autoScrollDisplayLink?.invalidate()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        isInFront = true
+        // back in front: the next scroll asks again for the pages after the screen
+        measuredAheadFrom = nil
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // leaving the reader (or another reader taking its place): the data of the pages coming stops, and nothing
+        // more is asked for while it is away (its layout still moves as it goes) (SUWA-29 C)
+        isInFront = false
+        stopDownloadingAhead()
     }
 
     override func configure() {
@@ -475,6 +505,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             last != measuredAheadFrom
         else { return }
         measuredAheadFrom = last
+        downloadAhead(from: last)
         let first = getCurrentPagePath(pos: .top) ?? last
         var paths: [IndexPath] = []
         var path = last
@@ -502,6 +533,66 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
         for node in nodes {
             node.measureAhead()
         }
+    }
+
+    /// The data of the `pagesToDownloadAhead` pages after `last` that come from the network (not downloaded, not from
+    /// a source that processes its pages), to the disk cache; the ones that are no longer among them stop.
+    private func downloadAhead(from last: IndexPath) {
+        var wanted: [(url: URL, context: PageContext?)] = []
+        if isInFront, viewModel.source?.features.processesPages != true {
+            var path = last
+            for _ in 0..<Self.pagesToDownloadAhead {
+                guard let next = indexPath(after: path) else { break }
+                path = next
+                guard
+                    let page = pages[safe: next.section]?[safe: next.item],
+                    // a chapter shown (after another one is opened, the old pages are there until its pages come)
+                    chapters.contains(where: { $0.key == page.chapterId }),
+                    page.type == .imagePage,
+                    page.zipURL == nil,
+                    let string = page.imageURL,
+                    let url = URL(string: string),
+                    !url.isFileURL
+                else { continue }
+                wanted.append((url, page.context))
+            }
+        }
+        let wantedURLs = Set(wanted.map(\.url))
+        let leftBehind = prefetching.filter { !wantedURLs.contains($0.key) }
+        if !leftBehind.isEmpty {
+            pagePrefetcher.stopPrefetching(with: Array(leftBehind.values))
+            for url in leftBehind.keys {
+                prefetching[url] = nil
+            }
+        }
+        let new = wanted.filter { prefetching[$0.url] == nil }
+        guard !new.isEmpty else { return }
+        let source = viewModel.source
+        Task { @MainActor [weak self] in
+            var requests: [URL: ImageRequest] = [:]
+            for (url, context) in new {
+                // the same request the page sends (the source's headers): its data is what the page finds on disk
+                let urlRequest = if let source {
+                    await source.getModifiedImageRequest(url: url, context: context)
+                } else {
+                    URLRequest(url: url)
+                }
+                requests[url] = ImageRequest(urlRequest: urlRequest)
+            }
+            guard let self else { return }
+            for (url, request) in requests {
+                self.prefetching[url] = request
+            }
+            self.pagePrefetcher.startPrefetching(with: Array(requests.values))
+        }
+    }
+
+    /// Nothing more is downloaded ahead and what was going stops (another chapter, leaving the reader).
+    private func stopDownloadingAhead() {
+        pagePrefetcher.stopPrefetching()
+        prefetching = [:]
+        // when the reader comes back, the next scroll asks again
+        measuredAheadFrom = nil
     }
 
     private func indexPath(after path: IndexPath) -> IndexPath? {
