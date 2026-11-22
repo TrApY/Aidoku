@@ -379,9 +379,9 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 
-    /// P2 and memory: with more pages to preload than Texture's own range (it decodes the pages up to 2.5
-    /// screens below), the ones further down get measured from their header without decoding them, and the
-    /// decoded images at once stay within «pages to preload» + 2.
+    /// P2 and memory: with more pages to preload than the pages that may be decoded (the ones that start within 4
+    /// screens below the screen: SUWA-29 B; before, Texture's 2.5), the ones further down get measured from their
+    /// header without decoding them.
     @Test func measuringFarAheadDecodesNothingMore() async throws {
         let preload = 8
         let opened = try await open(.remote(delay: 0.3), mangaKey: "lejos", preload: preload)
@@ -391,10 +391,10 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         #expect(maxDecoded <= preload + 2, "\(maxDecoded) images decoded at once")
         let last = try #require(opened.lastVisibleRow)
         let screen = opened.webtoon.collectionNode.bounds.height
-        let farRows = ((last + 1)...(last + preload)).filter { (opened.frame($0)?.minY ?? 0) > opened.bottom + 3 * screen }
-        #expect(!farRows.isEmpty, "no page further than 3 screens within the \(preload) to preload")
+        let farRows = ((last + 1)...(last + preload)).filter { (opened.frame($0)?.minY ?? 0) > opened.bottom + 4 * screen + 1 }
+        #expect(!farRows.isEmpty, "no page further than 4 screens within the \(preload) to preload")
         let decodedFar = farRows.filter { (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0, section: 0)) as? ReaderWebtoonPageNode)?.image != nil }
-        #expect(decodedFar.isEmpty, "rows \(decodedFar) of \(farRows), further than 3 screens, decoded")
+        #expect(decodedFar.isEmpty, "rows \(decodedFar) of \(farRows), further than 4 screens, decoded")
         #expect(farRows.allSatisfy { opened.isMeasured($0) }, "rows \(farRows.filter { !opened.isMeasured($0) }) not measured")
         await opened.close()
     }
@@ -412,20 +412,38 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
     }
 }
 
-// MARK: - SUWA-17 E1: decoded images at once
+// MARK: - SUWA-17 E1, SUWA-29 B: decoded images at once
 extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
-    /// Opened, still, scrolled down quickly and still again: never more pages hold a decoded image than «pages to
-    /// preload» + 2, counting the ones on screen (more only while more than that are on screen at once).
+    /// Opened, still, scrolled down quickly and still again: the pages holding a decoded image are only the ones on
+    /// screen, the one right above it and the ones that start within the 4 screens below it, at least «pages to
+    /// preload» + 2 from the first one on screen (SUWA-29 B; before, at most «pages to preload» + 2 in all: SUWA-17
+    /// E1), also while the pages grow with the screen still. A page that left a moment ago may still hold it for one
+    /// more look (Texture tells it a moment later).
     private func decodedStayWithin(_ preload: Int, _ kind: Kind, key: String) async throws {
         let opened = try await open(kind, mangaKey: key, preload: preload)
+        let screen = opened.webtoon.collectionNode.bounds.height
         var over: [String] = []
         var most = 0
+        var outsideBefore: Set<Int> = []
         let look: (String) -> Void = { when in
-            let limit = max(preload + 2, opened.visibleRows)
-            let decoded = opened.decodedImages
-            most = max(most, decoded)
-            if decoded > limit, over.count < 6 {
-                over.append("\(when): \(decoded) > \(limit)")
+            let decodedRows = opened.pageRows.filter { (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: $0, section: 0)) as? ReaderWebtoonPageNode)?.image != nil }
+            most = max(most, decodedRows.count)
+            let firstOnScreen = opened.pageRows.first { (opened.frame($0)?.maxY ?? 0) > opened.top + 0.5 } ?? 1
+            let outside = Set(decodedRows.filter { row in
+                guard let frame = opened.frame(row) else { return true }
+                // on screen, or still on screen for Texture (its visible state follows the screen a moment later)
+                let onScreen = (frame.maxY > opened.top + 0.5 && frame.minY < opened.bottom - 0.5)
+                    || (opened.webtoon.collectionNode.nodeForItem(at: IndexPath(row: row, section: 0)) as? ReaderWebtoonPageNode)?.isVisible == true
+                let rightAbove = row == firstOnScreen - 1
+                let within = frame.minY < opened.bottom + 4 * screen + 1
+                let fromFirst = row - firstOnScreen < preload + 2
+                return !(onScreen || rightAbove || (row >= firstOnScreen && (within || fromFirst)))
+            })
+            // out of the window in two looks in a row
+            let stayed = outside.intersection(outsideBefore)
+            outsideBefore = outside
+            if !stayed.isEmpty, over.count < 6 {
+                over.append("\(when): filas \(stayed.sorted()) fuera (primera en pantalla \(firstOnScreen))")
             }
         }
         try await watch(opened, seconds: 3, every: look)
@@ -436,15 +454,15 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 
-    @Test func downloadedAtMostTwoMoreDecodedThanToPreload() async throws {
+    @Test func downloadedDecodedOnlyAboveOnAndFourScreensBelowTheScreen() async throws {
         try await decodedStayWithin(2, .downloaded, key: "decod2")
     }
 
-    @Test func downloadedWithNothingToPreloadAtMostTwoDecoded() async throws {
+    @Test func downloadedWithNothingToPreloadDecodedOnlyAboveOnAndFourScreensBelowTheScreen() async throws {
         try await decodedStayWithin(0, .downloaded, key: "decod0")
     }
 
-    @Test func fromTheServerAtMostTwoMoreDecodedThanToPreload() async throws {
+    @Test func fromTheServerDecodedOnlyAboveOnAndFourScreensBelowTheScreen() async throws {
         try await decodedStayWithin(2, .remote(delay: 0.3), key: "decod2r")
     }
 }
