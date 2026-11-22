@@ -312,3 +312,20 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         await opened.close()
     }
 }
+
+// MARK: - Review: no frame of black between becoming opaque and showing the image
+extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
+    /// The image node of a page, its view loaded, given an image on the main thread: its view has it at once, in
+    /// the same pass the page becomes opaque (before, a turn of the main queue later: with no fade to hide it, a
+    /// frame of the black reader).
+    @Test func anImageGivenOnTheMainThreadIsInItsViewAtOnce() async throws {
+        let node = GIFImageNode()
+        _ = node.view
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+        }
+        node.image = image
+        #expect(node.imageView?.image === image, "the view has \(String(describing: node.imageView?.image))")
+    }
+}
