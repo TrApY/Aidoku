@@ -220,15 +220,9 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
     }
 
     override func animateLayoutTransition(_ context: ASContextTransitioning) {
-        UIView.animate(
-            withDuration: 0.3,
-            delay: 0,
-            options: [
-                .transitionCrossDissolve,
-                .allowUserInteraction,
-                .curveEaseInOut
-            ]
-        ) {
+        // the image shows at once (SUWA-29 A): it is already decoded, and the 0.3 s fade from transparent it had (on a
+        // black reader) let the page be seen black as it came on screen, also with the chapter downloaded
+        UIView.performWithoutAnimation {
             if self.image != nil {
                 self.imageNode.alpha = 1
             } else if self.text != nil {
@@ -237,7 +231,10 @@ class ReaderWebtoonPageNode: BaseObservingCellNode {
                 self.imageNode.alpha = 0
                 self.textNode.alpha = 0
             }
-        } completion: { [weak self] _ in
+        }
+        // the transition still ends on a later turn of the main queue, as when the animation ended: ending it
+        // inside this call left the content size wrong (the first try of SUWA-29)
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.imageNode.frame = context.finalFrame(for: self.imageNode)
             self.textNode.frame = context.finalFrame(for: self.textNode)
