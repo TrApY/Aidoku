@@ -181,7 +181,7 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
     /// stays in the disk cache, also for the pages too far down to be loaded or decoded yet (before, only the
     /// «pages to preload» ones measured ahead and the ones in Texture's preload range were asked for).
     @Test func fromTheServerTheDataOfTheTenNextPagesComesAheadWithoutDecodingThem() async throws {
-        let opened = try await open(.remote(delay: 0.3), mangaKey: "adelantados", preload: 2)
+        let opened = try await open(.remote(delay: 0.3), mangaKey: "adelantados", preload: 2, heldFrom: 11)
         let loader = try #require(opened.loader)
         let dataCache = try #require(opened.dataCache)
         try await watch(opened, seconds: 0.5) { _ in }
@@ -195,6 +195,7 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(asked == wanted, "pages \(Set(wanted).subtracting(asked).sorted()) after the screen never asked for")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { loader.release() }
         // the furthest ones, never within the 4 screens below the screen (from page 9 on, even at the provisional
         // height): on the disk, not decoded
         try await watch(opened, seconds: 1) { _ in }
