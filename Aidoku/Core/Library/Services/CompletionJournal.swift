@@ -34,8 +34,12 @@ enum CompletionJournal {
         return formatter
     }()
 
-    static func record(_ chapter: ChapterIdentifier, reason: String, detail: String = "", date: Date = Date(), fileUrl: URL? = nil) {
-        guard !AppSettings.general.incognitoMode.get() else { return }
+    /// `incognito`: nil, the app's setting (tests pass it, so they never change the setting other tests read).
+    static func record(
+        _ chapter: ChapterIdentifier, reason: String, detail: String = "", date: Date = Date(), fileUrl: URL? = nil,
+        incognito: Bool? = nil
+    ) {
+        guard !(incognito ?? AppSettings.general.incognitoMode.get()) else { return }
         let url = fileUrl ?? defaultUrl
         let line = [formatter.string(from: date), chapter.sourceKey, chapter.mangaKey, chapter.chapterKey, reason, detail]
             .joined(separator: "\t")
