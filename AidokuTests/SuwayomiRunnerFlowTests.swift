@@ -548,6 +548,91 @@ private let nexus = "4086183896761281232" // flagged NSFW
         #expect(server.count("GetMangaUpdate") == 1)
     }
 
+    // MARK: SUWA-34: forced search on the scan's website (the user's pull to refresh)
+
+    /// The server's answer for a manga it keeps updated itself: initialized, in its library, 26 chapters stored.
+    private func storedInLibrary() throws -> Data {
+        Data(String(decoding: try fixture("manga-update-initialized"), as: UTF8.self)
+            .replacingOccurrences(of: "\"inLibrary\": false", with: "\"inLibrary\": true").utf8)
+    }
+
+    /// The same manga after the server found a new chapter on the website: 27 chapters.
+    private func withANewChapter() throws -> Data {
+        var json = try #require(JSONSerialization.jsonObject(with: try storedInLibrary()) as? [String: Any])
+        var data = try #require(json["data"] as? [String: Any])
+        var chapters = try #require(data["chapters"] as? [String: Any])
+        var nodes = try #require(chapters["nodes"] as? [[String: Any]])
+        var newest = nodes[0]
+        newest["id"] = 27
+        newest["name"] = "Ch.26 - Capítulo nuevo"
+        newest["chapterNumber"] = 26
+        newest["sourceOrder"] = 26
+        nodes.insert(newest, at: 0)
+        chapters["nodes"] = nodes
+        data["chapters"] = chapters
+        json["data"] = data
+        return try JSONSerialization.data(withJSONObject: json)
+    }
+
+    private func updateInLibrary(_ runner: SuwayomiSourceRunner) async throws -> AidokuRunner.Manga {
+        try await runner.getMangaUpdate(
+            manga: .init(sourceKey: key, key: "54", title: "x"),
+            needsDetails: true,
+            needsChapters: true
+        )
+    }
+
+    @Test func forcedUpdateSearchesTheOriginAndReturnsTheNewChapters() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaUpdate", .success(try storedInLibrary()), .success(try withANewChapter()))
+        server.respond("FetchChapters", .success(try fixture("fetch-chapters")))
+        let runner = makeRunner()
+        let manga = try await SuwayomiServerSources.$forceOriginFetch.withValue(true) {
+            try await updateInLibrary(runner)
+        }
+        #expect(server.count("FetchChapters") == 1)
+        #expect(server.count("FetchManga") == 0)
+        #expect(server.count("GetMangaUpdate") == 2)
+        #expect(manga.chapters?.count == 27)
+        #expect(manga.chapters?.first?.title == "Ch.26 - Capítulo nuevo")
+    }
+
+    @Test func unforcedUpdateDoesNotSearchTheOrigin() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaUpdate", .success(try storedInLibrary()))
+        let runner = makeRunner()
+        let manga = try await updateInLibrary(runner)
+        #expect(server.count("FetchChapters") == 0)
+        #expect(server.count("GetMangaUpdate") == 1)
+        #expect(manga.chapters?.count == 26)
+    }
+
+    @Test func forcedUpdateWithAFailingSearchReturnsWhatIsStored() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaUpdate", .success(try storedInLibrary()))
+        server.respond("FetchChapters", .failure(URLError(.timedOut)))
+        let runner = makeRunner()
+        let manga = try await SuwayomiServerSources.$forceOriginFetch.withValue(true) {
+            try await updateInLibrary(runner)
+        }
+        #expect(server.count("FetchChapters") == 1)
+        #expect(server.count("GetMangaUpdate") == 1) // nothing was fetched: no second query
+        #expect(manga.chapters?.count == 26)
+    }
+
+    @Test func forcedUpdateOnlyAsksForChaptersWhenTheyWereAsked() async throws {
+        defer { cleanUp() }
+        server.respond("GetMangaUpdate", .success(try fixture("manga-update-state-only")))
+        let runner = makeRunner()
+        _ = try await SuwayomiServerSources.$forceOriginFetch.withValue(true) {
+            try await runner.getMangaUpdate(
+                manga: .init(sourceKey: key, key: "54", title: "x"),
+                needsDetails: false,
+                needsChapters: false
+            )
+        }
+        #expect(server.count("FetchChapters") == 0)
+    }
 }
 
 @Suite(.serialized) struct SuwayomiTrackerLibraryTests {
