@@ -273,7 +273,12 @@ actor SuwayomiSourceRunner: Runner {
         var response: SuwayomiMangaUpdateResponse = try await helper.request(
             body: Payload(variables: .init(mangaId: mangaId, details: needsDetails, chapters: needsChapters))
         )
-        let plan = SuwayomiServerSources.remoteFetchPlan(response, needsDetails: needsDetails, needsChapters: needsChapters)
+        let plan = SuwayomiServerSources.remoteFetchPlan(
+            response,
+            needsDetails: needsDetails,
+            needsChapters: needsChapters,
+            forceChapters: SuwayomiServerSources.forceOriginFetch
+        )
         if !plan.isEmpty {
             // manga only browsed from a server source: the server hasn't fetched it from the origin yet
             let result = await fetchFromOrigin(mangaId: mangaId, plan: plan)
