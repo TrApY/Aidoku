@@ -44,6 +44,16 @@ import Testing
         }
     }
 
+    /// Checking incognito does not turn on the app's own setting: the other suites run at the same time in the same
+    /// process, and anything they record or save meanwhile would be dropped as incognito (a migration test lost its
+    /// journal line in a full pass).
+    @Test func checkingIncognitoLeavesTheAppsSettingAlone() {
+        let before = AppSettings.general.incognitoMode.get()
+        withJournal(incognito: true) { _ in
+            #expect(AppSettings.general.incognitoMode.get() == before, "the app's setting changed while checking incognito")
+        }
+    }
+
     @Test func incognitoWritesNothing() {
         withJournal(incognito: true) { url in
             CompletionJournal.record(chapter, reason: "lector", fileUrl: url)
