@@ -197,8 +197,12 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         #expect(asked == wanted, "pages \(Set(wanted).subtracting(asked).sorted()) after the screen never asked for")
         DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { loader.release() }
         // the furthest ones, never within the 4 screens below the screen (from page 9 on, even at the provisional
-        // height): on the disk, not decoded
-        try await watch(opened, seconds: 1) { _ in }
+        // height): on the disk once the server sent them (waited for, not a fixed time), not decoded
+        let farPaths = wanted.filter { $0 >= 8 }.map { "/c1-\($0).jpg" }
+        for _ in 0..<200 where loader.pending.contains(where: { path in farPaths.contains { path.hasSuffix($0) } }) {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try await watch(opened, seconds: 0.2) { _ in }
         let screen = opened.webtoon.collectionNode.bounds.height
         let far = wanted.filter { $0 >= 8 }
         try #require(!far.isEmpty && far.allSatisfy { (opened.frame($0 + 1)?.minY ?? 0) > opened.bottom + 4 * screen + 1 }, "pages \(far) not further than 4 screens below")
