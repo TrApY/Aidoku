@@ -55,7 +55,7 @@ struct LibrarySettings: Sendable {
     let showUncategorizedCategory = SettingsKey<Bool>("Library.showUncategorizedCategory", default: false)
 
     let updateInterval = SettingsKey<String>("Library.updateInterval", default: "daily")
-    let skipTitles = SettingsKey<[String]>("Library.skipTitles", default: ["hasUnread", "completed", "notStarted"])
+    let skipTitles = SettingsKey<[String]>("Library.skipTitles", default: ["completed"])
     let excludedUpdateCategories = SettingsKey<[String]>("Library.excludedUpdateCategories", default: [])
     let backgroundRefresh = SettingsKey<Bool>("Library.backgroundRefresh", default: true)
     let updateOnlyOnWifi = SettingsKey<Bool>("Library.updateOnlyOnWifi", default: true)

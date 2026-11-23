@@ -102,6 +102,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ) -> Bool {
         // margin per orientation from the old amount + orientation, once (reads stored values only)
         PillarboxSettings.migrate()
+        // «saltar series con capítulos sin leer / sin empezar» ya no es el valor por defecto: una vez (SUWA-34)
+        LibrarySkipTitlesMigration.migrate()
         UserDefaults.standard.register(
             defaults: [
                 "History.lockHistoryTab": false,
