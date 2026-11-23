@@ -185,6 +185,12 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
         let loader = try #require(opened.loader)
         let dataCache = try #require(opened.dataCache)
         try await watch(opened, seconds: 0.5) { _ in }
+        // the first page measured (taller than its provisional height: now only it is on screen), the reader looks at
+        // the screen again, as any layout pass may do; on a busy device that comes after a look at 0.5 s
+        for _ in 0..<100 where !opened.isMeasured(1) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        opened.webtoon.measureAhead()
         let last = try #require(opened.lastVisibleRow)
         // row r is page r - 1
         let wanted = Array(last...min(last + 9, Self.pageCount - 1))
@@ -195,12 +201,6 @@ extension ImagePipelineSwappingTests.ReaderWebtoonPreloadTests {
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(asked == wanted, "pages \(Set(wanted).subtracting(asked).sorted()) after the screen never asked for")
-        // the first page measured (taller than its provisional height: now only it is on screen), the reader looks at
-        // the screen again, as any layout pass may do; on a busy device that comes after a look at 0.5 s
-        for _ in 0..<100 where !opened.isMeasured(1) {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        opened.webtoon.measureAhead()
         DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { loader.release() }
         // the furthest ones, never within the 4 screens below the screen (from page 9 on, even at the provisional
         // height): on the disk once the server sent them (waited for, not a fixed time), not decoded
