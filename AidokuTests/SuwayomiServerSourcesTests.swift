@@ -206,6 +206,51 @@ private func source(id: String, name: String, supportsLatest: Bool, isNsfw: Bool
         #expect(SuwayomiServerSources.remoteFetchPlan(inLibrary, needsDetails: true, needsChapters: true).isEmpty)
     }
 
+    // MARK: SUWA-34: forced search on the scan's website
+
+    /// A manga the server keeps updated itself: initialized, in the server library and with stored chapters.
+    private func storedAndInLibrary() throws -> SuwayomiMangaUpdateResponse {
+        let data = Data(String(decoding: try fixture("manga-update-initialized"), as: UTF8.self)
+            .replacingOccurrences(of: "\"inLibrary\": false", with: "\"inLibrary\": true").utf8)
+        let response = try JSONDecoder().decode(SuwayomiMangaUpdateResponse.self, from: data)
+        #expect(response.data.manga.initialized == true)
+        #expect(response.data.manga.inLibrary == true)
+        #expect(!response.chapterNodes.isEmpty)
+        return response
+    }
+
+    @Test func forcedPlanAsksForChaptersEvenWithStoredOnesInTheServerLibrary() throws {
+        let stored = try storedAndInLibrary()
+        #expect(SuwayomiServerSources.remoteFetchPlan(stored, needsDetails: true, needsChapters: true, forceChapters: true)
+            == .init(fetchManga: false, fetchChapters: true))
+        #expect(SuwayomiServerSources.remoteFetchPlan(stored, needsDetails: false, needsChapters: true, forceChapters: true)
+            == .init(fetchManga: false, fetchChapters: true))
+    }
+
+    @Test func forcedPlanNeedsChapters() throws {
+        let stored = try storedAndInLibrary()
+        #expect(SuwayomiServerSources.remoteFetchPlan(stored, needsDetails: true, needsChapters: false, forceChapters: true).isEmpty)
+        #expect(SuwayomiServerSources.remoteFetchPlan(stored, needsDetails: false, needsChapters: false, forceChapters: true).isEmpty)
+    }
+
+    @Test func forcedPlanKeepsFetchingDetailsOnlyWhenNotInitialized() throws {
+        let fresh = try JSONDecoder().decode(SuwayomiMangaUpdateResponse.self, from: fixture("manga-update-not-initialized"))
+        #expect(SuwayomiServerSources.remoteFetchPlan(fresh, needsDetails: true, needsChapters: true, forceChapters: true)
+            == .init(fetchManga: true, fetchChapters: true))
+    }
+
+    @Test func unforcedPlanIsTheSameAsToday() throws {
+        let stored = try storedAndInLibrary()
+        #expect(SuwayomiServerSources.remoteFetchPlan(stored, needsDetails: true, needsChapters: true).isEmpty)
+        #expect(SuwayomiServerSources.remoteFetchPlan(stored, needsDetails: true, needsChapters: true, forceChapters: false).isEmpty)
+        let noChapters = try JSONDecoder().decode(
+            SuwayomiMangaUpdateResponse.self,
+            from: fixture("manga-update-initialized-no-chapters")
+        )
+        #expect(SuwayomiServerSources.remoteFetchPlan(noChapters, needsDetails: true, needsChapters: true)
+            == .init(fetchManga: false, fetchChapters: true))
+    }
+
     @Test func noChaptersFoundIsRecognised() throws {
         let error = try #require(SuwayomiServerSources.graphQLError(from: fixture("fetch-chapters-no-chapters")))
         #expect(error == .message("No chapters found"))
