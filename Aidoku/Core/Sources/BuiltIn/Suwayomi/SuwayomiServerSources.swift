@@ -249,7 +249,9 @@ enum SuwayomiServerSources {
 
     /// Runs `operation` with `forceOriginFetch` set to `forced`.
     static func withOriginFetch<T>(forced: Bool, _ operation: () async throws -> T) async rethrows -> T {
-        try await operation()
+        try await $forceOriginFetch.withValue(forced) {
+            try await operation()
+        }
     }
 
     /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",

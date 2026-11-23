@@ -322,6 +322,8 @@ extension MangaManager {
     func backgroundRefreshLibrary(category: String? = nil, skipReachabilityCheck: Bool = false, fromUser: Bool = false) async {
         targetCategory = category
         self.skipReachabilityCheck = skipReachabilityCheck
+        // remembered like the two above: the task can start later, inside the background task's handler
+        self.fromUser = fromUser
 
 #if !targetEnvironment(simulator)
         if AppSettings.library.backgroundRefresh.get(), !ProcessInfo.processInfo.isMacCatalystApp {
@@ -360,7 +362,7 @@ extension MangaManager {
                 await doLibraryRefresh(
                     category: category,
                     skipReachabilityCheck: skipReachabilityCheck,
-                    forceOrigin: false,
+                    forceOrigin: fromUser,
                     forceAll: forceAll,
                     task: task,
                     refreshStarted: {
@@ -387,6 +389,7 @@ extension MangaManager {
 
         self.targetCategory = nil
         self.skipReachabilityCheck = false
+        self.fromUser = false
 
         // wait 0.5s for final progress animation to complete
         try? await Task.sleep(nanoseconds: 500_000_000)
@@ -532,9 +535,12 @@ extension MangaManager {
             for manga in filteredManga {
                 guard !Task.isCancelled else { return results }
 
+                // the user's pull to refresh makes Suwayomi search the scan's website now (SUWA-34)
                 guard
-                    let newManga = try? await SourceManager.shared.source(for: manga.sourceId)?
-                        .getMangaUpdate(manga: manga.toNew(), needsDetails: updateMetadata, needsChapters: true)
+                    let newManga = try? await SuwayomiServerSources.withOriginFetch(forced: forceOrigin, {
+                        try await SourceManager.shared.source(for: manga.sourceId)?
+                            .getMangaUpdate(manga: manga.toNew(), needsDetails: updateMetadata, needsChapters: true)
+                    })
                 else {
                     completed += 1
                     progress.completedUnitCount = Int64(completed)

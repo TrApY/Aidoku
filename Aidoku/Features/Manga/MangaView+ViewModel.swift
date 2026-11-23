@@ -565,11 +565,14 @@ extension MangaView.ViewModel {
 
         do {
             let oldManga = self.manga
-            var newManga = try await source.getMangaUpdate(
-                manga: oldManga,
-                needsDetails: true,
-                needsChapters: true
-            )
+            // pulling to refresh the manga page makes Suwayomi search the scan's website now (SUWA-34)
+            var newManga = try await SuwayomiServerSources.withOriginFetch(forced: true) {
+                try await source.getMangaUpdate(
+                    manga: oldManga,
+                    needsDetails: true,
+                    needsChapters: true
+                )
+            }
 
             // update manga in db
             if inLibrary {

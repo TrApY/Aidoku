@@ -680,7 +680,8 @@ extension LibraryViewController {
                             Task {
                                 await MangaManager.shared.backgroundRefreshLibrary(
                                     category: self.viewModel.isInRealCategory ? self.viewModel.currentCategory : nil,
-                                    skipReachabilityCheck: true
+                                    skipReachabilityCheck: true,
+                                    fromUser: true
                                 )
                             }
                         }
@@ -693,7 +694,8 @@ extension LibraryViewController {
         guard !isBlockedByNoWifi else { return }
         Task {
             await MangaManager.shared.backgroundRefreshLibrary(
-                category: viewModel.isInRealCategory ? viewModel.currentCategory : nil
+                category: viewModel.isInRealCategory ? viewModel.currentCategory : nil,
+                fromUser: true
             )
         }
     }
