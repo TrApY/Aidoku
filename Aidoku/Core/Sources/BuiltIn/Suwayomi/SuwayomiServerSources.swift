@@ -353,7 +353,7 @@ enum SuwayomiServerSources {
         let inLibrary = manga.inLibrary ?? false
         return .init(
             fetchManga: !initialized && (needsDetails || needsChapters),
-            fetchChapters: needsChapters && response.chapterNodes.isEmpty && (!initialized || !inLibrary)
+            fetchChapters: needsChapters && (forceChapters || (response.chapterNodes.isEmpty && (!initialized || !inLibrary)))
         )
     }
 
