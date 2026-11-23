@@ -13,12 +13,11 @@ import Testing
 @Suite(.serialized) struct CompletionJournalTests {
     private let chapter = ChapterIdentifier(sourceKey: "suwayomi.x.1", mangaKey: "1021", chapterKey: "7035")
 
+    /// A journal of its own. Incognito goes to `record` itself: turning on the app's setting would drop what the
+    /// suites running meanwhile record or save.
     private func withJournal(incognito: Bool = false, _ body: (URL) throws -> Void) rethrows {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("completados-\(UUID().uuidString).log")
-        let saved = AppSettings.general.incognitoMode.get()
-        AppSettings.general.incognitoMode.set(incognito)
         defer {
-            AppSettings.general.incognitoMode.set(saved)
             try? FileManager.default.removeItem(at: url)
         }
         try body(url)
@@ -26,7 +25,7 @@ import Testing
 
     @Test func everyCompletionSaysWhy() {
         withJournal { url in
-            CompletionJournal.record(chapter, reason: "webtoon: final visto", detail: "abajo fuera", fileUrl: url)
+            CompletionJournal.record(chapter, reason: "webtoon: final visto", detail: "abajo fuera", fileUrl: url, incognito: false)
             let lines = CompletionJournal.lines(fileUrl: url)
             #expect(lines.count == 1)
             #expect(lines.first?.hasSuffix("\tsuwayomi.x.1\t1021\t7035\twebtoon: final visto\tabajo fuera") == true)
@@ -36,7 +35,7 @@ import Testing
     @Test func theJournalStaysShort() {
         withJournal { url in
             for index in 1...(CompletionJournal.maxLines + 1) {
-                CompletionJournal.record(chapter, reason: "n\(index)", fileUrl: url)
+                CompletionJournal.record(chapter, reason: "n\(index)", fileUrl: url, incognito: false)
             }
             let lines = CompletionJournal.lines(fileUrl: url)
             #expect(lines.count == CompletionJournal.keptLines)
@@ -56,7 +55,7 @@ import Testing
 
     @Test func incognitoWritesNothing() {
         withJournal(incognito: true) { url in
-            CompletionJournal.record(chapter, reason: "lector", fileUrl: url)
+            CompletionJournal.record(chapter, reason: "lector", fileUrl: url, incognito: true)
             #expect(CompletionJournal.lines(fileUrl: url).isEmpty)
         }
     }
