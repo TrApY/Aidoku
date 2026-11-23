@@ -16,12 +16,24 @@ actor MangaManager {
 
     private static let taskIdentifier = (Bundle.main.bundleIdentifier ?? "") + ".libraryRefresh"
 
-    private var libraryRefreshTask: Task<(), Never>?
+    private(set) var libraryRefreshTask: Task<(), Never>?
     private var libraryRefreshProgressTask: Task<(), Never>?
     private var onLibraryRefreshProgress: (@MainActor (Progress) -> Void)?
 
     private var targetCategory: String?
     private var skipReachabilityCheck: Bool = false
+    /// SUWA-34: the pending refresh was asked for by the user (pull to refresh in the library).
+    private var fromUser: Bool = false
+
+    /// Replaces the body of a library refresh and the rescheduling after it (tests).
+    typealias LibraryRefreshBody = @Sendable (_ forceOrigin: Bool) async -> Void
+    private let libraryRefreshBodyOverride: LibraryRefreshBody?
+    private let rescheduleOverride: (@Sendable () -> Void)?
+
+    init(libraryRefreshBody: LibraryRefreshBody? = nil, reschedule: (@Sendable () -> Void)? = nil) {
+        libraryRefreshBodyOverride = libraryRefreshBody
+        rescheduleOverride = reschedule
+    }
 
     private static let maxConcurrentLibraryUpdateTasks = 10
 
@@ -307,7 +319,7 @@ extension MangaManager {
         }
     }
 
-    func backgroundRefreshLibrary(category: String? = nil, skipReachabilityCheck: Bool = false) async {
+    func backgroundRefreshLibrary(category: String? = nil, skipReachabilityCheck: Bool = false, fromUser: Bool = false) async {
         targetCategory = category
         self.skipReachabilityCheck = skipReachabilityCheck
 
@@ -348,6 +360,7 @@ extension MangaManager {
                 await doLibraryRefresh(
                     category: category,
                     skipReachabilityCheck: skipReachabilityCheck,
+                    forceOrigin: false,
                     forceAll: forceAll,
                     task: task,
                     refreshStarted: {
@@ -381,7 +394,11 @@ extension MangaManager {
 
         NotificationCenter.default.post(name: .updateLibrary, object: nil)
 
-        scheduleLibraryRefresh()
+        if let reschedule = rescheduleOverride {
+            reschedule()
+        } else {
+            scheduleLibraryRefresh()
+        }
     }
 
     /// Check if a manga should skip updating based on skip options.
@@ -443,10 +460,16 @@ extension MangaManager {
     private func doLibraryRefresh(
         category: String?,
         skipReachabilityCheck: Bool,
+        forceOrigin: Bool,
         forceAll: Bool,
         task: ProgressReporting? = nil,
         refreshStarted: (() async -> Void)? = nil
     ) async {
+        if let body = libraryRefreshBodyOverride {
+            await body(forceOrigin)
+            return
+        }
+
         // make sure user agent and sources have loaded before doing library refresh
         _ = await UserAgentProvider.shared.getUserAgent()
         await SourceManager.shared.waitForSourcesLoad()

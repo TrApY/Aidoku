@@ -241,6 +241,17 @@ enum SuwayomiServerSources {
     /// Listing the installed sources must not block settings or listings when the server is down.
     static let sourcesTimeout: TimeInterval = 10
 
+    /// SUWA-34: while true, `getMangaUpdate` of the Suwayomi runner asks the server to look for new chapters on
+    /// the scan's website even when it already has some stored. Set by the user's pull to refresh (library and
+    /// manga page) with `withOriginFetch(forced:_:)`; only the Suwayomi runner reads it, the source protocol
+    /// is untouched.
+    @TaskLocal static var forceOriginFetch = false
+
+    /// Runs `operation` with `forceOriginFetch` set to `forced`.
+    static func withOriginFetch<T>(forced: Bool, _ operation: () async throws -> T) async rethrows -> T {
+        try await operation()
+    }
+
     /// Suwayomi's `isNsfw` is the extension flag "may contain NSFW content",
     /// the equivalent of Aidoku's `containsNsfw` rating.
     static func allowsNsfw(contentRatings: Set<AidokuRunner.SourceContentRating>) -> Bool {
@@ -329,11 +340,12 @@ enum SuwayomiServerSources {
     /// What the server has to fetch from the origin before the manga can be read.
     /// - details: only while the manga isn't `initialized` (never fetched);
     /// - chapters: when none are stored and the server doesn't keep them updated itself
-    ///   (not initialized, or not in the server library).
+    ///   (not initialized, or not in the server library), or always when `forceChapters` (SUWA-34).
     static func remoteFetchPlan(
         _ response: SuwayomiMangaUpdateResponse,
         needsDetails: Bool,
-        needsChapters: Bool
+        needsChapters: Bool,
+        forceChapters: Bool = false
     ) -> RemoteFetchPlan {
         let manga = response.data.manga
         // servers without the field: fall back to "no details at all"
