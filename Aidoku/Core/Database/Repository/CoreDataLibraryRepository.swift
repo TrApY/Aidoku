@@ -455,4 +455,8 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         }
         return found
     }
+
+    func migrate(_ request: MigrationRequest) async -> MigrationOutcome? {
+        nil // L11a andamiaje: the transaction is still in MangaManager
+    }
 }

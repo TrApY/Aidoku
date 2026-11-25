@@ -63,4 +63,8 @@ protocol LibraryRepository: Sendable {
         scanlatorFilter: [String],
         incognito: Bool
     ) async -> OpenedRefresh?
+    /// One entry of a manga migration (spec §1.3 nº 13, D-L11-1): the transaction MangaManager ran, moved as it
+    /// was, in one context and one save. nil if the save failed (nothing is left half done). The journal, the
+    /// settings, the server work and the notifications stay with MangaManager.
+    func migrate(_ request: MigrationRequest) async -> MigrationOutcome?
 }
