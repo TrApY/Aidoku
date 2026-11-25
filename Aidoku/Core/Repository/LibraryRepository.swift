@@ -63,4 +63,15 @@ protocol LibraryRepository: Sendable {
         scanlatorFilter: [String],
         incognito: Bool
     ) async -> OpenedRefresh?
+    /// One entry of a manga migration (spec §1.3 nº 13, D-L11-1): the transaction MangaManager ran, moved as it
+    /// was, in one context and one save. nil if the save failed (nothing is left half done). The journal, the
+    /// settings, the server work and the notifications stay with MangaManager.
+    func migrate(_ request: MigrationRequest) async -> MigrationOutcome?
+    /// What a source's own migration looks up (D-L11-7): the source's manga in the library, its stored chapters and
+    /// its history rows, read in one context.
+    func identifiersToRemap(sourceKey: String) async -> IdentifiersToRemap
+    /// Rewrites, in one save, the keys of a source's manga in the library, of its stored chapters and of its history
+    /// rows with the new ones the source gave (spec §1.3 nº 14, D-L11-7); keys without a new one stay. false if the
+    /// save failed.
+    @discardableResult func remapIdentifiers(_ remap: IdentifierRemap) async -> Bool
 }

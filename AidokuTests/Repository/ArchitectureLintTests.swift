@@ -107,6 +107,67 @@ import Testing
         }
     }
 
+    /// SUWA-13 F4 L11 (D-L11-8): the big transactions went to the repositories, so the functions they left open no
+    /// context of their own any more. Their files stay in `allowed` for their other uses (L12).
+    @Test func theMovedTransactionsOpenNoContext() throws {
+        let files = try Self.sources(under: "Aidoku")
+        for (path, function) in [
+            ("Aidoku/Core/Library/Services/MangaManager.swift", "static func migrate("),
+            ("Aidoku/Core/Tracking/TrackerManager.swift", "func syncPageTrackerHistory("),
+            ("Aidoku/App/AppDelegate.swift", "func handleSourceMigration("),
+        ] {
+            let text = try #require(files[path], "\(path)")
+            let body = try #require(Self.body(of: function, in: text), "\(path): \(function)")
+            #expect(!body.contains("performBackgroundTask"), "\(path): \(function)")
+            #expect(!body.contains("CoreDataManager.shared"), "\(path): \(function)")
+        }
+    }
+
+    /// The body is the function's, not that of a closure given as a default value of a parameter
+    /// (TrackerManager.syncPageTrackerHistory has two).
+    @Test func theBodyOfAFunctionIsNotADefaultArgument() {
+        let text = """
+            func f(a: (Int) -> Int = { $0 }, b: @escaping () -> Void = {}) async {
+                work()
+            }
+            """
+        #expect(Self.body(of: "func f(", in: text) == "{\n    work()\n}")
+    }
+
+    /// The text of the function that starts with `signature` (ending in the parameters' opening parenthesis, found once),
+    /// from the first opening brace after its parameters to the one that closes it.
+    static func body(of signature: String, in text: String) -> String? {
+        let starts = text.ranges(of: signature)
+        guard starts.count == 1, signature.hasSuffix("(") else { return nil }
+        // past the parameters: their default values can be closures
+        var parentheses = 1
+        var position = starts[0].upperBound
+        while position < text.endIndex, parentheses > 0 {
+            if text[position] == "(" {
+                parentheses += 1
+            } else if text[position] == ")" {
+                parentheses -= 1
+            }
+            position = text.index(after: position)
+        }
+        guard let open = text[position...].firstIndex(of: "{") else { return nil }
+        var depth = 0
+        var index = open
+        while index < text.endIndex {
+            switch text[index] {
+                case "{": depth += 1
+                case "}":
+                    depth -= 1
+                    if depth == 0 {
+                        return String(text[open...index])
+                    }
+                default: break
+            }
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
     /// The values the contracts carry live with them (so they carry no UIKit either); their UI stays apart.
     @Test(arguments: ["LibraryFilter", "FilterGroup"])
     func theValuesOfTheContractsLiveWithThem(type: String) throws {

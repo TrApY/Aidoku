@@ -42,4 +42,8 @@ protocol HistoryRepository: Sendable {
     @discardableResult func removeAll(of manga: MangaIdentifier) async -> Bool
     /// Removes all history; with `excludingLibrary`, the history of manga in the library stays.
     @discardableResult func clear(excludingLibrary: Bool) async -> Bool
+    /// The page trackers' progress (chapter key → progress) brought to the manga's local history (spec §1.3 nº 5,
+    /// D-L11-6): in one context it reads the local history of those chapters, plans with TrackerSyncPlanner and
+    /// writes the plan, in one save. The journal and the notifications stay with the service, after the await.
+    func applyTrackerSync(mangaId: MangaIdentifier, remote: [String: ChapterReadProgress]) async -> TrackerSyncResult
 }
