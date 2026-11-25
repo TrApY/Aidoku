@@ -457,6 +457,216 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
     }
 
     func migrate(_ request: MigrationRequest) async -> MigrationOutcome? {
-        nil // L11a andamiaje: the transaction is still in MangaManager
+        // the names MangaManager.migrate gave them, so the transaction below reads as it did there
+        let oldManga = request.old
+        let newManga = request.new
+        let newChapters = request.newChapters
+        let options = request.options
+        let copy = options.keepOriginal
+        let newWasInLibrary = request.newWasInLibrary
+        let suwayomiTrackerId = request.suwayomiTrackerId
+        let suwayomiNewTrackId = request.suwayomiNewTrackId
+        // one context and one save, with the context's own merge policy (D-L11-3)
+        return await container.performBackgroundTask { context in
+            do {
+                // the order chosen in the old library entry (its flags), before it may go (SUWA-12 I3)
+                let oldSort = CoreDataManager.shared.getManga(mangaId: oldManga.identifier, context: context)
+                    .flatMap { ChapterSortMemory.chosen(inFlags: Int($0.chapterFlags)) }
+                // update manga object in library with new data
+                // remove old entry if the new one already exists in library
+                if !copy {
+                    var mangaObjectToUpdate: MangaObject?
+                    let oldCategories = CoreDataManager.shared.getCategories(mangaId: oldManga.identifier, context: context)
+
+                    // new is already in library
+                    if newManga.key != oldManga.key, let storedNewManga = CoreDataManager.shared.getManga(
+                        mangaId: newManga.identifier,
+                        context: context
+                    ) {
+                        // update the object in the library with the new details we fetched already
+                        mangaObjectToUpdate = storedNewManga
+                        // remove old entry
+                        CoreDataManager.shared.removeManga(
+                            mangaId: oldManga.identifier,
+                            context: context
+                        )
+                        mangaObjectToUpdate?.load(from: newManga)
+                        // it keeps its own categories, plus the old ones if asked
+                        if options.categories {
+                            CoreDataManager.shared.addCategoriesToManga(
+                                mangaId: newManga.identifier,
+                                categories: oldCategories,
+                                context: context
+                            )
+                        }
+                    } else {
+                        // get existing old object to replace data with new details
+                        mangaObjectToUpdate = CoreDataManager.shared.getManga(
+                            mangaId: oldManga.identifier,
+                            context: context
+                        )
+                        let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: oldManga.identifier, context: context)
+                        mangaObjectToUpdate?.load(from: newManga)
+                        // the old library object stays: drop what wasn't asked for
+                        if let libraryObject {
+                            if !options.categories {
+                                libraryObject.categories = NSSet()
+                            }
+                            if !options.readChapters {
+                                libraryObject.lastRead = nil
+                            }
+                        }
+                    }
+                }
+
+                // copy categories
+                if copy && options.categories {
+                    let categories = CoreDataManager.shared.getCategories(
+                        mangaId: oldManga.identifier,
+                        context: context
+                    )
+                    CoreDataManager.shared.addCategoriesToManga(
+                        mangaId: newManga.identifier,
+                        categories: categories,
+                        context: context
+                    )
+                } else if copy && !newWasInLibrary,
+                          let libraryObject = CoreDataManager.shared.getLibraryManga(mangaId: newManga.identifier, context: context) {
+                    // without categories (also without the default one it got when added)
+                    libraryObject.categories = NSSet()
+                }
+
+                // ... goes to the new entry: replaced, copied or already in the library
+                if let oldSort, let newObject = CoreDataManager.shared.getManga(mangaId: newManga.identifier, context: context) {
+                    newObject.chapterFlags = Int16(ChapterSortMemory.flags(oldSort, into: Int(newObject.chapterFlags)))
+                }
+
+                // migrate history
+                let storedOldHistory = CoreDataManager.shared.getHistoryForManga(
+                    mangaId: oldManga.identifier,
+                    context: context
+                )
+
+                // read = completed only; unfinished chapters keep their page; dates are kept
+                let historyPlan = MigrationHistory.plan(
+                    old: storedOldHistory.map {
+                        .init(
+                            chapter: $0.chapter?.chapter?.floatValue,
+                            volume: $0.chapter?.volume?.floatValue,
+                            completed: $0.completed,
+                            progress: Int($0.progress),
+                            total: Int($0.total),
+                            dateRead: $0.dateRead,
+                            scrollPosition: $0.scrollPosition?.doubleValue
+                        )
+                    },
+                    newChapters: newChapters
+                )
+
+                // remove old chapters and history
+                if !copy {
+                    CoreDataManager.shared.removeChapters(
+                        mangaId: oldManga.identifier,
+                        context: context
+                    )
+
+                    CoreDataManager.shared.removeHistory(
+                        mangaId: oldManga.identifier,
+                        context: context
+                    )
+
+                    // store new chapters
+                    CoreDataManager.shared.setChapters(
+                        newChapters,
+                        mangaId: newManga.identifier,
+                        context: context
+                    )
+                }
+
+                // mark new chapters as read, with the old reading dates (only if asked)
+                // the journal lines go back to the service, which writes them once saved (D-L11-2)
+                var completions: [MigrationOutcome.Completion] = []
+                for completed in options.readChapters ? historyPlan.completed : [] {
+                    completions.append(.init(
+                        chapter: .init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: completed.chapterKey),
+                        reason: "migración desde \(oldManga.identifier)"
+                    ))
+                    CoreDataManager.shared.setCompleted(
+                        chapterIds: [.init(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: completed.chapterKey)],
+                        date: completed.date,
+                        context: context
+                    )
+                }
+                // the unfinished chapter keeps its page (unless the new chapter already has its own history)
+                for unfinished in options.readChapters ? historyPlan.inProgress : [] {
+                    let chapterId = ChapterIdentifier(sourceKey: newManga.sourceKey, mangaKey: newManga.key, chapterKey: unfinished.chapterKey)
+                    if let existing = CoreDataManager.shared.getHistory(chapterId: chapterId, context: context),
+                       existing.completed || existing.progress > 0 {
+                        continue
+                    }
+                    CoreDataManager.shared.setProgress(
+                        unfinished.progress,
+                        chapterId: chapterId,
+                        totalPages: unfinished.total > 0 ? unfinished.total : nil,
+                        scrollPosition: unfinished.scrollPosition,
+                        dateRead: unfinished.date,
+                        context: context
+                    )
+                }
+
+                // migrate trackers
+                let trackItems = CoreDataManager.shared.getTracks(
+                    mangaId: oldManga.identifier,
+                    context: context
+                )
+
+                for item in trackItems {
+                    guard let trackId = item.id, let trackerId = item.trackerId else {
+                        if !copy && newManga.identifier != oldManga.identifier {
+                            context.delete(item) // a broken item doesn't stay behind
+                        }
+                        continue
+                    }
+                    let isSuwayomi = trackerId == suwayomiTrackerId
+                    let action = MigrationOptions.trackAction(
+                        isSuwayomi: isSuwayomi,
+                        trackId: trackId,
+                        suwayomiNewTrackId: suwayomiNewTrackId,
+                        keepOriginal: copy,
+                        sameEntry: newManga.identifier == oldManga.identifier,
+                        newHasTrack: CoreDataManager.shared.hasTrack(trackerId: trackerId, mangaId: newManga.identifier, context: context),
+                        tracking: options.tracking,
+                        canTrackNew: !isSuwayomi && request.canTrackNew(trackerId)
+                    )
+                    switch action {
+                        case .keep:
+                            break
+                        case .delete:
+                            context.delete(item)
+                        case let .move(id):
+                            if let id {
+                                item.id = id
+                            }
+                            item.sourceId = newManga.sourceKey
+                            item.mangaId = newManga.key
+                        case let .copy(id):
+                            CoreDataManager.shared.createTrack(
+                                id: id,
+                                trackerId: trackerId,
+                                mangaId: newManga.identifier,
+                                title: item.title,
+                                context: context
+                            )
+                    }
+                }
+
+                try context.save()
+
+                return MigrationOutcome(from: oldManga, to: newManga, completions: completions)
+            } catch {
+                LogManager.logger.error("Error migrating manga \(oldManga.key): \(error)")
+                return nil
+            }
+        }
     }
 }
