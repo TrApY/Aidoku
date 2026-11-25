@@ -134,11 +134,23 @@ import Testing
         #expect(Self.body(of: "func f(", in: text) == "{\n    work()\n}")
     }
 
-    /// The text of the function that starts with `signature` (which must be found once), from its first opening brace
-    /// to the one that closes it.
+    /// The text of the function that starts with `signature` (ending in the parameters' opening parenthesis, found once),
+    /// from the first opening brace after its parameters to the one that closes it.
     static func body(of signature: String, in text: String) -> String? {
         let starts = text.ranges(of: signature)
-        guard starts.count == 1, let open = text[starts[0].upperBound...].firstIndex(of: "{") else { return nil }
+        guard starts.count == 1, signature.hasSuffix("(") else { return nil }
+        // past the parameters: their default values can be closures
+        var parentheses = 1
+        var position = starts[0].upperBound
+        while position < text.endIndex, parentheses > 0 {
+            if text[position] == "(" {
+                parentheses += 1
+            } else if text[position] == ")" {
+                parentheses -= 1
+            }
+            position = text.index(after: position)
+        }
+        guard let open = text[position...].firstIndex(of: "{") else { return nil }
         var depth = 0
         var index = open
         while index < text.endIndex {
