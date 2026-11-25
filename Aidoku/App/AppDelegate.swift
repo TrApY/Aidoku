@@ -705,22 +705,13 @@ extension AppDelegate {
                         // if the source handles the migration, we can migrate all the db ids
                         self.showLoadingIndicator()
                         Task {
+                            let toRemap = await DataRepositories.shared.library.identifiersToRemap(sourceKey: source.id)
                             let (
                                 libraryMangaIds,
                                 libraryChaptersIds,
                                 historyMangaIds,
                                 historyChapterIds,
-                            ) = await CoreDataManager.shared.container.performBackgroundTask { context in
-                                let historyObjects = CoreDataManager.shared.getHistory(sourceKey: source.id, context: context)
-                                return (
-                                    CoreDataManager.shared.getLibraryManga(sourceKey: source.id, context: context)
-                                        .compactMap { $0.manga?.id },
-                                    CoreDataManager.shared.getChapters(sourceKey: source.id, context: context)
-                                        .map { ($0.mangaId, $0.id) },
-                                    historyObjects.map { $0.mangaId },
-                                    historyObjects.map { ($0.mangaId, $0.chapterId) },
-                                )
-                            }
+                            ) = (toRemap.libraryMangaKeys, toRemap.chapters, toRemap.historyMangaKeys, toRemap.historyChapters)
                             var newMangaIds: [String: String] = [:]
                             var newChapterIds: [String: String] = [:]
                             if source.features.handlesNotifications {
@@ -741,31 +732,9 @@ extension AppDelegate {
                             for (mangaId, oldId) in historyChapterIds where newChapterIds[oldId] == nil  {
                                 newChapterIds[oldId] = try? await source.handleMigration(kind: .chapter, mangaKey: mangaId, chapterKey: oldId)
                             }
-                            await CoreDataManager.shared.container.performBackgroundTask { [newMangaIds, newChapterIds] context in
-                                let libraryObjects = CoreDataManager.shared.getLibraryManga(sourceKey: source.id, context: context)
-                                let chapterObjects = CoreDataManager.shared.getChapters(sourceKey: source.id, context: context)
-                                let historyObjects = CoreDataManager.shared.getHistory(sourceKey: source.id, context: context)
-                                for object in libraryObjects {
-                                    guard
-                                        let oldId = object.manga?.id,
-                                        let newId = newMangaIds[oldId]
-                                    else { continue }
-                                    object.manga?.id = newId
-                                }
-                                for object in chapterObjects {
-                                    object.mangaId = newMangaIds[object.mangaId] ?? object.mangaId
-                                    object.id = newChapterIds[object.id] ?? object.id
-                                }
-                                for object in historyObjects {
-                                    object.mangaId = newMangaIds[object.mangaId] ?? object.mangaId
-                                    object.chapterId = newChapterIds[object.chapterId] ?? object.chapterId
-                                }
-                                do {
-                                    try context.save()
-                                } catch {
-                                    LogManager.logger.error("Failed to save id migration: \(error)")
-                                }
-                            }
+                            await DataRepositories.shared.library.remapIdentifiers(
+                                IdentifierRemap(sourceKey: source.id, mangaKeys: newMangaIds, chapterKeys: newChapterIds)
+                            )
 
                             NotificationCenter.default.post(name: .updateLibrary, object: nil)
                             NotificationCenter.default.post(name: .updateHistory, object: nil)

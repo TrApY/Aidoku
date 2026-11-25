@@ -671,11 +671,43 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
     }
 
     func identifiersToRemap(sourceKey: String) async -> IdentifiersToRemap {
-        // L11c andamiaje: still read in AppDelegate
-        IdentifiersToRemap(libraryMangaKeys: [], chapters: [], historyMangaKeys: [], historyChapters: [])
+        await container.performBackgroundTask { context in
+            let historyObjects = CoreDataManager.shared.getHistory(sourceKey: sourceKey, context: context)
+            return IdentifiersToRemap(
+                libraryMangaKeys: CoreDataManager.shared.getLibraryManga(sourceKey: sourceKey, context: context)
+                    .compactMap { $0.manga?.id },
+                chapters: CoreDataManager.shared.getChapters(sourceKey: sourceKey, context: context)
+                    .map { (mangaKey: $0.mangaId, chapterKey: $0.id) },
+                historyMangaKeys: historyObjects.map { $0.mangaId },
+                historyChapters: historyObjects.map { (mangaKey: $0.mangaId, chapterKey: $0.chapterId) }
+            )
+        }
     }
 
     func remapIdentifiers(_ remap: IdentifierRemap) async -> Bool {
-        false // L11c andamiaje: still written in AppDelegate
+        let sourceKey = remap.sourceKey
+        let newMangaIds = remap.mangaKeys
+        let newChapterIds = remap.chapterKeys
+        return await container.performBackgroundTask { context in
+            let libraryObjects = CoreDataManager.shared.getLibraryManga(sourceKey: sourceKey, context: context)
+            let chapterObjects = CoreDataManager.shared.getChapters(sourceKey: sourceKey, context: context)
+            let historyObjects = CoreDataManager.shared.getHistory(sourceKey: sourceKey, context: context)
+            for object in libraryObjects {
+                guard
+                    let oldId = object.manga?.id,
+                    let newId = newMangaIds[oldId]
+                else { continue }
+                object.manga?.id = newId
+            }
+            for object in chapterObjects {
+                object.mangaId = newMangaIds[object.mangaId] ?? object.mangaId
+                object.id = newChapterIds[object.id] ?? object.id
+            }
+            for object in historyObjects {
+                object.mangaId = newMangaIds[object.mangaId] ?? object.mangaId
+                object.chapterId = newChapterIds[object.chapterId] ?? object.chapterId
+            }
+            return context.saveLogging("Failed to save id migration")
+        }
     }
 }
