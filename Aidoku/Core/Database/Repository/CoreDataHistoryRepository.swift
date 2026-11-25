@@ -164,7 +164,51 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
     }
 
     func applyTrackerSync(mangaId: MangaIdentifier, remote: [String: ChapterReadProgress]) async -> TrackerSyncResult {
-        // L11b andamiaje: the sync is still written in TrackerManager
-        TrackerSyncResult(saved: false, plan: TrackerSyncPlan())
+        await container.performBackgroundTask { context in
+            func chapterId(_ chapterKey: String) -> ChapterIdentifier {
+                ChapterIdentifier(sourceKey: mangaId.sourceKey, mangaKey: mangaId.mangaKey, chapterKey: chapterKey)
+            }
+            // the local history read in the same context the plan is written in: the comparison of dates stays
+            // atomic with the save
+            var local: [String: TrackerSyncLocal] = [:]
+            for chapterKey in remote.keys {
+                if let existingHistory = CoreDataManager.shared.getHistory(chapterId: chapterId(chapterKey), context: context) {
+                    local[chapterKey] = TrackerSyncLocal(
+                        completed: existingHistory.completed,
+                        progress: Int(existingHistory.progress),
+                        total: Int(existingHistory.total),
+                        dateRead: existingHistory.dateRead
+                    )
+                }
+            }
+            let plan = TrackerSyncPlanner.plan(local: local, remote: remote)
+            for step in plan.steps {
+                switch step {
+                    case let .complete(chapterKey, date, _):
+                        CoreDataManager.shared.setCompleted(
+                            chapterIds: [chapterId(chapterKey)],
+                            date: date,
+                            context: context
+                        )
+                    case let .progress(chapterKey, page, date):
+                        CoreDataManager.shared.setProgress(
+                            page,
+                            chapterId: chapterId(chapterKey),
+                            dateRead: date,
+                            completed: false,
+                            context: context
+                        )
+                }
+            }
+            if let date = plan.mangaRead {
+                CoreDataManager.shared.setRead(
+                    mangaId: mangaId,
+                    date: date,
+                    context: context
+                )
+            }
+            let saved = context.saveLogging("TrackerManager.syncPageTrackerHistory")
+            return TrackerSyncResult(saved: saved, plan: plan)
+        }
     }
 }

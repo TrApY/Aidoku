@@ -383,84 +383,11 @@ actor TrackerManager {
         guard !result.isEmpty else { return }
         let trackerIdsForJournal = trackItems.map(\.trackerId).joined(separator: ",")
 
-        // create local history
-        let (completed, progressed) = await CoreDataManager.shared.container.performBackgroundTask { [result] context in
-            var completed: [String] = []
-            var progressed: [String: Int] = [:]
-            var journal: [(ChapterIdentifier, String)] = [] // written once saved (SUWA-12 H3)
-
-            var lastRead = Date.distantPast
-
-            for (chapterKey, progress) in result {
-                let chapterId = ChapterIdentifier(
-                    sourceKey: manga.sourceKey,
-                    mangaKey: manga.key,
-                    chapterKey: chapterKey
-                )
-                let existingHistory = CoreDataManager.shared.getHistory(
-                    chapterId: chapterId,
-                    context: context
-                )
-                // without a date from the tracker the local history can't be compared: it stays (SUWA-12 F);
-                // a chapter with no local history still gets the tracker's
-                if existingHistory != nil && progress.date == nil {
-                    continue
-                }
-                if let existingDate = existingHistory?.dateRead, let newDate = progress.date, newDate <= existingDate {
-                    // don't update if the existing history is newer than the tracker history
-                    continue
-                }
-                // mark chapters as read
-                if progress.completed {
-                    if !(existingHistory?.completed ?? false) {
-                        journal.append((
-                            chapterId,
-                            "fecha \(progress.date.map { "\($0)" } ?? "ninguna"), local \(existingHistory.map { "pág \($0.progress)/\($0.total)" } ?? "sin historial")"
-                        ))
-                        completed.append(chapterKey)
-                        // without the server's date the manga isn't «read recently» (SUWA-12 H4)
-                        let readDate = progress.date ?? Date.distantPast
-                        lastRead = readDate > lastRead ? readDate : lastRead
-                        CoreDataManager.shared.setCompleted(
-                            chapterIds: [chapterId],
-                            date: progress.date ?? Date(),
-                            context: context
-                        )
-                    }
-                } else if progress.page != 0 {
-                    progressed[chapterKey] = progress.page
-                    let readDate = progress.date ?? Date.now
-                    lastRead = readDate > lastRead ? readDate : lastRead
-                    CoreDataManager.shared.setProgress(
-                        progress.page,
-                        chapterId: chapterId,
-                        dateRead: readDate,
-                        completed: false,
-                        context: context
-                    )
-                }
-            }
-
-            // mark manga as read only if history was updated, with a date
-            if (!completed.isEmpty || !progressed.isEmpty) && lastRead > Date.distantPast {
-                CoreDataManager.shared.setRead(
-                    mangaId: manga.identifier,
-                    date: lastRead,
-                    context: context
-                )
-            }
-
-            do {
-                try context.save()
-                for (chapterId, detail) in journal {
-                    CompletionJournal.record(chapterId, reason: "sincronización \(trackerIdsForJournal)", detail: detail)
-                }
-            } catch {
-                LogManager.logger.error("TrackerManager.syncPageTrackerHistory: \(error)")
-            }
-
-            return (completed, progressed)
-        }
+        // create local history: read, plan and write in one context and one save (D-L11-6)
+        let sync = await DataRepositories.shared.history.applyTrackerSync(mangaId: manga.identifier, remote: result)
+        Self.recordSyncJournal(sync, manga: manga, trackerIds: trackerIdsForJournal)
+        let completed = sync.completed
+        let progressed = sync.progressed
 
         // post notifications to update ui
         if !completed.isEmpty {
@@ -496,7 +423,14 @@ actor TrackerManager {
 
     /// The journal of a page tracker sync: its completions, only if it saved (SUWA-12 H3).
     static func recordSyncJournal(_ sync: TrackerSyncResult, manga: AidokuRunner.Manga, trackerIds: String) {
-        // L11b andamiaje: the journal is still written inside syncPageTrackerHistory
+        guard sync.saved else { return }
+        for case let .complete(chapterKey, _, detail) in sync.plan.steps {
+            CompletionJournal.record(
+                ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapterKey),
+                reason: "sincronización \(trackerIds)",
+                detail: detail
+            )
+        }
     }
 
     /// Add all applicable enhanced trackers to a given manga.
