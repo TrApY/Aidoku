@@ -847,9 +847,9 @@ extension MangaManager {
             // never undo the migration on the device
             let newId = newManga.identifier
             // without the read chapters, the server gets no last read chapter
-            let highestRead = options.readChapters ? await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getHighestReadNumber(mangaId: newId, context: context)
-            } : nil
+            let highestRead = options.readChapters
+                ? await DataRepositories.shared.history.highestReadNumber(of: newId, mode: .stored(for: newId))
+                : nil
             let oldId = oldManga.identifier
             let bind = environment.bindEnhancedTrackers
             let queueKey = suwayomiTracker != nil && suwayomiPlan != .none ? "suwayomi" : "enhancedTrackers"
