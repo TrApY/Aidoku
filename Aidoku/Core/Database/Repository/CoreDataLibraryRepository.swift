@@ -669,4 +669,13 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
             }
         }
     }
+
+    func identifiersToRemap(sourceKey: String) async -> IdentifiersToRemap {
+        // L11c andamiaje: still read in AppDelegate
+        IdentifiersToRemap(libraryMangaKeys: [], chapters: [], historyMangaKeys: [], historyChapters: [])
+    }
+
+    func remapIdentifiers(_ remap: IdentifierRemap) async -> Bool {
+        false // L11c andamiaje: still written in AppDelegate
+    }
 }
