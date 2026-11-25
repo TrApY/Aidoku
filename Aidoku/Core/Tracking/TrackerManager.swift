@@ -494,6 +494,11 @@ actor TrackerManager {
         }
     }
 
+    /// The journal of a page tracker sync: its completions, only if it saved (SUWA-12 H3).
+    static func recordSyncJournal(_ sync: TrackerSyncResult, manga: AidokuRunner.Manga, trackerIds: String) {
+        // L11b andamiaje: the journal is still written inside syncPageTrackerHistory
+    }
+
     /// Add all applicable enhanced trackers to a given manga.
     func bindEnhancedTrackers(manga: AidokuRunner.Manga) async {
         for tracker in Self.trackers where tracker is EnhancedTracker {

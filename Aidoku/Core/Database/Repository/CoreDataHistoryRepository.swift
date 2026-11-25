@@ -162,4 +162,9 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
             return context.saveLogging("HistoryRepository.clear")
         }
     }
+
+    func applyTrackerSync(mangaId: MangaIdentifier, remote: [String: ChapterReadProgress]) async -> TrackerSyncResult {
+        // L11b andamiaje: the sync is still written in TrackerManager
+        TrackerSyncResult(saved: false, plan: TrackerSyncPlan())
+    }
 }
