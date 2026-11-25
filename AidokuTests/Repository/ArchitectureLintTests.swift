@@ -123,6 +123,17 @@ import Testing
         }
     }
 
+    /// The body is the function's, not that of a closure given as a default value of a parameter
+    /// (TrackerManager.syncPageTrackerHistory has two).
+    @Test func theBodyOfAFunctionIsNotADefaultArgument() {
+        let text = """
+            func f(a: (Int) -> Int = { $0 }, b: @escaping () -> Void = {}) async {
+                work()
+            }
+            """
+        #expect(Self.body(of: "func f(", in: text) == "{\n    work()\n}")
+    }
+
     /// The text of the function that starts with `signature` (which must be found once), from its first opening brace
     /// to the one that closes it.
     static func body(of signature: String, in text: String) -> String? {
