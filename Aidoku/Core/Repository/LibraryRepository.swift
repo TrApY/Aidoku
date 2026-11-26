@@ -83,4 +83,8 @@ protocol LibraryRepository: Sendable {
     /// The second part, after the history: every chapter, category and track (three batch deletes, in that order)
     /// and the save there was, in one context.
     func clearChaptersCategoriesAndTracks() async
+    /// The stored manga a source's downloads directory stands for (D-L12-8), in one read: the manga with the
+    /// directory's name as its key or, if there is none, the first one of the source whose key gives that directory
+    /// name; and whether it is in the library.
+    func downloadedEntry(sourceKey: String, directoryName: String) async -> DownloadedEntryInfo
 }

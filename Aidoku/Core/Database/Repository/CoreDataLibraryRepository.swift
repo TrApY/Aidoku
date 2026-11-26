@@ -734,4 +734,8 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
             try? context.save()
         }
     }
+
+    func downloadedEntry(sourceKey: String, directoryName: String) async -> DownloadedEntryInfo {
+        DownloadedEntryInfo(title: nil, cover: nil, isInLibrary: false, mangaKey: "")
+    }
 }
