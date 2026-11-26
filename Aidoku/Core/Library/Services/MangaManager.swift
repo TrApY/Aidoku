@@ -7,7 +7,6 @@
 
 import AidokuRunner
 import BackgroundTasks
-import CoreData
 import Nuke
 import UIKit
 
@@ -481,9 +480,7 @@ extension MangaManager {
         await TrackerManager.shared.processPendingUpdates()
 
         // fetch all library items from db
-        let allManga = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getLibraryManga(category: category, context: context).compactMap { $0.manga?.toManga() }
-        }
+        let allManga = await DataRepositories.shared.library.refreshEntries(category: category).map { $0.toManga() }
 
         // ensure there are manga to update
         guard !allManga.isEmpty else {
