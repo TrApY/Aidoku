@@ -50,4 +50,8 @@ final class CoreDataMangaRepository: MangaRepository, @unchecked Sendable {
             CoreDataManager.shared.setCover(mangaId: id, coverUrl: url, original: original, context: context)
         }
     }
+
+    func updateDetails(_ manga: AidokuRunner.Manga, filters: MangaChapterFilters) async -> Bool {
+        false
+    }
 }
