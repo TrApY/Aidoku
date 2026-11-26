@@ -17,6 +17,8 @@ import Testing
     /// The repository: this file is AidokuTests/Repository/ArchitectureLintTests.swift.
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
+    /// What F4 leaves on Core Data. Aidoku/Core/Database/ is not listed: it is Core Data's own folder and the test
+    /// leaves it out by its prefix.
     static let allowed: Set<String> = [
         "Aidoku/Core/Backup/BackupManager.swift",
         "Aidoku/Core/Backup/Models/BackupCategory.swift",
@@ -72,11 +74,50 @@ import Testing
     @Test func screensAndServicesDoNotUseCoreDataOutsideTheAllowedList() throws {
         let files = try Self.sources(under: "Aidoku")
         #expect(files.count > 400, "the sources were not found from \(Self.root.path)")
+        // Core/Database is Core Data itself
         let using = Set(files.filter { !$0.key.hasPrefix("Aidoku/Core/Database/") && !Self.coreDataUses(in: $0.value).isEmpty }.keys)
         let notAllowed = using.subtracting(Self.allowed).sorted()
         let stale = Self.allowed.subtracting(using).sorted()
         #expect(notAllowed == [], "these use Core Data directly and are not in the allowed list")
         #expect(stale == [], "these no longer use Core Data: take them out of the allowed list")
+    }
+
+    /// SUWA-13 F4 L12 (D-L12-12): the closed list. What is left in `allowed` is what F4 leaves on Core Data on
+    /// purpose (D11): the backups, the Suwayomi conversion with its sync and its start, the local files, the
+    /// vocabulary, their executor and the container's helper. Nothing else may join it.
+    static let closedList = [
+        "Aidoku/Core/Backup/",
+        "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiSourceConversion.swift",
+        "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiServerSourceSync.swift",
+        "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiStartup.swift",
+        "Aidoku/Core/Sources/BuiltIn/Local/LocalFileDataManager.swift",
+        "Aidoku/Core/Dictionary/Vocab/VocabManager.swift",
+        "Aidoku/Core/Utilities/Concurrency/ObjectActorSerialExecutor.swift",
+        "Aidoku/Extensions/CoreData/NSPersistentContainer.swift",
+    ]
+
+    @Test func everyAllowedFileMatchesTheClosedList() {
+        let outside = Self.allowed.filter { file in !Self.closedList.contains { file.hasPrefix($0) } }.sorted()
+        #expect(outside == [], "these are not in the closed list")
+        #expect(Self.allowed.count == 18)
+    }
+
+    /// Uses the line by line check did not see (bajo nº 3): a name split over lines, a fetch request, a managed
+    /// object class.
+    @Test(arguments: [
+        "let container = CoreDataManager\n    .shared\n    .container",
+        "let request = NSFetchRequest<NSFetchRequestResult>(entityName: \"Manga\")",
+        "func read(_ entry: LibraryMangaObject) {}",
+    ])
+    func aUseTheLineCheckMissedIsFound(text: String) {
+        #expect(!Self.coreDataUses(in: text).isEmpty, "\(text)")
+    }
+
+    /// An NSPredicate given to a PHFetchOptions is still not Core Data; any other one is.
+    @Test func aPhotoFetchPredicateIsNotCoreData() {
+        let text = "let options = PHFetchOptions()\noptions.predicate = NSPredicate(format: \"mediaType == %d\", 1)"
+        #expect(Self.coreDataUses(in: text).isEmpty)
+        #expect(!Self.coreDataUses(in: text + "\nlet other = NSPredicate(value: true)").isEmpty)
     }
 
     @Test func theContractsCarryNoCoreDataNorUIKit() throws {
