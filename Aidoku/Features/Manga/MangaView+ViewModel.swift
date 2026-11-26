@@ -962,11 +962,13 @@ extension MangaView.ViewModel {
     }
 
     private func saveFilters() async {
-        let manga = manga.toOld()
-        manga.chapterFlags = generateChapterFlags()
-        manga.langFilter = chapterLangFilter
-        manga.scanlatorFilter = chapterScanlatorFilter
-        await CoreDataManager.shared.updateMangaDetails(manga: manga)
+        let manga = manga
+        let filters = MangaChapterFilters(
+            flags: generateChapterFlags(),
+            language: chapterLangFilter,
+            scanlators: chapterScanlatorFilter
+        )
+        await DataRepositories.shared.manga.updateDetails(manga, filters: filters)
         NotificationCenter.default.post(name: .filteredChapters, object: manga.identifier)
     }
 }

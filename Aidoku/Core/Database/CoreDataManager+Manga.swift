@@ -122,22 +122,21 @@ extension CoreDataManager {
     }
 
     // set the override flag to force update for already edited keys
-    @discardableResult
-    func updateMangaDetails(manga: Manga, override: Bool = false) async -> Manga? {
-        await container.performBackgroundTask { context in
-            guard let object = self.getManga(
-                mangaId: manga.identifier,
-                context: context
-            ) else {
-                return nil
-            }
-            object.load(from: manga, override: override)
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("CoreDataManager.updateMangaDetails: \(error)")
-            }
-            return object.toManga()
+    /// In this context: false if the manga is not stored or the save failed.
+    func updateMangaDetails(manga: Manga, override: Bool = false, context: NSManagedObjectContext) -> Bool {
+        guard let object = self.getManga(
+            mangaId: manga.identifier,
+            context: context
+        ) else {
+            return false
+        }
+        object.load(from: manga, override: override)
+        do {
+            try context.save()
+            return true
+        } catch {
+            LogManager.logger.error("CoreDataManager.updateMangaDetails: \(error)")
+            return false
         }
     }
 

@@ -38,7 +38,6 @@ import Testing
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiStartup.swift",
         "Aidoku/Core/Utilities/Concurrency/ObjectActorSerialExecutor.swift",
         "Aidoku/Extensions/CoreData/NSPersistentContainer.swift",
-        "Aidoku/Features/Manga/MangaView+ViewModel.swift",
         "Aidoku/Features/Settings/SettingsView.swift",
     ]
 
