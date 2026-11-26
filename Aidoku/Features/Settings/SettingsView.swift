@@ -266,17 +266,9 @@ extension SettingsView {
                         await clearNetworkCache()
                         // each clear is a batch delete that runs at once (spec §1.3 nº 18): same order, history by
                         // its repository
-                        await CoreDataManager.shared.container.performBackgroundTask { context in
-                            CoreDataManager.shared.clearLibrary(context: context)
-                            CoreDataManager.shared.clearManga(context: context)
-                        }
+                        await DataRepositories.shared.library.clearLibraryAndManga()
                         await DataRepositories.shared.history.clear(excludingLibrary: false)
-                        await CoreDataManager.shared.container.performBackgroundTask { context in
-                            CoreDataManager.shared.clearChapters(context: context)
-                            CoreDataManager.shared.clearCategories(context: context)
-                            CoreDataManager.shared.clearTracks(context: context)
-                            try? context.save()
-                        }
+                        await DataRepositories.shared.library.clearChaptersCategoriesAndTracks()
                         await SourceManager.shared.clearSources()
                         await SourceManager.shared.clearSourceLists()
                         NotificationCenter.default.post(name: .updateLibrary, object: nil)

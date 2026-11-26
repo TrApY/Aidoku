@@ -719,7 +719,19 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         }
     }
 
-    func clearLibraryAndManga() async {}
+    func clearLibraryAndManga() async {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.clearLibrary(context: context)
+            CoreDataManager.shared.clearManga(context: context)
+        }
+    }
 
-    func clearChaptersCategoriesAndTracks() async {}
+    func clearChaptersCategoriesAndTracks() async {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.clearChapters(context: context)
+            CoreDataManager.shared.clearCategories(context: context)
+            CoreDataManager.shared.clearTracks(context: context)
+            try? context.save()
+        }
+    }
 }
