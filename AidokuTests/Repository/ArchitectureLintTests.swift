@@ -18,7 +18,6 @@ import Testing
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
     static let allowed: Set<String> = [
-        "Aidoku/App/AppDelegate.swift",
         "Aidoku/Core/Backup/BackupManager.swift",
         "Aidoku/Core/Backup/Models/BackupCategory.swift",
         "Aidoku/Core/Backup/Models/BackupChapter.swift",
