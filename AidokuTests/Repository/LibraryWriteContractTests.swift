@@ -219,6 +219,51 @@ import Testing
         #expect(try #require(await store.seed.libraryDates(of: a)).lastUpdatedChapters == old)
         await store.tearDown()
     }
+
+    /// A local file (a manga with a file info) loses only its library entry, by both paths (§1.5 nº 7, bajo nº 23):
+    /// the manga and its chapters with a file stay; the other chapters and its tracks go.
+    @Test(arguments: repositoryFixtures)
+    func removingALocalFileKeepsItsMangaAndItsFiles(fixture: any RepositoryFixture) async throws {
+        for several in [false, true] {
+            let store = try await fixture.make()
+            let repos = store.repos
+            let local = MangaIdentifier(sourceKey: "contract.local", mangaKey: "fichero")
+            await store.addToLibrary([local, b])
+            await store.seed.addChapters([.init(key: "f1"), .init(key: "f2")], to: local)
+            await store.seed.setLocalFile(local, chapters: ["f1"])
+            await repos.tracks.add(track(local, "t1"))
+            let removed = several ? await repos.library.remove([local]) : await repos.library.remove(local)
+            #expect(removed.saved, "several: \(several)")
+            #expect(await !repos.library.contains(local), "several: \(several)")
+            #expect(await repos.manga.contains(local), "several: \(several)")
+            #expect(await repos.chapters.chapters(of: local).map(\.key) == ["f1"], "several: \(several)")
+            #expect(await repos.tracks.items(of: local).isEmpty, "several: \(several)")
+            #expect(await repos.library.contains(b), "several: \(several)")
+            await store.tearDown()
+        }
+    }
+
+    /// More than a batch (101 at once, the batches are of 100): all of them go (bajo nº 23).
+    @Test(arguments: repositoryFixtures)
+    func removingMoreThanABatchAtOnce(fixture: any RepositoryFixture) async throws {
+        let store = try await fixture.make()
+        let repos = store.repos
+        let ids = (0..<101).map { MangaIdentifier(sourceKey: "contract.source", mangaKey: "n\($0)") }
+        await store.addToLibrary(ids + [c])
+        let last = try #require(ids.last)
+        await store.seed.addChapters([.init(key: "l1")], to: last)
+        await repos.tracks.add(track(last, "t1"))
+        #expect(await repos.library.contained(in: ids).count == 101)
+        let removed = await repos.library.remove(ids)
+        #expect(removed.saved)
+        #expect(removed.chapterFlagsBefore.count == 101)
+        #expect(await repos.library.contained(in: ids).isEmpty)
+        #expect(await !repos.manga.contains(last))
+        #expect(await repos.chapters.chapters(of: last).isEmpty)
+        #expect(await repos.tracks.items(of: last).isEmpty)
+        #expect(await repos.library.contains(c))
+        await store.tearDown()
+    }
 }
 
 /// What the adoption closure was given.

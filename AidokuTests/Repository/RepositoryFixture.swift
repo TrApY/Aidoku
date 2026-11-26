@@ -99,6 +99,10 @@ protocol FixtureSeeder: Sendable {
     func updates(of manga: MangaIdentifier) async -> [String: Bool]
     /// The store the sources are saved in (their entity is in the local configuration).
     func sourceStore(key: String) async -> String?
+    /// Sets the chapter's stored url as it is (an empty one included).
+    func setChapterURL(_ chapter: ChapterIdentifier, _ url: String?) async
+    /// Makes the manga and these of its chapters local files (a file info each), as the local source stores them.
+    func setLocalFile(_ manga: MangaIdentifier, chapters: [String]) async
     /// Right before the next save of another context of this store, moves the category `title` to `position` and
     /// saves it from a context of its own: a concurrent write that next save meets (D-L12-9).
     func moveCategoryBeforeNextSave(_ title: String, to position: Int) async
@@ -249,6 +253,40 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
     func sourceStore(key: String) async -> String? {
         await container.performBackgroundTask { context in
             CoreDataManager.shared.getSource(key: key, context: context)?.objectID.persistentStore?.configurationName
+        }
+    }
+
+    func setChapterURL(_ chapter: ChapterIdentifier, _ url: String?) async {
+        await container.performBackgroundTask { context in
+            guard let object = CoreDataManager.shared.getChapter(chapterId: chapter, context: context) else {
+                Issue.record("no such chapter: \(chapter)")
+                return
+            }
+            object.url = url
+            saveSeed(context)
+        }
+    }
+
+    func setLocalFile(_ manga: MangaIdentifier, chapters: [String]) async {
+        await container.performBackgroundTask { context in
+            guard let object = CoreDataManager.shared.getManga(mangaId: manga, context: context) else {
+                Issue.record("no such manga: \(manga)")
+                return
+            }
+            let info = LocalFileInfoObject(context: context)
+            info.path = "contract/\(manga.mangaKey)"
+            object.fileInfo = info
+            for key in chapters {
+                let id = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.mangaKey, chapterKey: key)
+                guard let chapter = CoreDataManager.shared.getChapter(chapterId: id, context: context) else {
+                    Issue.record("no such chapter: \(id)")
+                    continue
+                }
+                let file = LocalFileInfoObject(context: context)
+                file.path = "contract/\(manga.mangaKey)/\(key)"
+                chapter.fileInfo = file
+            }
+            saveSeed(context)
         }
     }
 
