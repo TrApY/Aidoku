@@ -736,6 +736,41 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
     }
 
     func downloadedEntry(sourceKey: String, directoryName: String) async -> DownloadedEntryInfo {
-        DownloadedEntryInfo(title: nil, cover: nil, isInLibrary: false, mangaKey: "")
+        await container.performBackgroundTask { context in
+            // First try direct lookup with the directory name
+            var mangaObject = CoreDataManager.shared.getManga(
+                mangaId: .init(sourceKey: sourceKey, mangaKey: directoryName),
+                context: context
+            )
+            var isInLibrary = CoreDataManager.shared.hasLibraryManga(
+                mangaId: .init(sourceKey: sourceKey, mangaKey: directoryName),
+                context: context
+            )
+
+            // If not found, try to find a manga whose sanitized ID matches the directory name
+            if mangaObject == nil {
+                let allMangaForSource = CoreDataManager.shared.getManga(context: context)
+                    .filter { $0.sourceId == sourceKey }
+
+                for candidateManga in allMangaForSource {
+                    let candidateId = candidateManga.id
+                    if candidateId.directoryName == directoryName {
+                        mangaObject = candidateManga
+                        isInLibrary = CoreDataManager.shared.hasLibraryManga(
+                            mangaId: .init(sourceKey: sourceKey, mangaKey: candidateId),
+                            context: context
+                        )
+                        break
+                    }
+                }
+            }
+
+            return DownloadedEntryInfo(
+                title: mangaObject?.title,
+                cover: mangaObject?.cover,
+                isInLibrary: isInLibrary,
+                mangaKey: mangaObject?.id ?? directoryName
+            )
+        }
     }
 }
