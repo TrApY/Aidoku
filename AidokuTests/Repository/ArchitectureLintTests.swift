@@ -40,7 +40,16 @@ import Testing
         "Aidoku/Extensions/CoreData/NSPersistentContainer.swift",
     ]
 
-    static let patterns = ["CoreDataManager.shared", "import CoreData", "NSManagedObject", "NSPredicate", "NSSortDescriptor"]
+    /// What counts as Core Data, looked for in the whole text of a file (bajo nº 3: a name split over lines too).
+    static let patterns = [
+        #"CoreDataManager\s*\.\s*shared"#,
+        #"import\s+CoreData\b"#,
+        "NSManagedObject",
+        "NSPredicate",
+        "NSSortDescriptor",
+        "NSFetchRequest",
+        #"\b(Manga|Chapter|History|LibraryManga|Category|Track|Source|MangaUpdate|ReadingSession|Vocab\w*)Object\b"#,
+    ]
 
     /// relative path → contents of every Swift file under `folder`
     static func sources(under folder: String) throws -> [String: String] {
@@ -55,20 +64,16 @@ import Testing
         return out
     }
 
-    /// The patterns a file uses (an NSPredicate assigned to a PHFetchOptions does not count).
+    /// The patterns a file uses, in its whole text (an NSPredicate assigned to a PHFetchOptions does not count).
     static func coreDataUses(in text: String) -> Set<String> {
-        let photoOptions = text.matches(of: #/let\s+(\w+)\s*=\s*PHFetchOptions\(\)/#).map { String($0.output.1) }
-        var found: Set<String> = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            for pattern in patterns where line.contains(pattern) {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if pattern == "NSPredicate", photoOptions.contains(where: { trimmed.hasPrefix("\($0).predicate =") }) {
-                    continue
-                }
-                found.insert(pattern)
-            }
+        var text = text
+        for name in text.matches(of: #/let\s+(\w+)\s*=\s*PHFetchOptions\(\)/#).map({ String($0.output.1) }) {
+            guard let given = try? Regex("\\b\(name)\\s*\\.\\s*predicate\\s*=\\s*NSPredicate") else { continue }
+            text = text.replacing(given, with: "")
         }
-        return found
+        return Set(patterns.filter { pattern in
+            (try? Regex(pattern)).map { text.contains($0) } ?? true
+        })
     }
 
     @Test func screensAndServicesDoNotUseCoreDataOutsideTheAllowedList() throws {
