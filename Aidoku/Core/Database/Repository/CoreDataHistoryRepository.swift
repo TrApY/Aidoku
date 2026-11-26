@@ -88,7 +88,12 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
     }
 
     func readState(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> HistoryReadState {
-        HistoryReadState(highestReadNumber: nil, earliestReadDate: nil)
+        await container.performBackgroundTask { context in
+            HistoryReadState(
+                highestReadNumber: CoreDataManager.shared.getHighestReadNumber(mangaId: manga, mode: mode, context: context),
+                earliestReadDate: CoreDataManager.shared.getEarliestReadDate(mangaId: manga, context: context)
+            )
+        }
     }
 
     // MARK: writes

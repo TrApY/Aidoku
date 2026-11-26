@@ -297,14 +297,6 @@ extension CoreDataManager {
         return result?.dateRead
     }
 
-    /// Get the highest read number (chapter or volume) based on forced mode for a manga.
-    func getHighestReadNumber(
-        mangaId: MangaIdentifier,
-        context: NSManagedObjectContext
-    ) -> Float? {
-        getHighestReadNumber(mangaId: mangaId, mode: .stored(for: mangaId), context: context)
-    }
-
     /// The highest read number (chapter or volume) of a manga as `mode` counts it.
     func getHighestReadNumber(
         mangaId: MangaIdentifier,

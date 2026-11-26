@@ -36,7 +36,6 @@ import Testing
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiServerSourceSync.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiSourceConversion.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiStartup.swift",
-        "Aidoku/Core/Tracking/TrackerManager.swift",
         "Aidoku/Core/Utilities/Concurrency/ObjectActorSerialExecutor.swift",
         "Aidoku/Extensions/CoreData/NSPersistentContainer.swift",
         "Aidoku/Features/Manga/MangaView+ViewModel.swift",
