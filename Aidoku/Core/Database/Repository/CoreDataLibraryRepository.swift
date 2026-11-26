@@ -718,4 +718,8 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
             return context.saveLogging("Failed to save id migration")
         }
     }
+
+    func clearLibraryAndManga() async {}
+
+    func clearChaptersCategoriesAndTracks() async {}
 }

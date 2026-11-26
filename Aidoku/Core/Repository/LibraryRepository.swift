@@ -77,4 +77,10 @@ protocol LibraryRepository: Sendable {
     /// rows with the new ones the source gave (spec §1.3 nº 14, D-L11-7); keys without a new one stay. false if the
     /// save failed.
     @discardableResult func remapIdentifiers(_ remap: IdentifierRemap) async -> Bool
+    /// Settings' «reset», first part (D-L12-7, spec §1.3 nº 18): every library entry and every manga, two batch
+    /// deletes that run at once, in one context (there is nothing to save). A failed one is logged, as before.
+    func clearLibraryAndManga() async
+    /// The second part, after the history: every chapter, category and track (three batch deletes, in that order)
+    /// and the save there was, in one context.
+    func clearChaptersCategoriesAndTracks() async
 }
