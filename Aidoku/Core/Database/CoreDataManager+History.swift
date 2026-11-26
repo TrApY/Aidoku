@@ -223,11 +223,6 @@ extension CoreDataManager {
         return historyDict
     }
 
-    @MainActor
-    func getProgress(chapterId: ChapterIdentifier) -> (completed: Bool, progress: Int?) {
-        getProgress(chapterId: chapterId, context: context)
-    }
-
     /// Get current completion status and page progress for chapter
     func getProgress(
         chapterId: ChapterIdentifier,

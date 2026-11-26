@@ -16,11 +16,6 @@ final class CoreDataManager: @unchecked Sendable {
 
     let container: NSPersistentCloudKitContainer
 
-    @MainActor
-    var context: NSManagedObjectContext {
-        container.viewContext
-    }
-
     // only accessed from init
     private var cancellables: Set<AnyCancellable> = []
 
@@ -121,29 +116,6 @@ final class CoreDataManager: @unchecked Sendable {
 //        }
 
         return container
-    }
-
-    @MainActor
-    func save() {
-        do {
-            try context.save()
-        } catch {
-            LogManager.logger.error("CoreDataManager.save: \(error.localizedDescription)")
-        }
-    }
-
-//    func saveIfNeeded() {
-//        if context.hasChanges {
-//            save()
-//        }
-//    }
-
-    func remove(_ objectID: NSManagedObjectID) {
-        container.performBackgroundTask { context in
-            let object = context.object(with: objectID)
-            context.delete(object)
-            try? context.save()
-        }
     }
 
     /// Clear all objects from fetch request.
