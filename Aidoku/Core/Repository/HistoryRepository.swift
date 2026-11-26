@@ -23,6 +23,8 @@ protocol HistoryRepository: Sendable {
     /// The highest number read (completed) as `mode` counts it; the caller gives the mode (it used to be read from the
     /// settings inside, §1.5 nº 5; ChapterTitleDisplayMode.stored(for:) gives the stored one).
     func highestReadNumber(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> Float?
+    /// `highestReadNumber` and `earliestReadDate` in one read, as registering a tracker needs them (D-L12-4).
+    func readState(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> HistoryReadState
 
     // MARK: writes
 

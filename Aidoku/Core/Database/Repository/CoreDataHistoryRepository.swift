@@ -87,6 +87,10 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
         }
     }
 
+    func readState(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> HistoryReadState {
+        HistoryReadState(highestReadNumber: nil, earliestReadDate: nil)
+    }
+
     // MARK: writes
 
     @discardableResult
