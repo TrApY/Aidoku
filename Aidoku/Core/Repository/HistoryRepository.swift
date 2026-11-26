@@ -48,4 +48,8 @@ protocol HistoryRepository: Sendable {
     /// D-L11-6): in one context it reads the local history of those chapters, plans with TrackerSyncPlanner and
     /// writes the plan, in one save. The journal and the notifications stay with the service, after the await.
     func applyTrackerSync(mangaId: MangaIdentifier, remote: [String: ChapterReadProgress]) async -> TrackerSyncResult
+    /// The 0.6 migration of the history (D-L12-6): links each history row without a chapter to its stored chapter,
+    /// in one context and one save; the rows already linked stay as they are. `progress` gets, from that context,
+    /// the share of rows gone through before each row (from 0, below 1). false if the save failed.
+    @discardableResult func migrateChapterLinks(progress: @escaping @Sendable (Float) -> Void) async -> Bool
 }

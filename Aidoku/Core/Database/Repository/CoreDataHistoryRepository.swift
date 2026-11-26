@@ -220,4 +220,8 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
             return TrackerSyncResult(saved: saved, plan: plan)
         }
     }
+
+    func migrateChapterLinks(progress: @escaping @Sendable (Float) -> Void) async -> Bool {
+        false
+    }
 }
