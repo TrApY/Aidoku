@@ -24,7 +24,10 @@ import Testing
     func theEditedFieldsStayAndTheFiltersAreWritten(fixture: any RepositoryFixture) async throws {
         let store = try await fixture.make()
         let repo = store.repos.manga
-        await store.seed.setManga(id, MangaSeed(flags: 1, language: "es", scanlators: ["A"], cover: "https://example.com/old.jpg", title: "Viejo", author: "Autor"))
+        await store.seed.setManga(
+            id,
+            MangaSeed(flags: 1, language: "es", scanlators: ["A"], cover: "https://example.com/old.jpg", title: "Viejo", author: "Autor")
+        )
         // the user set the cover: an edited field
         await repo.setCover(id, url: "https://example.com/mine.jpg", original: false)
 
