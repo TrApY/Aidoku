@@ -636,10 +636,7 @@ extension MangaManager {
 
         // set cover in coredata
         let coverUrl = "aidoku-image:///Covers/\(targetUrl.lastPathComponent)"
-        await CoreDataManager.shared.setCover(
-            mangaId: manga.identifier,
-            coverUrl: coverUrl
-        )
+        await DataRepositories.shared.manga.setCover(manga.identifier, url: coverUrl, original: false)
 
         return coverUrl
     }
@@ -648,11 +645,7 @@ extension MangaManager {
         var cover: String?
         defer {
             // set new cover and get old cover url
-            let originalCover = await CoreDataManager.shared.setCover(
-                mangaId: manga.identifier,
-                coverUrl: cover,
-                original: true
-            )
+            let originalCover = await DataRepositories.shared.manga.setCover(manga.identifier, url: cover, original: true)
 
             // if the original cover is an aidoku image, remove it
             if originalCover != cover, let originalCover, let url = URL(string: originalCover)?.toAidokuFileUrl() {

@@ -6,7 +6,6 @@
 //
 
 import AidokuRunner
-import CoreData
 import Foundation
 import ZIPFoundation
 
@@ -463,9 +462,10 @@ extension LocalFileManager {
         }
 
         // set cover image in coredata
-        return await CoreDataManager.shared.setCover(
-            mangaId: .init(sourceKey: LocalSourceRunner.sourceKey, mangaKey: mangaKey),
-            coverUrl: newCoverURL.toAidokuImageUrl()?.absoluteString
+        return await DataRepositories.shared.manga.setCover(
+            .init(sourceKey: LocalSourceRunner.sourceKey, mangaKey: mangaKey),
+            url: newCoverURL.toAidokuImageUrl()?.absoluteString,
+            original: false
         )
     }
 }

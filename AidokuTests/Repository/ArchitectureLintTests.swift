@@ -34,7 +34,6 @@ import Testing
         "Aidoku/Core/Downloads/DownloadManager.swift",
         "Aidoku/Core/Library/Services/MangaManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Local/LocalFileDataManager.swift",
-        "Aidoku/Core/Sources/BuiltIn/Local/LocalFileManager.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiServerSourceSync.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiSourceConversion.swift",
         "Aidoku/Core/Sources/BuiltIn/Suwayomi/SuwayomiStartup.swift",

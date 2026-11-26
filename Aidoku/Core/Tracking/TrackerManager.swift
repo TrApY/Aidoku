@@ -470,14 +470,7 @@ extension TrackerManager {
         let inLibrary = await DataRepositories.shared.library.contains(manga.identifier)
         if inLibrary {
             // load data from db
-            return await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getChapters(
-                    mangaId: manga.identifier,
-                    context: context
-                ).map {
-                    $0.toNewChapter()
-                }
-            }
+            return await DataRepositories.shared.chapters.chapters(of: manga.identifier)
         } else {
             return (try? await SourceManager.shared.source(for: manga.sourceKey)?.getMangaUpdate(
                 manga: manga,
@@ -513,12 +506,10 @@ extension TrackerManager {
         let currentHighestRead = if let currentHighestRead {
             currentHighestRead
         } else {
-            await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getHighestReadNumber(
-                    mangaId: manga.identifier,
-                    context: context
-                ) ?? 0
-            }
+            await DataRepositories.shared.history.highestReadNumber(
+                of: manga.identifier,
+                mode: .stored(for: manga.identifier)
+            ) ?? 0
         }
 
         // Check for display mode
