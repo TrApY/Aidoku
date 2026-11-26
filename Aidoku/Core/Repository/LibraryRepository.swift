@@ -18,6 +18,9 @@ protocol LibraryRepository: Sendable {
     func entries(sourceKey: String) async -> [AidokuRunner.Manga]
     /// The manga in the library, all of them or those in a category.
     func entries(category: String?) async -> [AidokuRunner.Manga]
+    /// The library entries the library refresh goes through (all, or those in a category), each as the old
+    /// `Manga` read it (D-L12-3): one per entry with a manga, in one read.
+    func refreshEntries(category: String?) async -> [LibraryRefreshEntry]
     /// The manga if it is in the library, read as download ahead did (through the old `Manga`).
     func entry(_ id: MangaIdentifier) async -> AidokuRunner.Manga?
     /// The sources with manga in the library.

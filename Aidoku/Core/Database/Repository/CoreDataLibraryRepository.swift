@@ -192,6 +192,10 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         }
     }
 
+    func refreshEntries(category: String?) async -> [LibraryRefreshEntry] {
+        []
+    }
+
     func entry(_ id: MangaIdentifier) async -> AidokuRunner.Manga? {
         await container.performBackgroundTask { context in
             CoreDataManager.shared.getLibraryManga(mangaId: id, context: context)?.manga?.toManga().toNew()
