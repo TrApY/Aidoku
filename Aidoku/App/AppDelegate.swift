@@ -404,7 +404,7 @@ extension AppDelegate {
     private func migrateHistory() async {
         showLoadingIndicator(style: .progress)
         try? await Task.sleep(nanoseconds: 500 * 1_000_000)
-        await CoreDataManager.shared.migrateChapterHistory(progress: { @Sendable progress in
+        await DataRepositories.shared.history.migrateChapterLinks(progress: { @Sendable progress in
             Task { @MainActor in
                 self.indicatorProgress = progress
             }

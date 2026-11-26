@@ -151,32 +151,32 @@ final class CoreDataManager: @unchecked Sendable {
     }
 
     // TODO: clean this up
-    func migrateChapterHistory(progress: (@Sendable (Float) -> Void)? = nil) async {
+    /// The 0.6 migration of the history in this context; false if the save failed.
+    func migrateChapterHistory(progress: (@Sendable (Float) -> Void)? = nil, context: NSManagedObjectContext) -> Bool {
         LogManager.logger.info("Beginning chapter history migration for 0.6")
 
-        await container.performBackgroundTask { context in
-            let request = HistoryObject.fetchRequest()
-            let historyObjects = (try? context.fetch(request)) ?? []
-            let total = Float(historyObjects.count)
-            var i: Float = 0
-            var count = 0
-            for historyObject in historyObjects {
-                progress?(i / total)
-                i += 1
-                guard
-                    historyObject.chapter == nil,
-                    let chapterObject = self.getChapter(
-                        chapterId: historyObject.identifier,
-                        context: context
-                    )
-                else { continue }
-                historyObject.chapter = chapterObject
-                count += 1
-            }
-            try? context.save()
-
-            LogManager.logger.info("Migrated \(count)/\(historyObjects.count) history objects")
+        let request = HistoryObject.fetchRequest()
+        let historyObjects = (try? context.fetch(request)) ?? []
+        let total = Float(historyObjects.count)
+        var i: Float = 0
+        var count = 0
+        for historyObject in historyObjects {
+            progress?(i / total)
+            i += 1
+            guard
+                historyObject.chapter == nil,
+                let chapterObject = self.getChapter(
+                    chapterId: historyObject.identifier,
+                    context: context
+                )
+            else { continue }
+            historyObject.chapter = chapterObject
+            count += 1
         }
+        let saved = (try? context.save()) != nil
+
+        LogManager.logger.info("Migrated \(count)/\(historyObjects.count) history objects")
+        return saved
     }
 }
 

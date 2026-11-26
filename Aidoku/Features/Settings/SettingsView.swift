@@ -239,7 +239,7 @@ extension SettingsView {
                 ) {
                     Task {
                         UIApplication.shared.appDelegate?.showLoadingIndicator(style: .progress)
-                        await CoreDataManager.shared.migrateChapterHistory { progress in
+                        await DataRepositories.shared.history.migrateChapterLinks { progress in
                             Task { @MainActor in
                                 UIApplication.shared.appDelegate?.indicatorProgress = progress
                             }

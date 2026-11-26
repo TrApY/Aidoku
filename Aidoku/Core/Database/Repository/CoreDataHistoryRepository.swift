@@ -221,7 +221,10 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
         }
     }
 
+    @discardableResult
     func migrateChapterLinks(progress: @escaping @Sendable (Float) -> Void) async -> Bool {
-        false
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.migrateChapterHistory(progress: progress, context: context)
+        }
     }
 }
