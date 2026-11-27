@@ -29,7 +29,10 @@ import Testing
 
     /// Inserts what `build` makes in a context of its own and saves; the permanent ids, in `build`'s order.
     @discardableResult
-    private static func insert(_ container: NSPersistentContainer, _ build: (NSManagedObjectContext) -> [NSManagedObject]) throws -> [NSManagedObjectID] {
+    private static func insert(
+        _ container: NSPersistentContainer,
+        _ build: @Sendable (NSManagedObjectContext) -> [NSManagedObject]
+    ) throws -> [NSManagedObjectID] {
         let context = container.newBackgroundContext()
         return try context.performAndWait {
             let objects = build(context)
@@ -55,36 +58,39 @@ import Testing
         var items: [Item]
     }
 
-    /// makeBackup's order with a deletion in the middle: `fetch` in `reading` (the objects come as faults), with
-    /// `fireFirst` each fetched object is read once (the backup was already converting it), then `victims` are
-    /// deleted in another context and saved, and `convert` runs in `reading` on what was fetched.
+    /// makeBackup's order with a deletion in the middle, all on `reading`'s queue as in makeBackup: `fetch` (the
+    /// objects come as faults), with `fireFirst` each fetched object is read once (the backup was already converting
+    /// it), then `victims` are deleted in another context and saved, and `convert` runs on what was fetched.
     private static func convertAfterDeleting<Object: NSManagedObject, Item>(
         _ container: NSPersistentContainer,
         victims: [NSManagedObjectID],
         fireFirst: Bool = false,
-        fetch: (NSManagedObjectContext) -> [Object],
-        convert: ([Object]) -> [Item]
+        fetch: @Sendable (NSManagedObjectContext) -> [Object],
+        convert: @Sendable ([Object]) -> [Item]
     ) throws -> Race<Item> {
         let reading = container.newBackgroundContext()
-        let objects = reading.performAndWait { fetch(reading) }
-        let faults = reading.performAndWait {
+        return try reading.performAndWait {
+            let objects = fetch(reading)
             if fireFirst {
                 for object in objects {
                     object.willAccessValue(forKey: nil)
                     object.didAccessValue(forKey: nil)
                 }
             }
-            return objects.filter(\.isFault).count
+            let faults = objects.filter(\.isFault).count
+            try delete(container, victims)
+            return Race(fetched: objects.count, faultsBeforeDeleting: faults, items: convert(objects))
         }
-        try delete(container, victims)
-        let items = reading.performAndWait { convert(objects) }
-        return Race(fetched: objects.count, faultsBeforeDeleting: faults, items: items)
     }
 
     private static let source = "fuente.prueba"
 
     private static func date(_ seconds: TimeInterval) -> Date {
         Date(timeIntervalSince1970: seconds)
+    }
+
+    private static func object<T: NSManagedObject>(_ id: NSManagedObjectID, _ context: NSManagedObjectContext) -> T? {
+        context.object(with: id) as? T
     }
 
     @discardableResult
@@ -443,12 +449,9 @@ import Testing
     /// saved on its own, so that the rows get their keys, and the fetches without a sort their order, always in the
     /// same order (the objects inserted by one save get theirs in an order of their own).
     private static func seedEverything(_ container: NSPersistentContainer) throws {
-        func one(_ build: (NSManagedObjectContext) -> NSManagedObject) throws -> NSManagedObjectID {
+        func one(_ build: @Sendable (NSManagedObjectContext) -> NSManagedObject) throws -> NSManagedObjectID {
             let ids = try insert(container) { [build($0)] }
             return ids[0]
-        }
-        func object<T: NSManagedObject>(_ id: NSManagedObjectID, _ context: NSManagedObjectContext) -> T? {
-            context.object(with: id) as? T
         }
         let reading = try one { context in
             let category = CategoryObject(context: context)
