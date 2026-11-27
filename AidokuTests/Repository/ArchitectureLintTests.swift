@@ -48,7 +48,7 @@ import Testing
         "NSPredicate",
         "NSSortDescriptor",
         "NSFetchRequest",
-        #"\b(Manga|Chapter|History|LibraryManga|Category|Track|Source|MangaUpdate|ReadingSession|Vocab\w*)Object\b"#,
+        #"\b(Manga|Chapter|History|LibraryManga|LocalFileInfo|Category|Track|Source|MangaUpdate|ReadingSession|Vocab\w*)Object\b"#,
     ]
 
     /// relative path → contents of every Swift file under `folder`
