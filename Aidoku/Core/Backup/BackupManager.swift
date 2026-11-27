@@ -266,7 +266,8 @@ actor BackupManager {
 // it is not in the backup, as if it had been deleted before the backup started, and the log says how many.
 extension BackupManager {
     nonisolated static func backupLibrary(_ objects: [LibraryMangaObject], categories: Bool) -> [BackupLibraryManga] {
-        convert(objects, entity: "library entries", related: { $0.manga }) {
+        // the categories are read from the store during the conversion, after the check
+        convert(objects, entity: "library entries", related: { $0.manga }, recheckInStore: categories) {
             BackupLibraryManga(libraryObject: $0, skipCategories: !categories)
         }
     }
@@ -307,6 +308,26 @@ extension BackupManager {
         convert(objects, entity: "sources") { BackupSource($0) }
     }
 
+    /// Which of `ids` still have their row in the store (a fetch reads the store, not the context's objects), in
+    /// batches under the predicate limit; nil if the store cannot be read, and then nothing is left out.
+    private nonisolated static func idsInStore(_ ids: [NSManagedObjectID], context: NSManagedObjectContext) -> Set<NSManagedObjectID>? {
+        guard let entityName = ids.first?.entity.name else { return [] }
+        let batchSize = 500
+        var existing = Set<NSManagedObjectID>()
+        for start in stride(from: 0, to: ids.count, by: batchSize) {
+            let request = NSFetchRequest<NSManagedObjectID>(entityName: entityName)
+            request.resultType = .managedObjectIDResultType
+            request.predicate = NSPredicate(format: "SELF IN %@", Array(ids[start..<min(start + batchSize, ids.count)]))
+            do {
+                existing.formUnion(try context.fetch(request))
+            } catch {
+                LogManager.logger.warn("Backup: could not recheck the \(entityName) objects: \(error)")
+                return nil
+            }
+        }
+        return existing
+    }
+
     /// Whether `object` can still be read on its context's queue. A fault is fired here: either its row is loaded
     /// into the object (what the conversion reads next comes from it, not from the store) or the row is gone and
     /// Core Data marks the object as deleted.
@@ -320,16 +341,22 @@ extension BackupManager {
     }
 
     /// `transform` of every readable object (and whose `related` object, if it has one, is readable too), in the
-    /// same order; a nil from `transform` is left out as before. Logs one line with the number of objects skipped
-    /// because they could no longer be read, without any of their data.
+    /// same order; a nil from `transform` is left out as before. With `recheckInStore` (a `transform` that reads more
+    /// from the store, such as a to-many relationship), the objects whose rows another context deleted while they
+    /// were being converted are left out too: what `transform` read from the store after the check may no longer
+    /// be theirs. Logs one line with the number of objects skipped because they could no longer be read, without any
+    /// of their data.
     private nonisolated static func convert<Object: NSManagedObject, Item>(
         _ objects: [Object],
         entity: String,
         related: ((Object) -> NSManagedObject?)? = nil,
+        recheckInStore: Bool = false,
         _ transform: (Object) -> Item?
     ) -> [Item] {
         var items: [Item] = []
         items.reserveCapacity(objects.count)
+        var ids: [NSManagedObjectID] = []
+        var context: NSManagedObjectContext?
         var skipped = 0
         for object in objects {
             guard isReadable(object) else {
@@ -342,7 +369,18 @@ extension BackupManager {
             }
             if let item = transform(object) {
                 items.append(item)
+                ids.append(object.objectID)
+                context = context ?? object.managedObjectContext
             }
+        }
+        if
+            recheckInStore,
+            let context,
+            let existing = idsInStore(ids, context: context)
+        {
+            let converted = items.count
+            items = zip(ids, items).filter { existing.contains($0.0) }.map { $0.1 }
+            skipped += converted - items.count
         }
         if skipped > 0 {
             LogManager.logger.warn("Backup: skipped \(skipped) \(entity) that could no longer be read")
