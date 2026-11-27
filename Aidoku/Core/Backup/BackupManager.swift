@@ -6,6 +6,7 @@
 //
 
 import BackgroundTasks
+import CoreData
 import Foundation
 import UIKit
 
@@ -113,88 +114,89 @@ actor BackupManager {
             []
         }
         return await CoreDataManager.shared.container.performBackgroundTask { context in
-            let library: [BackupLibraryManga] = if options.libraryEntries {
-                CoreDataManager.shared.getLibraryManga(context: context).map {
-                    BackupLibraryManga(libraryObject: $0, skipCategories: !options.categories)
-                }
-            } else {
-                []
-            }
-            let history: [BackupHistory] = if options.history {
-                CoreDataManager.shared.getHistory(context: context).map {
-                    BackupHistory(historyObject: $0)
-                }
-            } else {
-                []
-            }
-            let manga: [BackupManga] = if options.libraryEntries {
-                CoreDataManager.shared.getManga(context: context).map {
-                    BackupManga(mangaObject: $0)
-                }
-            } else {
-                []
-            }
-            let chapters: [BackupChapter] = if options.chapters {
-                CoreDataManager.shared.getChapters(context: context).map {
-                    BackupChapter(chapterObject: $0)
-                }
-            } else {
-                []
-            }
-            let trackItems: [BackupTrackItem] = if options.tracking {
-                CoreDataManager.shared.getTracks(context: context).compactMap {
-                    BackupTrackItem(trackObject: $0)
-                }
-            } else {
-                []
-            }
-            let sessionItems: [BackupReadingSession] = if options.readingSessions {
-                CoreDataManager.shared.getSessions(context: context).compactMap(BackupReadingSession.init)
-            } else {
-                []
-            }
-            let vocabulary: [BackupVocabEntry] = if options.vocabulary {
-                CoreDataManager.shared.getVocab(context: context).compactMap(BackupVocabEntry.init)
-            } else {
-                []
-            }
-            let updateItems: [BackupUpdate] = if options.updates {
-                CoreDataManager.shared.getUpdates(context: context).compactMap(BackupUpdate.init)
-            } else {
-                []
-            }
-            let categories: [BackupCategory] = if options.categories {
-                CoreDataManager.shared.getCategories(context: context).compactMap(BackupCategory.init)
-            } else {
-                []
-            }
-            let sources: [BackupSource] = CoreDataManager.shared.getSources(context: context).compactMap(BackupSource.init)
-
-            let settings: [String: JSONAnyValue]? = if options.settings {
-                self.exportSettings(includeSensitive: options.sensitiveSettings, sourceKeys: sources.map(\.id))
-            } else {
-                nil
-            }
-
-            return Backup(
-                library: library,
-                history: history,
-                manga: manga,
-                chapters: chapters,
-                trackItems: trackItems,
-                readingSessions: sessionItems,
-                vocabulary: vocabulary,
-                updates: updateItems,
-                categories: categories,
-                sources: sources,
-                sourceLists: sourceLists,
-                settings: settings,
-                date: Date.now,
-                name: name.isEmpty ? nil : name,
-                automatic: options.automatic,
-                version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-            )
+            self.makeBackup(context: context, options: options, sourceLists: sourceLists, name: name)
         }
+    }
+
+    /// Reads from `context` everything `options` asks for and converts it into the backup's models, entity by
+    /// entity. Call it on the context's queue (createBackup runs it inside `performBackgroundTask`).
+    nonisolated func makeBackup(
+        context: NSManagedObjectContext,
+        options: BackupOptions,
+        sourceLists: [String],
+        name: String
+    ) -> Backup {
+        let library: [BackupLibraryManga] = if options.libraryEntries {
+            Self.backupLibrary(CoreDataManager.shared.getLibraryManga(context: context), categories: options.categories)
+        } else {
+            []
+        }
+        let history: [BackupHistory] = if options.history {
+            Self.backupHistory(CoreDataManager.shared.getHistory(context: context))
+        } else {
+            []
+        }
+        let manga: [BackupManga] = if options.libraryEntries {
+            Self.backupManga(CoreDataManager.shared.getManga(context: context))
+        } else {
+            []
+        }
+        let chapters: [BackupChapter] = if options.chapters {
+            Self.backupChapters(CoreDataManager.shared.getChapters(context: context))
+        } else {
+            []
+        }
+        let trackItems: [BackupTrackItem] = if options.tracking {
+            Self.backupTracks(CoreDataManager.shared.getTracks(context: context))
+        } else {
+            []
+        }
+        let sessionItems: [BackupReadingSession] = if options.readingSessions {
+            Self.backupSessions(CoreDataManager.shared.getSessions(context: context))
+        } else {
+            []
+        }
+        let vocabulary: [BackupVocabEntry] = if options.vocabulary {
+            Self.backupVocabulary(CoreDataManager.shared.getVocab(context: context))
+        } else {
+            []
+        }
+        let updateItems: [BackupUpdate] = if options.updates {
+            Self.backupUpdates(CoreDataManager.shared.getUpdates(context: context))
+        } else {
+            []
+        }
+        let categories: [BackupCategory] = if options.categories {
+            Self.backupCategories(CoreDataManager.shared.getCategories(context: context))
+        } else {
+            []
+        }
+        let sources: [BackupSource] = Self.backupSources(CoreDataManager.shared.getSources(context: context))
+
+        let settings: [String: JSONAnyValue]? = if options.settings {
+            self.exportSettings(includeSensitive: options.sensitiveSettings, sourceKeys: sources.map(\.id))
+        } else {
+            nil
+        }
+
+        return Backup(
+            library: library,
+            history: history,
+            manga: manga,
+            chapters: chapters,
+            trackItems: trackItems,
+            readingSessions: sessionItems,
+            vocabulary: vocabulary,
+            updates: updateItems,
+            categories: categories,
+            sources: sources,
+            sourceLists: sourceLists,
+            settings: settings,
+            date: Date.now,
+            name: name.isEmpty ? nil : name,
+            automatic: options.automatic,
+            version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        )
     }
 
     private nonisolated func exportSettings(includeSensitive: Bool, sourceKeys: [String]) -> [String: JSONAnyValue] {
@@ -250,6 +252,50 @@ actor BackupManager {
 
     func removeBackup(url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+}
+
+// MARK: Converting
+// One function per entity, called by makeBackup on the context's queue with the objects it has just fetched.
+extension BackupManager {
+    nonisolated static func backupLibrary(_ objects: [LibraryMangaObject], categories: Bool) -> [BackupLibraryManga] {
+        objects.map { BackupLibraryManga(libraryObject: $0, skipCategories: !categories) }
+    }
+
+    nonisolated static func backupHistory(_ objects: [HistoryObject]) -> [BackupHistory] {
+        objects.map { BackupHistory(historyObject: $0) }
+    }
+
+    nonisolated static func backupManga(_ objects: [MangaObject]) -> [BackupManga] {
+        objects.map { BackupManga(mangaObject: $0) }
+    }
+
+    nonisolated static func backupChapters(_ objects: [ChapterObject]) -> [BackupChapter] {
+        objects.map { BackupChapter(chapterObject: $0) }
+    }
+
+    nonisolated static func backupTracks(_ objects: [TrackObject]) -> [BackupTrackItem] {
+        objects.map { BackupTrackItem(trackObject: $0) }
+    }
+
+    nonisolated static func backupSessions(_ objects: [ReadingSessionObject]) -> [BackupReadingSession] {
+        objects.compactMap(BackupReadingSession.init)
+    }
+
+    nonisolated static func backupVocabulary(_ objects: [VocabObject]) -> [BackupVocabEntry] {
+        objects.compactMap(BackupVocabEntry.init)
+    }
+
+    nonisolated static func backupUpdates(_ objects: [MangaUpdateObject]) -> [BackupUpdate] {
+        objects.compactMap(BackupUpdate.init)
+    }
+
+    nonisolated static func backupCategories(_ objects: [CategoryObject]) -> [BackupCategory] {
+        objects.map(BackupCategory.init)
+    }
+
+    nonisolated static func backupSources(_ objects: [SourceObject]) -> [BackupSource] {
+        objects.map(BackupSource.init)
     }
 }
 
