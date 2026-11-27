@@ -119,6 +119,8 @@ import Testing
         "func read(_ entry: LibraryMangaObject) {}",
         // a class name followed by a member: Swift's default word boundary does not cut there
         "let request = MangaObject.fetchRequest()",
+        // every entity of the 0.9 model has its class: LocalFileInfo was missing from the list
+        "let x = LocalFileInfoObject(context: c)",
     ])
     func aUseTheLineCheckMissedIsFound(text: String) {
         #expect(!Self.coreDataUses(in: text).isEmpty, "\(text)")
