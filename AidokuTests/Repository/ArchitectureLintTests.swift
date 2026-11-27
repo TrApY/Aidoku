@@ -113,6 +113,8 @@ import Testing
         "let container = CoreDataManager\n    .shared\n    .container",
         "let request = NSFetchRequest<NSFetchRequestResult>(entityName: \"Manga\")",
         "func read(_ entry: LibraryMangaObject) {}",
+        // a class name followed by a member: Swift's default word boundary does not cut there
+        "let request = MangaObject.fetchRequest()",
     ])
     func aUseTheLineCheckMissedIsFound(text: String) {
         #expect(!Self.coreDataUses(in: text).isEmpty, "\(text)")
