@@ -6,6 +6,7 @@
 //
 
 import BackgroundTasks
+import CoreData
 import Foundation
 import UIKit
 
@@ -113,88 +114,89 @@ actor BackupManager {
             []
         }
         return await CoreDataManager.shared.container.performBackgroundTask { context in
-            let library: [BackupLibraryManga] = if options.libraryEntries {
-                CoreDataManager.shared.getLibraryManga(context: context).map {
-                    BackupLibraryManga(libraryObject: $0, skipCategories: !options.categories)
-                }
-            } else {
-                []
-            }
-            let history: [BackupHistory] = if options.history {
-                CoreDataManager.shared.getHistory(context: context).map {
-                    BackupHistory(historyObject: $0)
-                }
-            } else {
-                []
-            }
-            let manga: [BackupManga] = if options.libraryEntries {
-                CoreDataManager.shared.getManga(context: context).map {
-                    BackupManga(mangaObject: $0)
-                }
-            } else {
-                []
-            }
-            let chapters: [BackupChapter] = if options.chapters {
-                CoreDataManager.shared.getChapters(context: context).map {
-                    BackupChapter(chapterObject: $0)
-                }
-            } else {
-                []
-            }
-            let trackItems: [BackupTrackItem] = if options.tracking {
-                CoreDataManager.shared.getTracks(context: context).compactMap {
-                    BackupTrackItem(trackObject: $0)
-                }
-            } else {
-                []
-            }
-            let sessionItems: [BackupReadingSession] = if options.readingSessions {
-                CoreDataManager.shared.getSessions(context: context).compactMap(BackupReadingSession.init)
-            } else {
-                []
-            }
-            let vocabulary: [BackupVocabEntry] = if options.vocabulary {
-                CoreDataManager.shared.getVocab(context: context).compactMap(BackupVocabEntry.init)
-            } else {
-                []
-            }
-            let updateItems: [BackupUpdate] = if options.updates {
-                CoreDataManager.shared.getUpdates(context: context).compactMap(BackupUpdate.init)
-            } else {
-                []
-            }
-            let categories: [BackupCategory] = if options.categories {
-                CoreDataManager.shared.getCategories(context: context).compactMap(BackupCategory.init)
-            } else {
-                []
-            }
-            let sources: [BackupSource] = CoreDataManager.shared.getSources(context: context).compactMap(BackupSource.init)
-
-            let settings: [String: JSONAnyValue]? = if options.settings {
-                self.exportSettings(includeSensitive: options.sensitiveSettings, sourceKeys: sources.map(\.id))
-            } else {
-                nil
-            }
-
-            return Backup(
-                library: library,
-                history: history,
-                manga: manga,
-                chapters: chapters,
-                trackItems: trackItems,
-                readingSessions: sessionItems,
-                vocabulary: vocabulary,
-                updates: updateItems,
-                categories: categories,
-                sources: sources,
-                sourceLists: sourceLists,
-                settings: settings,
-                date: Date.now,
-                name: name.isEmpty ? nil : name,
-                automatic: options.automatic,
-                version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-            )
+            self.makeBackup(context: context, options: options, sourceLists: sourceLists, name: name)
         }
+    }
+
+    /// Reads from `context` everything `options` asks for and converts it into the backup's models, entity by
+    /// entity. Call it on the context's queue (createBackup runs it inside `performBackgroundTask`).
+    nonisolated func makeBackup(
+        context: NSManagedObjectContext,
+        options: BackupOptions,
+        sourceLists: [String],
+        name: String
+    ) -> Backup {
+        let library: [BackupLibraryManga] = if options.libraryEntries {
+            Self.backupLibrary(CoreDataManager.shared.getLibraryManga(context: context), categories: options.categories)
+        } else {
+            []
+        }
+        let history: [BackupHistory] = if options.history {
+            Self.backupHistory(CoreDataManager.shared.getHistory(context: context))
+        } else {
+            []
+        }
+        let manga: [BackupManga] = if options.libraryEntries {
+            Self.backupManga(CoreDataManager.shared.getManga(context: context))
+        } else {
+            []
+        }
+        let chapters: [BackupChapter] = if options.chapters {
+            Self.backupChapters(CoreDataManager.shared.getChapters(context: context))
+        } else {
+            []
+        }
+        let trackItems: [BackupTrackItem] = if options.tracking {
+            Self.backupTracks(CoreDataManager.shared.getTracks(context: context))
+        } else {
+            []
+        }
+        let sessionItems: [BackupReadingSession] = if options.readingSessions {
+            Self.backupSessions(CoreDataManager.shared.getSessions(context: context))
+        } else {
+            []
+        }
+        let vocabulary: [BackupVocabEntry] = if options.vocabulary {
+            Self.backupVocabulary(CoreDataManager.shared.getVocab(context: context))
+        } else {
+            []
+        }
+        let updateItems: [BackupUpdate] = if options.updates {
+            Self.backupUpdates(CoreDataManager.shared.getUpdates(context: context))
+        } else {
+            []
+        }
+        let categories: [BackupCategory] = if options.categories {
+            Self.backupCategories(CoreDataManager.shared.getCategories(context: context))
+        } else {
+            []
+        }
+        let sources: [BackupSource] = Self.backupSources(CoreDataManager.shared.getSources(context: context))
+
+        let settings: [String: JSONAnyValue]? = if options.settings {
+            self.exportSettings(includeSensitive: options.sensitiveSettings, sourceKeys: sources.map(\.id))
+        } else {
+            nil
+        }
+
+        return Backup(
+            library: library,
+            history: history,
+            manga: manga,
+            chapters: chapters,
+            trackItems: trackItems,
+            readingSessions: sessionItems,
+            vocabulary: vocabulary,
+            updates: updateItems,
+            categories: categories,
+            sources: sources,
+            sourceLists: sourceLists,
+            settings: settings,
+            date: Date.now,
+            name: name.isEmpty ? nil : name,
+            automatic: options.automatic,
+            version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        )
     }
 
     private nonisolated func exportSettings(includeSensitive: Bool, sourceKeys: [String]) -> [String: JSONAnyValue] {
@@ -250,6 +252,140 @@ actor BackupManager {
 
     func removeBackup(url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+}
+
+// MARK: Converting
+// One function per entity, called by makeBackup on the context's queue with the objects it has just fetched.
+//
+// Another context can delete an object (and save) between makeBackup's fetch and its conversion: the automatic
+// backup runs while the app keeps working. The fetched object is then a fault that can no longer be fulfilled, Core
+// Data makes it a deleted object with nil attributes (`shouldDeleteInaccessibleFaults`), and reading one of its
+// non-optional attributes (`lastOpened: Date`, `sourceId: String`…) stops the app. Each conversion therefore skips
+// every object that can no longer be read (and the entries whose related manga or history can no longer be read):
+// it is not in the backup, as if it had been deleted before the backup started, and the log says how many.
+extension BackupManager {
+    nonisolated static func backupLibrary(_ objects: [LibraryMangaObject], categories: Bool) -> [BackupLibraryManga] {
+        // the categories are read from the store during the conversion, after the check
+        convert(objects, entity: "library entries", related: { $0.manga }, recheckInStore: categories) {
+            BackupLibraryManga(libraryObject: $0, skipCategories: !categories)
+        }
+    }
+
+    nonisolated static func backupHistory(_ objects: [HistoryObject]) -> [BackupHistory] {
+        convert(objects, entity: "history entries") { BackupHistory(historyObject: $0) }
+    }
+
+    nonisolated static func backupManga(_ objects: [MangaObject]) -> [BackupManga] {
+        convert(objects, entity: "manga") { BackupManga(mangaObject: $0) }
+    }
+
+    nonisolated static func backupChapters(_ objects: [ChapterObject]) -> [BackupChapter] {
+        convert(objects, entity: "chapters") { BackupChapter(chapterObject: $0) }
+    }
+
+    nonisolated static func backupTracks(_ objects: [TrackObject]) -> [BackupTrackItem] {
+        convert(objects, entity: "track items") { BackupTrackItem(trackObject: $0) }
+    }
+
+    nonisolated static func backupSessions(_ objects: [ReadingSessionObject]) -> [BackupReadingSession] {
+        convert(objects, entity: "reading sessions", related: { $0.history }) { BackupReadingSession($0) }
+    }
+
+    nonisolated static func backupVocabulary(_ objects: [VocabObject]) -> [BackupVocabEntry] {
+        convert(objects, entity: "vocabulary entries") { BackupVocabEntry($0) }
+    }
+
+    nonisolated static func backupUpdates(_ objects: [MangaUpdateObject]) -> [BackupUpdate] {
+        convert(objects, entity: "updates") { BackupUpdate($0) }
+    }
+
+    nonisolated static func backupCategories(_ objects: [CategoryObject]) -> [BackupCategory] {
+        convert(objects, entity: "categories") { BackupCategory($0) }
+    }
+
+    nonisolated static func backupSources(_ objects: [SourceObject]) -> [BackupSource] {
+        convert(objects, entity: "sources") { BackupSource($0) }
+    }
+
+    /// Which of `ids` still have their row in the store (a fetch reads the store, not the context's objects), in
+    /// batches under the predicate limit; nil if the store cannot be read, and then nothing is left out.
+    private nonisolated static func idsInStore(_ ids: [NSManagedObjectID], context: NSManagedObjectContext) -> Set<NSManagedObjectID>? {
+        guard let entityName = ids.first?.entity.name else { return [] }
+        let batchSize = 500
+        var existing = Set<NSManagedObjectID>()
+        for start in stride(from: 0, to: ids.count, by: batchSize) {
+            let request = NSFetchRequest<NSManagedObjectID>(entityName: entityName)
+            request.resultType = .managedObjectIDResultType
+            request.predicate = NSPredicate(format: "SELF IN %@", Array(ids[start..<min(start + batchSize, ids.count)]))
+            do {
+                existing.formUnion(try context.fetch(request))
+            } catch {
+                LogManager.logger.warn("Backup: could not recheck the \(entityName) objects: \(error)")
+                return nil
+            }
+        }
+        return existing
+    }
+
+    /// Whether `object` can still be read on its context's queue. A fault is fired here: either its row is loaded
+    /// into the object (what the conversion reads next comes from it, not from the store) or the row is gone and
+    /// Core Data marks the object as deleted.
+    nonisolated static func isReadable(_ object: NSManagedObject) -> Bool {
+        guard !object.isDeleted, object.managedObjectContext != nil else { return false }
+        if object.isFault {
+            object.willAccessValue(forKey: nil)
+            object.didAccessValue(forKey: nil)
+        }
+        return !object.isDeleted && !object.isFault
+    }
+
+    /// `transform` of every readable object (and whose `related` object, if it has one, is readable too), in the
+    /// same order; a nil from `transform` is left out as before. With `recheckInStore` (a `transform` that reads more
+    /// from the store, such as a to-many relationship), the objects whose rows another context deleted while they
+    /// were being converted are left out too: what `transform` read from the store after the check may no longer
+    /// be theirs. Logs one line with the number of objects skipped because they could no longer be read, without any
+    /// of their data.
+    private nonisolated static func convert<Object: NSManagedObject, Item>(
+        _ objects: [Object],
+        entity: String,
+        related: ((Object) -> NSManagedObject?)? = nil,
+        recheckInStore: Bool = false,
+        _ transform: (Object) -> Item?
+    ) -> [Item] {
+        var items: [Item] = []
+        items.reserveCapacity(objects.count)
+        var ids: [NSManagedObjectID] = []
+        var context: NSManagedObjectContext?
+        var skipped = 0
+        for object in objects {
+            guard isReadable(object) else {
+                skipped += 1
+                continue
+            }
+            if let relatedObject = related?(object), !isReadable(relatedObject) {
+                skipped += 1
+                continue
+            }
+            if let item = transform(object) {
+                items.append(item)
+                ids.append(object.objectID)
+                context = context ?? object.managedObjectContext
+            }
+        }
+        if
+            recheckInStore,
+            let context,
+            let existing = idsInStore(ids, context: context)
+        {
+            let converted = items.count
+            items = zip(ids, items).filter { existing.contains($0.0) }.map { $0.1 }
+            skipped += converted - items.count
+        }
+        if skipped > 0 {
+            LogManager.logger.warn("Backup: skipped \(skipped) \(entity) that could no longer be read")
+        }
+        return items
     }
 }
 
