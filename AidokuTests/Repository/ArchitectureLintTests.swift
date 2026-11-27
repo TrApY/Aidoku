@@ -68,11 +68,15 @@ import Testing
     static func coreDataUses(in text: String) -> Set<String> {
         var text = text
         for name in text.matches(of: #/let\s+(\w+)\s*=\s*PHFetchOptions\(\)/#).map({ String($0.output.1) }) {
-            guard let given = try? Regex("\\b\(name)\\s*\\.\\s*predicate\\s*=\\s*NSPredicate") else { continue }
+            guard let given = try? Regex("\\b\(name)\\s*\\.\\s*predicate\\s*=\\s*NSPredicate").wordBoundaryKind(.simple) else {
+                continue
+            }
             text = text.replacing(given, with: "")
         }
+        // `\b` as a word boundary between a word and anything else (Swift's default is Unicode's, which keeps
+        // `MangaObject.fetchRequest` as one word)
         return Set(patterns.filter { pattern in
-            (try? Regex(pattern)).map { text.contains($0) } ?? true
+            (try? Regex(pattern)).map { text.contains($0.wordBoundaryKind(.simple)) } ?? true
         })
     }
 

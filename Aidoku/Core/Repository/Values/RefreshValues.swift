@@ -36,8 +36,8 @@ struct MangaUpdateEntry: Sendable, Hashable {
     var viewed: Bool
 }
 
-/// One library entry as the library refresh reads it (D-L12-3): the fields of the old `Manga` that
-/// `MangaObject.toManga()` fills, so that the refresh keeps each entry's identity (source and key, as the old
+/// One library entry as the library refresh reads it (D-L12-3): the fields of the old `Manga` that the stored
+/// manga's `toManga()` fills, so that the refresh keeps each entry's identity (source and key, as the old
 /// `Manga` hashes) and the values it goes by (what it skips, the chapter filters, `toNew()`).
 struct LibraryRefreshEntry: Sendable, Hashable {
     var sourceId: String
