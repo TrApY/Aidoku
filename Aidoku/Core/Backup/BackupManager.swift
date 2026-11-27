@@ -257,45 +257,97 @@ actor BackupManager {
 
 // MARK: Converting
 // One function per entity, called by makeBackup on the context's queue with the objects it has just fetched.
+//
+// Another context can delete an object (and save) between makeBackup's fetch and its conversion: the automatic
+// backup runs while the app keeps working. The fetched object is then a fault that can no longer be fulfilled, Core
+// Data makes it a deleted object with nil attributes (`shouldDeleteInaccessibleFaults`), and reading one of its
+// non-optional attributes (`lastOpened: Date`, `sourceId: String`…) stops the app. Each conversion therefore skips
+// every object that can no longer be read (and the entries whose related manga or history can no longer be read):
+// it is not in the backup, as if it had been deleted before the backup started, and the log says how many.
 extension BackupManager {
     nonisolated static func backupLibrary(_ objects: [LibraryMangaObject], categories: Bool) -> [BackupLibraryManga] {
-        objects.map { BackupLibraryManga(libraryObject: $0, skipCategories: !categories) }
+        convert(objects, entity: "library entries", related: { $0.manga }) {
+            BackupLibraryManga(libraryObject: $0, skipCategories: !categories)
+        }
     }
 
     nonisolated static func backupHistory(_ objects: [HistoryObject]) -> [BackupHistory] {
-        objects.map { BackupHistory(historyObject: $0) }
+        convert(objects, entity: "history entries") { BackupHistory(historyObject: $0) }
     }
 
     nonisolated static func backupManga(_ objects: [MangaObject]) -> [BackupManga] {
-        objects.map { BackupManga(mangaObject: $0) }
+        convert(objects, entity: "manga") { BackupManga(mangaObject: $0) }
     }
 
     nonisolated static func backupChapters(_ objects: [ChapterObject]) -> [BackupChapter] {
-        objects.map { BackupChapter(chapterObject: $0) }
+        convert(objects, entity: "chapters") { BackupChapter(chapterObject: $0) }
     }
 
     nonisolated static func backupTracks(_ objects: [TrackObject]) -> [BackupTrackItem] {
-        objects.map { BackupTrackItem(trackObject: $0) }
+        convert(objects, entity: "track items") { BackupTrackItem(trackObject: $0) }
     }
 
     nonisolated static func backupSessions(_ objects: [ReadingSessionObject]) -> [BackupReadingSession] {
-        objects.compactMap(BackupReadingSession.init)
+        convert(objects, entity: "reading sessions", related: { $0.history }) { BackupReadingSession($0) }
     }
 
     nonisolated static func backupVocabulary(_ objects: [VocabObject]) -> [BackupVocabEntry] {
-        objects.compactMap(BackupVocabEntry.init)
+        convert(objects, entity: "vocabulary entries") { BackupVocabEntry($0) }
     }
 
     nonisolated static func backupUpdates(_ objects: [MangaUpdateObject]) -> [BackupUpdate] {
-        objects.compactMap(BackupUpdate.init)
+        convert(objects, entity: "updates") { BackupUpdate($0) }
     }
 
     nonisolated static func backupCategories(_ objects: [CategoryObject]) -> [BackupCategory] {
-        objects.map(BackupCategory.init)
+        convert(objects, entity: "categories") { BackupCategory($0) }
     }
 
     nonisolated static func backupSources(_ objects: [SourceObject]) -> [BackupSource] {
-        objects.map(BackupSource.init)
+        convert(objects, entity: "sources") { BackupSource($0) }
+    }
+
+    /// Whether `object` can still be read on its context's queue. A fault is fired here: either its row is loaded
+    /// into the object (what the conversion reads next comes from it, not from the store) or the row is gone and
+    /// Core Data marks the object as deleted.
+    nonisolated static func isReadable(_ object: NSManagedObject) -> Bool {
+        guard !object.isDeleted, object.managedObjectContext != nil else { return false }
+        if object.isFault {
+            object.willAccessValue(forKey: nil)
+            object.didAccessValue(forKey: nil)
+        }
+        return !object.isDeleted && !object.isFault
+    }
+
+    /// `transform` of every readable object (and whose `related` object, if it has one, is readable too), in the
+    /// same order; a nil from `transform` is left out as before. Logs one line with the number of objects skipped
+    /// because they could no longer be read, without any of their data.
+    private nonisolated static func convert<Object: NSManagedObject, Item>(
+        _ objects: [Object],
+        entity: String,
+        related: ((Object) -> NSManagedObject?)? = nil,
+        _ transform: (Object) -> Item?
+    ) -> [Item] {
+        var items: [Item] = []
+        items.reserveCapacity(objects.count)
+        var skipped = 0
+        for object in objects {
+            guard isReadable(object) else {
+                skipped += 1
+                continue
+            }
+            if let relatedObject = related?(object), !isReadable(relatedObject) {
+                skipped += 1
+                continue
+            }
+            if let item = transform(object) {
+                items.append(item)
+            }
+        }
+        if skipped > 0 {
+            LogManager.logger.warn("Backup: skipped \(skipped) \(entity) that could no longer be read")
+        }
+        return items
     }
 }
 

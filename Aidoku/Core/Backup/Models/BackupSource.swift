@@ -12,8 +12,10 @@ struct BackupSource {
     let apiVersion: String?
     let config: Data?
 
-    init(_ object: SourceObject) {
-        self.id = object.id! // property is non-optional
+    init?(_ object: SourceObject) {
+        // the model's property is non-optional: nil only when the object can no longer be read
+        guard let id = object.id else { return nil }
+        self.id = id
         self.apiVersion = object.apiVersion
         self.config = object.customSource as? Data
     }
