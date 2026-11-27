@@ -378,6 +378,34 @@ import Testing
         }
     }
 
+    /// Revisión del servidor (H1): the entry was already read and checked, but another context deletes only the
+    /// entry (not its manga, as removeFromLibrary does with a local manga) before the conversion reads its categories
+    /// from the store. The old conversion kept the row of the entry that no longer existed, with no categories.
+    @Test func aLibraryEntryDeletedAfterItWasReadIsLeftOutAndTheOthersKeepTheirCategories() throws {
+        try Self.withStore { container in
+            let ids = try Self.insert(container) { context in
+                let category = CategoryObject(context: context)
+                category.title = "Leyendo"
+                let entries = [Self.libraryEntry(Self.manga("a", context), context), Self.libraryEntry(Self.manga("b", context), context)]
+                for entry in entries {
+                    entry.addToCategories(category)
+                }
+                return entries
+            }
+            let race = try Self.convertAfterDeleting(
+                container,
+                victims: [ids[0]],
+                fireFirst: true,
+                fetch: { CoreDataManager.shared.getLibraryManga(context: $0) },
+                convert: { BackupManager.backupLibrary($0, categories: true) }
+            )
+            try #require(race.fetched == 2)
+            try #require(race.faultsBeforeDeleting == 0)
+            #expect(race.items.map(\.mangaId) == ["b"])
+            #expect(race.items.map { $0.categories ?? [] } == [["Leyendo"]])
+        }
+    }
+
     /// S38-3: one line per entity with the number skipped, and none of the objects' data.
     @Test func theLogSaysHowManyWereSkippedWithoutTheirData() async throws {
         let expected = "Backup: skipped 2 history entries that could no longer be read"
