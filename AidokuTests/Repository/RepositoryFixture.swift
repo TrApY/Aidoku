@@ -99,6 +99,13 @@ protocol FixtureSeeder: Sendable {
     func updates(of manga: MangaIdentifier) async -> [String: Bool]
     /// The store the sources are saved in (their entity is in the local configuration).
     func sourceStore(key: String) async -> String?
+    /// Sets the chapter's stored url as it is (an empty one included).
+    func setChapterURL(_ chapter: ChapterIdentifier, _ url: String?) async
+    /// Makes the manga and these of its chapters local files (a file info each), as the local source stores them.
+    func setLocalFile(_ manga: MangaIdentifier, chapters: [String]) async
+    /// Right before the next save of another context of this store, moves the category `title` to `position` and
+    /// saves it from a context of its own: a concurrent write that next save meets (D-L12-9).
+    func moveCategoryBeforeNextSave(_ title: String, to position: Int) async
 }
 
 struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
@@ -249,6 +256,66 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
         }
     }
 
+    func setChapterURL(_ chapter: ChapterIdentifier, _ url: String?) async {
+        await container.performBackgroundTask { context in
+            guard let object = CoreDataManager.shared.getChapter(chapterId: chapter, context: context) else {
+                Issue.record("no such chapter: \(chapter)")
+                return
+            }
+            object.url = url
+            saveSeed(context)
+        }
+    }
+
+    func setLocalFile(_ manga: MangaIdentifier, chapters: [String]) async {
+        await container.performBackgroundTask { context in
+            guard let object = CoreDataManager.shared.getManga(mangaId: manga, context: context) else {
+                Issue.record("no such manga: \(manga)")
+                return
+            }
+            let info = LocalFileInfoObject(context: context)
+            info.path = "contract/\(manga.mangaKey)"
+            object.fileInfo = info
+            for key in chapters {
+                let id = ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.mangaKey, chapterKey: key)
+                guard let chapter = CoreDataManager.shared.getChapter(chapterId: id, context: context) else {
+                    Issue.record("no such chapter: \(id)")
+                    continue
+                }
+                let file = LocalFileInfoObject(context: context)
+                file.path = "contract/\(manga.mangaKey)/\(key)"
+                chapter.fileInfo = file
+            }
+            saveSeed(context)
+        }
+    }
+
+    func moveCategoryBeforeNextSave(_ title: String, to position: Int) async {
+        let coordinator = container.persistentStoreCoordinator
+        let other = container.newBackgroundContext()
+        let observer = OneShotObserver()
+        observer.token = NotificationCenter.default.addObserver(
+            forName: .NSManagedObjectContextWillSave,
+            object: nil,
+            queue: nil
+        ) { note in
+            guard
+                let saving = note.object as? NSManagedObjectContext,
+                saving !== other,
+                saving.persistentStoreCoordinator === coordinator,
+                observer.fire()
+            else { return }
+            other.performAndWait {
+                CoreDataManager.shared.moveCategory(title: title, toPosition: position, context: other)
+                do {
+                    try other.save()
+                } catch {
+                    Issue.record("the concurrent move was not saved: \(error)")
+                }
+            }
+        }
+    }
+
     func addLibraryEntryWithoutManga() async {
         await container.performBackgroundTask { context in
             _ = LibraryMangaObject(context: context)
@@ -281,6 +348,25 @@ struct CoreDataSeeder: FixtureSeeder, @unchecked Sendable {
                 context.rollback()
             }
         }
+    }
+}
+
+/// An observer that acts once and then stops observing.
+final class OneShotObserver: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = false
+    var token: NSObjectProtocol?
+
+    /// true the first time only (and it stops observing).
+    func fire() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !fired else { return false }
+        fired = true
+        if let token {
+            NotificationCenter.default.removeObserver(token)
+        }
+        return true
     }
 }
 

@@ -6,7 +6,6 @@
 //
 
 import AidokuRunner
-import CoreData
 import Foundation
 
 /// An interface to interact with title tracking services.
@@ -223,18 +222,9 @@ actor TrackerManager {
     /// Register a new track item to a manga and save to the data store.
     func register(tracker: Tracker, manga: AidokuRunner.Manga, item: TrackSearchItem) async {
         let mangaId = manga.identifier
-        let (highestReadNumber, earliestReadDate) = await CoreDataManager.shared.container.performBackgroundTask { context in
-            (
-                CoreDataManager.shared.getHighestReadNumber(
-                    mangaId: mangaId,
-                    context: context
-                ),
-                CoreDataManager.shared.getEarliestReadDate(
-                    mangaId: mangaId,
-                    context: context
-                )
-            )
-        }
+        // both from one read, as before (D-L12-4)
+        let state = await DataRepositories.shared.history.readState(of: mangaId, mode: .stored(for: mangaId))
+        let (highestReadNumber, earliestReadDate) = (state.highestReadNumber, state.earliestReadDate)
         do {
             let id = try await tracker.register(
                 trackId: item.id,
@@ -470,14 +460,7 @@ extension TrackerManager {
         let inLibrary = await DataRepositories.shared.library.contains(manga.identifier)
         if inLibrary {
             // load data from db
-            return await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getChapters(
-                    mangaId: manga.identifier,
-                    context: context
-                ).map {
-                    $0.toNewChapter()
-                }
-            }
+            return await DataRepositories.shared.chapters.chapters(of: manga.identifier)
         } else {
             return (try? await SourceManager.shared.source(for: manga.sourceKey)?.getMangaUpdate(
                 manga: manga,
@@ -513,12 +496,10 @@ extension TrackerManager {
         let currentHighestRead = if let currentHighestRead {
             currentHighestRead
         } else {
-            await CoreDataManager.shared.container.performBackgroundTask { context in
-                CoreDataManager.shared.getHighestReadNumber(
-                    mangaId: manga.identifier,
-                    context: context
-                ) ?? 0
-            }
+            await DataRepositories.shared.history.highestReadNumber(
+                of: manga.identifier,
+                mode: .stored(for: manga.identifier)
+            ) ?? 0
         }
 
         // Check for display mode

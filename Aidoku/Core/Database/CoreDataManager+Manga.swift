@@ -19,11 +19,6 @@ extension CoreDataManager {
         (try? context.fetch(MangaObject.fetchRequest())) ?? []
     }
 
-    @MainActor
-    func getManga(mangaId: MangaIdentifier) -> MangaObject? {
-        getManga(mangaId: mangaId, context: context)
-    }
-
     /// Get a particular manga object.
     func getManga(
         mangaId: MangaIdentifier,
@@ -56,11 +51,6 @@ extension CoreDataManager {
         return createManga(manga, context: context)
     }
 
-    @MainActor
-    func hasManga(mangaId: MangaIdentifier) -> Bool {
-        hasManga(mangaId: mangaId, context: context)
-    }
-
     /// Check if a manga object exists.
     func hasManga(
         mangaId: MangaIdentifier,
@@ -84,19 +74,8 @@ extension CoreDataManager {
         }
     }
 
-    /// Set the cover image for a manga object.
-    @discardableResult
-    func setCover(
-        mangaId: MangaIdentifier,
-        coverUrl: String?,
-        original: Bool = false,
-    ) async -> String? {
-        await container.performBackgroundTask { context in
-            self.setCover(mangaId: mangaId, coverUrl: coverUrl, original: original, context: context)
-        }
-    }
-
-    /// The same in this context: the cover before; nil if there is no manga or the save failed.
+    /// Set the cover image for a manga object in this context: the cover before; nil if there is no manga or the
+    /// save failed.
     func setCover(
         mangaId: MangaIdentifier,
         coverUrl: String?,
@@ -143,28 +122,22 @@ extension CoreDataManager {
     }
 
     // set the override flag to force update for already edited keys
-    @discardableResult
-    func updateMangaDetails(manga: Manga, override: Bool = false) async -> Manga? {
-        await container.performBackgroundTask { context in
-            guard let object = self.getManga(
-                mangaId: manga.identifier,
-                context: context
-            ) else {
-                return nil
-            }
-            object.load(from: manga, override: override)
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("CoreDataManager.updateMangaDetails: \(error)")
-            }
-            return object.toManga()
+    /// In this context: false if the manga is not stored or the save failed.
+    func updateMangaDetails(manga: Manga, override: Bool = false, context: NSManagedObjectContext) -> Bool {
+        guard let object = self.getManga(
+            mangaId: manga.identifier,
+            context: context
+        ) else {
+            return false
         }
-    }
-
-    @MainActor
-    func getMangaSourceReadingMode(mangaId: MangaIdentifier) -> Int {
-        getMangaSourceReadingMode(mangaId: mangaId, context: context)
+        object.load(from: manga, override: override)
+        do {
+            try context.save()
+            return true
+        } catch {
+            LogManager.logger.error("CoreDataManager.updateMangaDetails: \(error)")
+            return false
+        }
     }
 
     func getMangaSourceReadingMode(mangaId: MangaIdentifier, context: NSManagedObjectContext) -> Int {

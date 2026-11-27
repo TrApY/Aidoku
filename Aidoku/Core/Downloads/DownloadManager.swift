@@ -466,49 +466,15 @@ extension DownloadManager {
                     (
                         title: firstComicInfo.series,
                         coverUrl: mangaDirectory.appendingPathComponent("cover.png").absoluteString,
-                        isInLibrary: await DataRepositories.shared.library.contains(.init(sourceKey: sourceId, mangaKey: extraData?.mangaKey ?? mangaId)),
+                        isInLibrary: await DataRepositories.shared.library.contains(
+                            .init(sourceKey: sourceId, mangaKey: extraData?.mangaKey ?? mangaId)
+                        ),
                         actualMangaId: extraData?.mangaKey ?? mangaId
                     )
                 } else {
-                    await withCheckedContinuation { continuation in
-                        CoreDataManager.shared.container.performBackgroundTask { context in
-                            // First try direct lookup with the directory name
-                            var mangaObject = CoreDataManager.shared.getManga(
-                                mangaId: .init(sourceKey: sourceId, mangaKey: extraData?.mangaKey ?? mangaId),
-                                context: context
-                            )
-                            var isInLibrary = CoreDataManager.shared.hasLibraryManga(
-                                mangaId: .init(sourceKey: sourceId, mangaKey: extraData?.mangaKey ?? mangaId),
-                                context: context
-                            )
-
-                            // If not found, try to find a manga whose sanitized ID matches the directory name
-                            if mangaObject == nil {
-                                let allMangaForSource = CoreDataManager.shared.getManga(context: context)
-                                    .filter { $0.sourceId == sourceId }
-
-                                for candidateManga in allMangaForSource {
-                                    let candidateId = candidateManga.id
-                                    if candidateId.directoryName == mangaId {
-                                        mangaObject = candidateManga
-                                        isInLibrary = CoreDataManager.shared.hasLibraryManga(
-                                            mangaId: .init(sourceKey: sourceId, mangaKey: candidateId),
-                                            context: context
-                                        )
-                                        break
-                                    }
-                                }
-                            }
-
-                            let result = (
-                                title: mangaObject?.title,
-                                coverUrl: mangaObject?.cover,
-                                isInLibrary: isInLibrary,
-                                actualMangaId: mangaObject?.id ?? mangaId
-                            )
-                            continuation.resume(returning: result)
-                        }
-                    }
+                    // without ComicInfo there is only the directory's name (extraData is nil): the stored manga it
+                    // stands for, in one read (D-L12-8)
+                    await DataRepositories.shared.library.downloadedEntry(sourceKey: sourceId, directoryName: mangaId).metadata
                 }
 
                 let downloadedMangaInfo = DownloadedMangaInfo(
@@ -812,5 +778,12 @@ extension DownloadManager {
         let cover: String?
         let thumbnailBase64: String?
         let description: String?
+    }
+}
+
+private extension DownloadedEntryInfo {
+    /// As the downloads list reads it.
+    var metadata: (title: String?, coverUrl: String?, isInLibrary: Bool, actualMangaId: String) {
+        (title: title, coverUrl: cover, isInLibrary: isInLibrary, actualMangaId: mangaKey)
     }
 }

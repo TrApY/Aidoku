@@ -18,6 +18,9 @@ protocol LibraryRepository: Sendable {
     func entries(sourceKey: String) async -> [AidokuRunner.Manga]
     /// The manga in the library, all of them or those in a category.
     func entries(category: String?) async -> [AidokuRunner.Manga]
+    /// The library entries the library refresh goes through (all, or those in a category), each as the old
+    /// `Manga` read it (D-L12-3): one per entry with a manga, in one read.
+    func refreshEntries(category: String?) async -> [LibraryRefreshEntry]
     /// The manga if it is in the library, read as download ahead did (through the old `Manga`).
     func entry(_ id: MangaIdentifier) async -> AidokuRunner.Manga?
     /// The sources with manga in the library.
@@ -74,4 +77,14 @@ protocol LibraryRepository: Sendable {
     /// rows with the new ones the source gave (spec §1.3 nº 14, D-L11-7); keys without a new one stay. false if the
     /// save failed.
     @discardableResult func remapIdentifiers(_ remap: IdentifierRemap) async -> Bool
+    /// Settings' «reset», first part (D-L12-7, spec §1.3 nº 18): every library entry and every manga, two batch
+    /// deletes that run at once, in one context (there is nothing to save). A failed one is logged, as before.
+    func clearLibraryAndManga() async
+    /// The second part, after the history: every chapter, category and track (three batch deletes, in that order)
+    /// and the save there was, in one context.
+    func clearChaptersCategoriesAndTracks() async
+    /// The stored manga a source's downloads directory stands for (D-L12-8), in one read: the manga with the
+    /// directory's name as its key or, if there is none, the first one of the source whose key gives that directory
+    /// name; and whether it is in the library.
+    func downloadedEntry(sourceKey: String, directoryName: String) async -> DownloadedEntryInfo
 }

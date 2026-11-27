@@ -19,6 +19,8 @@ import Testing
         let word = "suwa13-\(UUID().uuidString)"
         let chapter = ChapterIdentifier(sourceKey: "contract.source", mangaKey: "m", chapterKey: "c")
         let entry = VocabEntry(chapterId: chapter, word: word, reading: "よみ", sentence: "frase", page: 3)
+        // the word is removed from the store whatever happens below (bajo nº 24)
+        defer { await repository.delete(entry: entry) }
         #expect(await !repository.has(word: word, reading: "よみ"))
         await repository.create(entry: entry)
         #expect(await repository.has(word: word, reading: "よみ"))

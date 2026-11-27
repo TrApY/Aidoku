@@ -227,4 +227,44 @@ import Testing
         }
         await store.tearDown()
     }
+
+    /// The filters read tracks and history in one go, not per manga (bajo nº 20): those of a manga with the same
+    /// key in another source, or of a manga outside the library, change nothing.
+    @Test(arguments: repositoryFixtures)
+    func theSameKeyInAnotherSourceDoesNotCount(fixture: any RepositoryFixture) async throws {
+        let store = try await fixture.make()
+        await seedLibrary(store)
+        // (other source, "a"), not in the library; (source, "b"), the key of bravo in alpha's source; and (other
+        // source, "c"), the key of charlie (started, not tracked) in bravo's source: only the source tells them apart
+        let sameKeys = [
+            MangaIdentifier(sourceKey: "contract.other", mangaKey: "a"),
+            MangaIdentifier(sourceKey: "contract.source", mangaKey: "b"),
+            MangaIdentifier(sourceKey: "contract.other", mangaKey: "c"),
+        ]
+        for manga in sameKeys {
+            await store.seed.addChapters([.init(key: "x1")], to: manga)
+            await store.seed.addHistory(HistorySeed(
+                chapter: ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.mangaKey, chapterKey: "x1"),
+                progress: 1,
+                completed: true
+            ))
+            await store.repos.tracks.add(
+                TrackItem(id: "t-\(manga.sourceKey)-\(manga.mangaKey)", trackerId: "contract.tracker", mangaId: manga, title: nil, chapterOffset: 0)
+            )
+        }
+        // and the manga outside the library gets a track and a history row too
+        let outside = MangaIdentifier(sourceKey: "contract.third", mangaKey: "fuera")
+        await store.seed.addHistory(
+            HistorySeed(chapter: ChapterIdentifier(sourceKey: outside.sourceKey, mangaKey: outside.mangaKey, chapterKey: "f1"), progress: 1)
+        )
+        await store.repos.tracks.add(
+            TrackItem(id: "t-fuera", trackerId: "contract.tracker", mangaId: outside, title: nil, chapterOffset: 0)
+        )
+        #expect(try await shown(store, [filter(.started)]) == ["a", "c"])
+        #expect(try await shown(store, [filter(.started, exclude: true)]) == ["b"])
+        #expect(try await shown(store, [filter(.tracking)]) == ["a"])
+        #expect(try await shown(store, [filter(.tracking, exclude: true)]) == ["b", "c"])
+        #expect(try await shown(store, []) == ["a", "b", "c"])
+        await store.tearDown()
+    }
 }

@@ -48,3 +48,12 @@ struct LibraryPage: Sendable, Hashable {
     /// reached them.
     var unappliedFilters: [LibraryFilter]
 }
+
+/// What the downloads list shows of a downloaded manga that has no ComicInfo (D-L12-8).
+struct DownloadedEntryInfo: Sendable, Hashable {
+    var title: String?
+    var cover: String?
+    var isInLibrary: Bool
+    /// the stored manga's key, or the directory's name if none was found
+    var mangaKey: String
+}

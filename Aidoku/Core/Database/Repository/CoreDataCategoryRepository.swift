@@ -136,6 +136,9 @@ final class CoreDataCategoryRepository: CategoryRepository, @unchecked Sendable 
     @discardableResult
     func move(_ titles: [String], to position: Int) async -> Bool {
         await container.performBackgroundTask { context in
+            // a drag used to be saved in the view context, whose policy keeps the drag against a write made at the
+            // same time; here, and only here, the same (bajo nº 4, D-L12-9)
+            context.mergePolicy = NSMergePolicy(merge: .mergeByPropertyObjectTrumpMergePolicyType)
             for title in titles {
                 CoreDataManager.shared.moveCategory(title: title, toPosition: position, context: context)
             }

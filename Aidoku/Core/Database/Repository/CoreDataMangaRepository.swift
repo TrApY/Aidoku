@@ -50,4 +50,15 @@ final class CoreDataMangaRepository: MangaRepository, @unchecked Sendable {
             CoreDataManager.shared.setCover(mangaId: id, coverUrl: url, original: original, context: context)
         }
     }
+
+    @discardableResult
+    func updateDetails(_ manga: AidokuRunner.Manga, filters: MangaChapterFilters) async -> Bool {
+        await container.performBackgroundTask { context in
+            let manga = manga.toOld()
+            manga.chapterFlags = filters.flags
+            manga.langFilter = filters.language
+            manga.scanlatorFilter = filters.scanlators
+            return CoreDataManager.shared.updateMangaDetails(manga: manga, context: context)
+        }
+    }
 }

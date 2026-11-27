@@ -49,4 +49,25 @@ import Testing
         #expect(await chapters.chaptersBlankAsNil(of: MangaIdentifier(sourceKey: "contract.source", mangaKey: "m2")).isEmpty)
         await store.tearDown()
     }
+
+    /// An empty stored url (bajo nº 19) comes back as nil from both reads.
+    @Test(arguments: repositoryFixtures)
+    func aBlankURLComesBackAsNil(fixture: any RepositoryFixture) async throws {
+        let store = try await fixture.make()
+        let chapters = store.repos.chapters
+        await store.seed.addChapters([
+            AidokuRunner.Chapter(key: "c1", title: "", chapterNumber: 1),
+            AidokuRunner.Chapter(key: "c2", chapterNumber: 2, url: URL(string: "https://example.com/c2"))
+        ], to: manga)
+        await store.seed.setChapterURL(ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.mangaKey, chapterKey: "c1"), "")
+        let stored = await chapters.chapters(of: manga)
+        try #require(stored.count == 2)
+        #expect(stored[0].url == nil)
+        #expect(stored[1].url == URL(string: "https://example.com/c2"))
+        let before = await chapters.chaptersBlankAsNil(of: manga)
+        try #require(before.count == 2)
+        #expect(before[0].url == nil)
+        #expect(before[1].url == URL(string: "https://example.com/c2"))
+        await store.tearDown()
+    }
 }

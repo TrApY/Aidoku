@@ -192,6 +192,14 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
         }
     }
 
+    func refreshEntries(category: String?) async -> [LibraryRefreshEntry] {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.getLibraryManga(category: category, context: context)
+                .compactMap { $0.manga?.toManga() }
+                .map(LibraryRefreshEntry.init)
+        }
+    }
+
     func entry(_ id: MangaIdentifier) async -> AidokuRunner.Manga? {
         await container.performBackgroundTask { context in
             CoreDataManager.shared.getLibraryManga(mangaId: id, context: context)?.manga?.toManga().toNew()
@@ -708,6 +716,61 @@ final class CoreDataLibraryRepository: LibraryRepository, @unchecked Sendable {
                 object.chapterId = newChapterIds[object.chapterId] ?? object.chapterId
             }
             return context.saveLogging("Failed to save id migration")
+        }
+    }
+
+    func clearLibraryAndManga() async {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.clearLibrary(context: context)
+            CoreDataManager.shared.clearManga(context: context)
+        }
+    }
+
+    func clearChaptersCategoriesAndTracks() async {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.clearChapters(context: context)
+            CoreDataManager.shared.clearCategories(context: context)
+            CoreDataManager.shared.clearTracks(context: context)
+            try? context.save()
+        }
+    }
+
+    func downloadedEntry(sourceKey: String, directoryName: String) async -> DownloadedEntryInfo {
+        await container.performBackgroundTask { context in
+            // First try direct lookup with the directory name
+            var mangaObject = CoreDataManager.shared.getManga(
+                mangaId: .init(sourceKey: sourceKey, mangaKey: directoryName),
+                context: context
+            )
+            var isInLibrary = CoreDataManager.shared.hasLibraryManga(
+                mangaId: .init(sourceKey: sourceKey, mangaKey: directoryName),
+                context: context
+            )
+
+            // If not found, try to find a manga whose sanitized ID matches the directory name
+            if mangaObject == nil {
+                let allMangaForSource = CoreDataManager.shared.getManga(context: context)
+                    .filter { $0.sourceId == sourceKey }
+
+                for candidateManga in allMangaForSource {
+                    let candidateId = candidateManga.id
+                    if candidateId.directoryName == directoryName {
+                        mangaObject = candidateManga
+                        isInLibrary = CoreDataManager.shared.hasLibraryManga(
+                            mangaId: .init(sourceKey: sourceKey, mangaKey: candidateId),
+                            context: context
+                        )
+                        break
+                    }
+                }
+            }
+
+            return DownloadedEntryInfo(
+                title: mangaObject?.title,
+                cover: mangaObject?.cover,
+                isInLibrary: isInLibrary,
+                mangaKey: mangaObject?.id ?? directoryName
+            )
         }
     }
 }

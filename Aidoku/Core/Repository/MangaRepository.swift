@@ -22,4 +22,8 @@ protocol MangaRepository: Sendable {
     /// Sets the cover and marks it as edited (with `original`, as not edited). The cover it had before; nil if the
     /// manga is not stored or the save failed, and also when it had none.
     @discardableResult func setCover(_ id: MangaIdentifier, url: String?, original: Bool) async -> String?
+    /// Writes the manga's details and these chapter filters into the stored manga, as the manga screen did
+    /// (D-L12-5, spec §1.5 nº 15): what the user edited stays; the chapter flags, the language, the scanlators
+    /// and the next update time are always written. false if the manga is not stored or the save failed.
+    @discardableResult func updateDetails(_ manga: AidokuRunner.Manga, filters: MangaChapterFilters) async -> Bool
 }

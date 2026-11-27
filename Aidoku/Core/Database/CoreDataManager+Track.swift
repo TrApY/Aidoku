@@ -18,11 +18,6 @@ extension CoreDataManager {
         (try? context.fetch(TrackObject.fetchRequest())) ?? []
     }
 
-    @MainActor
-    func hasTrack(mangaId: MangaIdentifier) -> Bool {
-        hasTrack(mangaId: mangaId, context: context)
-    }
-
     /// Checks if a track item exists in the data store for a manga.
     func hasTrack(mangaId: MangaIdentifier, context: NSManagedObjectContext) -> Bool {
         let request = TrackObject.fetchRequest()

@@ -19,11 +19,6 @@ extension CoreDataManager {
         (try? context.fetch(SourceObject.fetchRequest())) ?? []
     }
 
-    @MainActor
-    func hasSource(key: String) -> Bool {
-        hasSource(key: key, context: context)
-    }
-
     /// Check if a source exists in the data store.
     func hasSource(key: String, context: NSManagedObjectContext) -> Bool {
         let request = SourceObject.fetchRequest()
@@ -52,31 +47,5 @@ extension CoreDataManager {
     func removeSource(key: String, context: NSManagedObjectContext) {
         guard let object = getSource(key: key, context: context) else { return }
         context.delete(object)
-    }
-
-    func setListing(sourceKey: String, listing: Int) async {
-        await container.performBackgroundTask { context in
-            guard
-                listing >= 0,
-                listing < Int16.max,
-                let source = self.getSource(key: sourceKey, context: context)
-            else { return }
-            source.listing = Int16(listing)
-            do {
-                try context.save()
-            } catch {
-                LogManager.logger.error("CoreDataManager.setListing: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    func getListing(sourceKey: String) async -> Int? {
-        await container.performBackgroundTask { context in
-            if let source = self.getSource(key: sourceKey, context: context) {
-                return Int(source.listing)
-            } else {
-                return nil
-            }
-        }
     }
 }

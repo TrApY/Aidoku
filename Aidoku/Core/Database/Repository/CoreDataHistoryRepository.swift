@@ -87,6 +87,15 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
         }
     }
 
+    func readState(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> HistoryReadState {
+        await container.performBackgroundTask { context in
+            HistoryReadState(
+                highestReadNumber: CoreDataManager.shared.getHighestReadNumber(mangaId: manga, mode: mode, context: context),
+                earliestReadDate: CoreDataManager.shared.getEarliestReadDate(mangaId: manga, context: context)
+            )
+        }
+    }
+
     // MARK: writes
 
     @discardableResult
@@ -209,6 +218,13 @@ final class CoreDataHistoryRepository: HistoryRepository, @unchecked Sendable {
             }
             let saved = context.saveLogging("TrackerManager.syncPageTrackerHistory")
             return TrackerSyncResult(saved: saved, plan: plan)
+        }
+    }
+
+    @discardableResult
+    func migrateChapterLinks(progress: @escaping @Sendable (Float) -> Void) async -> Bool {
+        await container.performBackgroundTask { context in
+            CoreDataManager.shared.migrateChapterHistory(progress: progress, context: context)
         }
     }
 }

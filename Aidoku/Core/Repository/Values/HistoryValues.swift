@@ -51,3 +51,10 @@ struct PageSave: Sendable, Hashable {
     var totalPages: Int?
     var scrollPosition: Double?
 }
+
+/// What registering a tracker reads of a manga's history (D-L12-4), in one read: the highest number read as the
+/// mode counts it, and the earliest read date of its completed chapters.
+struct HistoryReadState: Sendable, Hashable {
+    var highestReadNumber: Float?
+    var earliestReadDate: Date?
+}

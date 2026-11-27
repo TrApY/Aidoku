@@ -7,7 +7,6 @@
 
 import AidokuRunner
 import BackgroundTasks
-import CoreData
 import Nuke
 import UIKit
 
@@ -481,9 +480,7 @@ extension MangaManager {
         await TrackerManager.shared.processPendingUpdates()
 
         // fetch all library items from db
-        let allManga = await CoreDataManager.shared.container.performBackgroundTask { context in
-            CoreDataManager.shared.getLibraryManga(category: category, context: context).compactMap { $0.manga?.toManga() }
-        }
+        let allManga = await DataRepositories.shared.library.refreshEntries(category: category).map { $0.toManga() }
 
         // ensure there are manga to update
         guard !allManga.isEmpty else {
@@ -636,10 +633,7 @@ extension MangaManager {
 
         // set cover in coredata
         let coverUrl = "aidoku-image:///Covers/\(targetUrl.lastPathComponent)"
-        await CoreDataManager.shared.setCover(
-            mangaId: manga.identifier,
-            coverUrl: coverUrl
-        )
+        await DataRepositories.shared.manga.setCover(manga.identifier, url: coverUrl, original: false)
 
         return coverUrl
     }
@@ -648,11 +642,7 @@ extension MangaManager {
         var cover: String?
         defer {
             // set new cover and get old cover url
-            let originalCover = await CoreDataManager.shared.setCover(
-                mangaId: manga.identifier,
-                coverUrl: cover,
-                original: true
-            )
+            let originalCover = await DataRepositories.shared.manga.setCover(manga.identifier, url: cover, original: true)
 
             // if the original cover is an aidoku image, remove it
             if originalCover != cover, let originalCover, let url = URL(string: originalCover)?.toAidokuFileUrl() {

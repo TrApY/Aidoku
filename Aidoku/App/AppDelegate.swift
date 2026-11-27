@@ -156,7 +156,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // persistent-history remote-change observer's performAndWait deadlocks the
         // launch (no window ever appears). Forcing first init on the main thread here
         // makes the main thread win the race deterministically.
-        _ = CoreDataManager.shared
+        // DataRepositories.shared builds the Core Data manager's shared instance, container included, when it is
+        // first touched (CoreDataRepositories.swift), so touching it here still does it (D-L12-10).
+        _ = DataRepositories.shared
 
         // check for icloud availability
         // https://developer.apple.com/documentation/foundation/filemanager/url(forubiquitycontaineridentifier:)
@@ -404,7 +406,7 @@ extension AppDelegate {
     private func migrateHistory() async {
         showLoadingIndicator(style: .progress)
         try? await Task.sleep(nanoseconds: 500 * 1_000_000)
-        await CoreDataManager.shared.migrateChapterHistory(progress: { @Sendable progress in
+        await DataRepositories.shared.history.migrateChapterLinks(progress: { @Sendable progress in
             Task { @MainActor in
                 self.indicatorProgress = progress
             }

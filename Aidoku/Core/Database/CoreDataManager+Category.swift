@@ -43,11 +43,6 @@ extension CoreDataManager {
         return (libraryObject?.categories?.allObjects as? [CategoryObject]) ?? []
     }
 
-    @MainActor
-    func getCategoryTitles(sorted: Bool = true, excludeFilterGroups: Bool = true) -> [String] {
-        getCategoryTitles(sorted: sorted, excludeFilterGroups: excludeFilterGroups, context: context)
-    }
-
     func getCategoryTitles(
         sorted: Bool = true,
         excludeFilterGroups: Bool = true,

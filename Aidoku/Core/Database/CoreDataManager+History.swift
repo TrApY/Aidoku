@@ -223,11 +223,6 @@ extension CoreDataManager {
         return historyDict
     }
 
-    @MainActor
-    func getProgress(chapterId: ChapterIdentifier) -> (completed: Bool, progress: Int?) {
-        getProgress(chapterId: chapterId, context: context)
-    }
-
     /// Get current completion status and page progress for chapter
     func getProgress(
         chapterId: ChapterIdentifier,
@@ -300,14 +295,6 @@ extension CoreDataManager {
         request.sortDescriptors = [NSSortDescriptor(key: "dateRead", ascending: true)]
         let result = (try? context.fetch(request))?.first
         return result?.dateRead
-    }
-
-    /// Get the highest read number (chapter or volume) based on forced mode for a manga.
-    func getHighestReadNumber(
-        mangaId: MangaIdentifier,
-        context: NSManagedObjectContext
-    ) -> Float? {
-        getHighestReadNumber(mangaId: mangaId, mode: .stored(for: mangaId), context: context)
     }
 
     /// The highest read number (chapter or volume) of a manga as `mode` counts it.

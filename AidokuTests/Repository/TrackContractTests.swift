@@ -133,16 +133,18 @@ import Testing
         await store.tearDown()
     }
 
-    /// A predicate that throws (an id it cannot read) removes nothing, as before.
+    /// A predicate that throws (an id it cannot read) removes nothing, as before, whichever item it throws on: it
+    /// takes the first id it is given and throws on the next one, so the order of the fetch does not matter (bajo nº 2).
     @Test(arguments: repositoryFixtures)
     func aThrowingPredicateRemovesNothing(fixture: any RepositoryFixture) async throws {
         struct Unreadable: Error {}
         let store = try await fixture.make()
         let tracks = store.repos.tracks
         await tracks.add(item("server.a|1", "komga", manga))
-        await tracks.add(item("sin-separador", "komga", other))
-        let removed = await tracks.removeAll(trackerId: "komga", where: { id in
-            guard id.contains("|") else { throw Unreadable() }
+        await tracks.add(item("server.a|2", "komga", other))
+        let calls = PredicateCalls()
+        let removed = await tracks.removeAll(trackerId: "komga", where: { _ in
+            guard calls.next() == 1 else { throw Unreadable() }
             return true
         })
         #expect(!removed)
@@ -175,5 +177,19 @@ import Testing
         #expect(tracked)
         #expect(!untracked)
         await store.tearDown()
+    }
+}
+
+/// How many times a predicate was called.
+final class PredicateCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    /// 1 the first time, 2 the second…
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
     }
 }

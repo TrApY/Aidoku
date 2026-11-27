@@ -23,6 +23,8 @@ protocol HistoryRepository: Sendable {
     /// The highest number read (completed) as `mode` counts it; the caller gives the mode (it used to be read from the
     /// settings inside, §1.5 nº 5; ChapterTitleDisplayMode.stored(for:) gives the stored one).
     func highestReadNumber(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> Float?
+    /// `highestReadNumber` and `earliestReadDate` in one read, as registering a tracker needs them (D-L12-4).
+    func readState(of manga: MangaIdentifier, mode: ChapterTitleDisplayMode) async -> HistoryReadState
 
     // MARK: writes
 
@@ -46,4 +48,8 @@ protocol HistoryRepository: Sendable {
     /// D-L11-6): in one context it reads the local history of those chapters, plans with TrackerSyncPlanner and
     /// writes the plan, in one save. The journal and the notifications stay with the service, after the await.
     func applyTrackerSync(mangaId: MangaIdentifier, remote: [String: ChapterReadProgress]) async -> TrackerSyncResult
+    /// The 0.6 migration of the history (D-L12-6): links each history row without a chapter to its stored chapter,
+    /// in one context and one save; the rows already linked stay as they are. `progress` gets, from that context,
+    /// the share of rows gone through before each row (from 0, below 1). false if the save failed.
+    @discardableResult func migrateChapterLinks(progress: @escaping @Sendable (Float) -> Void) async -> Bool
 }
