@@ -137,6 +137,8 @@ extension ReaderCompletion {
         private(set) var reached: Int?
         /// The jump that broke the descent, if one did: from then on the chapter does not complete by itself.
         private(set) var jump: Jump?
+        /// The last page reported (where a jump starts from).
+        private var last = 0
 
         /// Nothing started it: the chapter was entered going down from the previous one (its first report counts) or
         /// from below.
@@ -144,20 +146,38 @@ extension ReaderCompletion {
 
         /// A descent that starts at `page`: the page the chapter opens at, or the one the slider drops the user at.
         init(startingAt page: Int) {
-            // ROJO[B]: esqueleto, no se anota nada
+            let start = max(1, page)
+            reached = start
+            last = start
         }
 
         /// A new page report of the chapter (the transition after the last page is `total + 1`, the one before the
         /// first page is 0).
-        mutating func report(page: Int) {
-            // ROJO[B]: esqueleto, no se anota nada
+        mutating func report(page raw: Int) {
+            let page = max(1, raw)
+            defer { last = page }
+            guard jump == nil else { return }
+            guard let reached else {
+                // nothing opened it: going down from the previous chapter it shows its first page or the next one
+                if page <= Self.margin {
+                    reached = page
+                } else {
+                    jump = Jump(from: 0, to: page)
+                }
+                return
+            }
+            if page <= reached + Self.margin {
+                self.reached = max(reached, page)
+            } else {
+                jump = Jump(from: last, to: page)
+            }
         }
 
         /// Whether the chapter, of `totalPages` pages, may be completed: the user went down it to its last page (or the
         /// one before it: the transition fully on screen while the middle of the screen is still on it).
         func allowsCompletion(totalPages: Int) -> Bool {
-            // ROJO[B]: esqueleto, todo se permite como antes
-            true
+            guard totalPages > 0, jump == nil, let reached else { return false }
+            return reached >= totalPages - 1
         }
     }
 }

@@ -49,6 +49,13 @@ class ReaderViewController: BaseObservingViewController {
     private var lastPageSeenChapters: Set<String> = []
     /// The slider is dropping the user at another page (SUWA-39 B1).
     private var isSliderJump = false
+    /// Webtoon only (SUWA-39 B1): how the user went down each chapter in this session, by its key. It starts when the
+    /// chapter opens (the page it opens at: «Continuar», the chapter list) or when the slider drops the user at
+    /// another page; a chapter entered going down from the previous one starts with its first report. A chapter
+    /// is completed only if it is a descent to its last page, whichever way would complete it.
+    private var webtoonDescents: [String: ReaderCompletion.WebtoonDescent] = [:]
+    /// The chapters whose refused completion already went to the journal (once each, until they are opened again).
+    private var webtoonRefusalsNoted: Set<String> = []
     /// The chapters this reader already tried to complete: once each (entering the transition and then going
     /// on to the next chapter is one completion, not two; SUWA-17 C2).
     private var completionAttempted: Set<String> = []
@@ -795,6 +802,9 @@ extension ReaderViewController {
         // the position is the one it opens at, not the last chapter's: leaving before the reader tells anything
         // is not a change either (SUWA-17 F4)
         currentPosition = openingPosition()
+        // the descent of the webtoon starts at the page it opens at (SUWA-39 B1)
+        webtoonDescents[chapter.key] = .init(startingAt: max(1, currentPage))
+        webtoonRefusalsNoted.remove(chapter.key)
         // moving inside the page it opens at is not reading either (hallazgo 2, JoTa 17-nov)
         openedAt = (chapter.key, max(1, currentPage))
         // the page it opens at is not a change: nothing is saved until the user turns a page
@@ -1315,7 +1325,9 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
                 lastPageSeen: lastPageSeenChapters.contains(self.chapter.key),
                 inForeground: appActivity.isActive
             ),
-            !AppSettings.general.incognitoMode.get()
+            !AppSettings.general.incognitoMode.get(),
+            // the webtoon: only a chapter the user went down (SUWA-39 B1)
+            webtoonMayComplete(self.chapter, totalPages: totalPages)
         {
             completionAttempted.insert(self.chapter.key)
             let readerType = String(describing: type(of: reader as Any))
@@ -1377,6 +1389,34 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         setCurrentPages(page...page, position: position)
     }
 
+    /// The webtoon reported `page` of the chapter being read: the slider starts a new descent there, anything else
+    /// goes on with the one it had (SUWA-39 B1).
+    private func noteWebtoonPage(_ page: Int, totalPages: Int) {
+        if isSliderJump {
+            webtoonDescents[chapter.key] = .init(startingAt: min(max(1, page), totalPages))
+            webtoonRefusalsNoted.remove(chapter.key)
+        } else {
+            webtoonDescents[chapter.key, default: .init()].report(page: page)
+        }
+    }
+
+    /// Whether the webtoon may complete `chapter`: only after going down it to its last page (SUWA-39 B1). A refusal
+    /// goes to the completion journal, once per chapter, with the jump that broke the descent and no titles (B2).
+    /// Other readers: always.
+    private func webtoonMayComplete(_ chapter: AidokuRunner.Chapter, totalPages: Int) -> Bool {
+        guard reader is ReaderWebtoonViewController else { return true }
+        let descent = webtoonDescents[chapter.key] ?? .init()
+        if descent.allowsCompletion(totalPages: totalPages) { return true }
+        if webtoonRefusalsNoted.insert(chapter.key).inserted {
+            CompletionJournal.record(
+                .init(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: chapter.key),
+                reason: descent.jump.map { "webtoon: no completa, salto \($0.from)→\($0.to)" } ?? "webtoon: no completa, sin bajada",
+                detail: "página \(currentPage) de \(totalPages), hasta la \(descent.reached.map(String.init) ?? "-")"
+            )
+        }
+        return false
+    }
+
     func setCurrentPages(_ pages: ClosedRange<Int>) {
         setCurrentPages(pages, position: nil)
     }
@@ -1406,6 +1446,9 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
             return
         }
         let previousPage = currentPage
+        if reader is ReaderWebtoonViewController {
+            noteWebtoonPage(pages.lowerBound, totalPages: totalPages)
+        }
 
         updateDescriptionButton(pages: pages)
         updateAutoScrollButton()
@@ -1529,6 +1572,9 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         guard appActivity.isActive else { return false } // every reader, also the text one (SUWA-12 I1)
         guard !AppSettings.general.incognitoMode.get() else { return false }
         // once per chapter in this reader (it counted already)
+        guard !completionAttempted.contains(chapter.key) else { return true }
+        // the webtoon completes the chapters the user went down (SUWA-39 B1), whichever way asks
+        guard webtoonMayComplete(chapter, totalPages: toolbarView.totalPages ?? 0) else { return false }
         guard completionAttempted.insert(chapter.key).inserted else { return true }
 
         let reason = "\(completionTrigger) (\(String(describing: type(of: reader as Any))), página \(currentPage) de \(toolbarView.totalPages ?? 0))"
