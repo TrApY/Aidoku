@@ -781,6 +781,35 @@ extension ImagePipelineSwappingTests {
         await opened.close()
     }
 
+    /// R2-m2: a batch that never comes back (the chapter in, the collection not told) must not freeze the reader for
+    /// good: opening another chapter starts from nothing, and its pages are told and it is completed.
+    @Test(.timeLimit(.minutes(2))) func aBatchThatNeverComesBackDoesNotFreezeTheNextChapter() async throws {
+        let opened = try await open(mangaKey: "lotecolgado", startPage: 6, holding: { _ in false }, chain: ["d1", "d2", "d3"], startKey: "d1")
+        let webtoon = opened.webtoon
+        try await settle(opened)
+        try preload(opened, "d2")
+        webtoon.sectionBatchGate = { await withUnsafeContinuation { (_: UnsafeContinuation<Void, Never>) in } }
+        let stuck = Task { await webtoon.appendNextChapter() }
+        try await waitUntil(seconds: 5) { webtoon.isChangingSections }
+        try #require(webtoon.isChangingSections, "the change of the sections did not start")
+        webtoon.sectionBatchGate = nil
+        // another chapter is opened
+        try preload(opened, "d3")
+        let third = try #require(opened.chain.first { $0.key == "d3" })
+        opened.reader.setChapter(third)
+        opened.reader.loadCurrentChapter()
+        try await waitUntil { webtoon.anchor?.chapterKey == "d3" }
+        try #require(webtoon.anchor?.chapterKey == "d3", "d3 did not open: \(String(describing: webtoon.anchor))")
+        #expect(!webtoon.isChangingSections, "the change that never came back still holds the reader")
+        try await readsDown(opened, rows: [2, 3])
+        #expect(opened.reader.currentPage == 3, "the new chapter is at page \(opened.reader.currentPage)")
+        try await readsDown(opened, rows: Array(4...12))
+        try await readsDown(opened, rows: [13])
+        let completed = await completedInHistory(opened.ids[2])
+        #expect(completed, "d3 not completed: \(journalLines(opened.ids[2], startingWith: "webtoon:"))")
+        _ = stuck
+        await opened.close()
+    }
 
 
 
