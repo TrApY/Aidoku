@@ -74,10 +74,15 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// The reader is shown (between viewWillAppear and viewWillDisappear): only then is anything downloaded ahead.
     private var isInFront = true
 
-    // The chapters currently shown in the reader view
-    private var chapters: [AidokuRunner.Chapter] = []
+    // The chapters currently shown in the reader view (readable for the tests)
+    private(set) var chapters: [AidokuRunner.Chapter] = []
     // The pages corresponding to the `chapters` variable
     private var pages: [[Page]] = []
+    /// Tests (SUWA-39): told right after `chapters` and `pages` changed (a chapter put in or trimmed) and before the
+    /// collection applies the batch: for that moment the collection has other sections than the arrays.
+    var onSectionsMutated: (() -> Void)?
+    /// Tests (SUWA-39): says whether the user is touching the content, instead of the scroll view's own state.
+    var isUserTouchingOverride: (() -> Bool)?
     private var dictionaryOverlayTapHandler: ((String, String, CGRect, [CGRect]) -> Void)?
     private var dictionaryOverlayInteractionMode: DictionaryOverlayInteractionMode = .none
 
@@ -1251,6 +1256,7 @@ extension ReaderWebtoonViewController {
         }
         chapters.insert(prevChapter, at: 0)
         pages.insert(chapterPages, at: 0)
+        onSectionsMutated?()
 
         // disable animations and adjust offset before re-enabling (the layout keeps the anchor: SUWA-19)
         CATransaction.begin()
@@ -1268,6 +1274,7 @@ extension ReaderWebtoonViewController {
         if !loadingNext, canTrimSection(at: trimIndex) {
             chapters.removeLast()
             pages.removeLast()
+            onSectionsMutated?()
             await collectionNode.performBatch(animated: false) {
                 collectionNode.deleteSections(IndexSet(integer: trimIndex))
             }
@@ -1311,6 +1318,7 @@ extension ReaderWebtoonViewController {
         }
         chapters.append(nextChapter)
         pages.append(chapterPages)
+        onSectionsMutated?()
 
         // disable animations and adjust offset before re-enabling
         CATransaction.begin()
@@ -1326,6 +1334,7 @@ extension ReaderWebtoonViewController {
             // the anchor is by chapter: its section index changing moves nothing (SUWA-19)
             chapters.removeFirst()
             pages.removeFirst()
+            onSectionsMutated?()
             await collectionNode.performBatch(animated: false) {
                 collectionNode.deleteSections(IndexSet(integer: 0))
             }
