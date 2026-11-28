@@ -748,6 +748,38 @@ extension ImagePipelineSwappingTests {
         await opened.close()
     }
 
+    /// R2-I2: `setChapter` puts the new chapter in `chapters` at once and the old pages stay until the new ones come
+    /// (seconds, with a WebView). A drag in that time must not anchor the new chapter on the old chapter's pages: no
+    /// anchor, no page reported for the new chapter, and its descent goes on when the pages come.
+    @Test(.timeLimit(.minutes(2))) func aDragWhileTheNewChapterLoadsDoesNotAnchorItOnTheOldPages() async throws {
+        let opened = try await open(mangaKey: "cargandoarrastre", startPage: 6, holding: { _ in false }, chain: ["d1", "d2"], startKey: "d1")
+        let webtoon = opened.webtoon
+        try await settle(opened)
+        try preload(opened, "d2")
+        let gate = Gate()
+        webtoon.pagesLoadGate = { await gate.wait() }
+        let next = try #require(opened.chain.first { $0.key == "d2" })
+        opened.reader.setChapter(next)
+        opened.reader.loadCurrentChapter()
+        try await Task.sleep(for: .milliseconds(500))
+        try #require(webtoon.chapters.map(\.key) == ["d2"], "\(webtoon.chapters.map(\.key))")
+        try #require(opened.sections == 1, "the collection has \(opened.sections) sections")
+        // the user drags on the old pages
+        try userScrolls(opened, toRow: 8, section: 0, at: 0.5)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(webtoon.anchor == nil, "anchored on the old pages: \(String(describing: webtoon.anchor))")
+        #expect(opened.reader.currentPage < 1, "the new chapter was told at page \(opened.reader.currentPage)")
+        await gate.open()
+        webtoon.pagesLoadGate = nil
+        try await waitUntil { webtoon.anchor?.chapterKey == "d2" }
+        try #require(webtoon.anchor?.chapterKey == "d2", "d2 did not open: \(String(describing: webtoon.anchor))")
+        // its descent goes on: reading it down to the end completes it
+        try await readsDown(opened, rows: Array(2...12))
+        try await readsDown(opened, rows: [13])
+        let completed = await completedInHistory(opened.ids[1])
+        #expect(completed, "d2 not completed: \(journalLines(opened.ids[1], startingWith: "webtoon:"))")
+        await opened.close()
+    }
 
 
 
