@@ -114,3 +114,50 @@ final class ReaderAppActivity: @unchecked Sendable {
         observers.forEach(center.removeObserver)
     }
 }
+
+// MARK: - Webtoon descent (SUWA-39 B1)
+
+extension ReaderCompletion {
+    /// SUWA-39 B1, webtoon only: whether the user went DOWN a chapter, page after page, to its last page in this
+    /// session. A chapter is completed only if they did (by the transition fully on screen, by the page report that
+    /// goes into the transition, or by going on to the next chapter from its last page). The reader tells it the pages
+    /// of each chapter in turn; `start` is the page it opens at or the one the slider drops the user at.
+    struct WebtoonDescent: Equatable {
+        /// Where a descent broke: the page before and the one it jumped to (from 0: nothing opened the chapter).
+        struct Jump: Equatable {
+            let from: Int
+            let to: Int
+        }
+
+        /// How many pages down a report may be from the highest one reached and still be going down (the transition
+        /// and quick swipes). A jump further than that, not from the slider, breaks the descent.
+        static let margin = 2
+
+        /// The highest page of the descent so far; nil: nothing started it yet.
+        private(set) var reached: Int?
+        /// The jump that broke the descent, if one did: from then on the chapter does not complete by itself.
+        private(set) var jump: Jump?
+
+        /// Nothing started it: the chapter was entered going down from the previous one (its first report counts) or
+        /// from below.
+        init() {}
+
+        /// A descent that starts at `page`: the page the chapter opens at, or the one the slider drops the user at.
+        init(startingAt page: Int) {
+            // ROJO[B]: esqueleto, no se anota nada
+        }
+
+        /// A new page report of the chapter (the transition after the last page is `total + 1`, the one before the
+        /// first page is 0).
+        mutating func report(page: Int) {
+            // ROJO[B]: esqueleto, no se anota nada
+        }
+
+        /// Whether the chapter, of `totalPages` pages, may be completed: the user went down it to its last page (or the
+        /// one before it: the transition fully on screen while the middle of the screen is still on it).
+        func allowsCompletion(totalPages: Int) -> Bool {
+            // ROJO[B]: esqueleto, todo se permite como antes
+            true
+        }
+    }
+}

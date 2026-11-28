@@ -47,6 +47,8 @@ class ReaderViewController: BaseObservingViewController {
     /// completes only the chapter being read, and only if it is one of these (SUWA-17 C1). Only in the current
     /// visit: emptied on every chapter change (SUWA-17 D6).
     private var lastPageSeenChapters: Set<String> = []
+    /// The slider is dropping the user at another page (SUWA-39 B1).
+    private var isSliderJump = false
     /// The chapters this reader already tried to complete: once each (entering the transition and then going
     /// on to the next chapter is one completion, not two; SUWA-17 C2).
     private var completionAttempted: Set<String> = []
@@ -914,7 +916,17 @@ extension ReaderViewController {
         reader?.sliderMoved(value: sender.currentValue)
     }
     @objc func sliderStopped(_ sender: ReaderSliderView) {
-        reader?.sliderStopped(value: sender.currentValue)
+        sliderJump {
+            reader?.sliderStopped(value: sender.currentValue)
+        }
+    }
+
+    /// What the slider does when the user lets go of it: the page it drops them at is deliberate, not a jump
+    /// (SUWA-39 B1: a webtoon descent starts there).
+    func sliderJump(_ body: () -> Void) {
+        isSliderJump = true
+        defer { isSliderJump = false }
+        body()
     }
 }
 

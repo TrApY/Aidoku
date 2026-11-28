@@ -22,7 +22,11 @@ extension ImagePipelineSwappingTests {
     private let second = AidokuRunner.Chapter(key: "c2", chapterNumber: 2)
 
     /// A reader on `chapter` of a manga with chapters 1 and 2 (the source's order, newest first).
-    private func reader(mangaKey: String, chapter: AidokuRunner.Chapter) async -> (ReaderViewController, AidokuRunner.Manga) {
+    private func reader(
+        mangaKey: String,
+        chapter: AidokuRunner.Chapter,
+        pageCount: Int = ReaderChapterEndTests.pageCount
+    ) async -> (ReaderViewController, AidokuRunner.Manga) {
         let manga = AidokuRunner.Manga(sourceKey: "lectorfinal", key: mangaKey, title: "Final", chapters: [second, first])
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
         let reader = ReaderViewController(source: nil, manga: manga, chapter: chapter)
@@ -31,7 +35,7 @@ extension ImagePipelineSwappingTests {
         reader.loadViewIfNeeded()
         try? await Task.sleep(for: .seconds(1))
         reader.presentedViewController?.dismiss(animated: false)
-        reader.setPages((0..<Self.pageCount).map {
+        reader.setPages((0..<pageCount).map {
             Page(sourceId: manga.sourceKey, chapterId: chapter.key, index: $0, imageURL: "https://example.invalid/\($0).jpg")
         })
         return (reader, manga)
@@ -168,6 +172,134 @@ extension ImagePipelineSwappingTests {
         UserDefaults.standard.removeObject(forKey: deleteKey)
         UserDefaults.standard.removeObject(forKey: queueKey)
         await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+
+    // MARK: - SUWA-39 B: in the webtoon a chapter is completed only after going down it
+
+    private static let webtoonPages = 32
+
+    /// The chapter opened in the webtoon reader at the stored page (what «Continuar» does), with 32 pages: the
+    /// reader opens it (that is where the descent starts) and, with no source, finds no pages, so they are told after.
+    private func openedWebtoon(
+        mangaKey: String,
+        chapter: AidokuRunner.Chapter,
+        page: Int
+    ) async throws -> (ReaderViewController, AidokuRunner.Manga) {
+        let manga = AidokuRunner.Manga(sourceKey: "lectorfinal", key: mangaKey, title: "Final", chapters: [second, first])
+        UserDefaults.standard.set("webtoon", forKey: "Reader.readingMode.\(manga.identifier)")
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+        await DataRepositories.shared.history.savePage(PageSave(chapter: id(manga, chapter), page: page, totalPages: Self.webtoonPages))
+        let reader = ReaderViewController(source: nil, manga: manga, chapter: chapter)
+        reader.appActivity = ReaderAppActivity(center: NotificationCenter(), active: true)
+        reader.loadViewIfNeeded()
+        try await Task.sleep(for: .seconds(1))
+        reader.presentedViewController?.dismiss(animated: false)
+        reader.loadCurrentChapter()
+        try await Task.sleep(for: .seconds(1))
+        reader.presentedViewController?.dismiss(animated: false)
+        reader.setPages((0..<Self.webtoonPages).map {
+            Page(sourceId: manga.sourceKey, chapterId: chapter.key, index: $0, imageURL: "https://example.invalid/\($0).jpg")
+        })
+        try #require(reader.reader is ReaderWebtoonViewController, "not the webtoon reader")
+        try #require(reader.currentPage == page, "opened at \(reader.currentPage), not at \(page)")
+        return (reader, manga)
+    }
+
+    private func closeWebtoon(_ manga: AidokuRunner.Manga) async {
+        UserDefaults.standard.removeObject(forKey: "Reader.readingMode.\(manga.identifier)")
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
+
+    /// The lines of the journal where the webtoon reader says it did not complete the chapter.
+    private func refusals(_ chapter: ChapterIdentifier) -> [String] {
+        CompletionJournal.lines().compactMap { line in
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard
+                fields.count >= 5, fields[1] == chapter.sourceKey, fields[2] == chapter.mangaKey, fields[3] == chapter.chapterKey,
+                fields[4].hasPrefix("webtoon: no completa")
+            else { return nil }
+            return fields[4]
+        }
+    }
+
+    /// Opened at page 12, the user is put at page 30 of 32 without the slider (a jump: a link, a layout, a stale
+    /// anchor) and goes down to the transition: not read, not completed. The journal says why, once.
+    @Test func aJumpDownWithoutTheSliderDoesNotComplete() async throws {
+        let (reader, manga) = try await openedWebtoon(mangaKey: "saltosin", chapter: first, page: 12)
+        let chapterId = id(manga, first)
+        for page in [30, 31, 32, 33] {
+            reader.setCurrentPage(page, position: nil)
+        }
+        try await Task.sleep(for: .seconds(2))
+        #expect(await storedProgress(chapterId).completed == false, "completed after a jump from page 12 to 30")
+        #expect(refusals(chapterId).contains("webtoon: no completa, salto 12→30"), "\(refusals(chapterId))")
+        // asking again does not repeat the line
+        reader.setCurrentPage(32, position: nil)
+        reader.setCurrentPage(33, position: nil)
+        try await Task.sleep(for: .seconds(1))
+        #expect(refusals(chapterId).filter { $0 == "webtoon: no completa, salto 12→30" }.count == 1)
+        await closeWebtoon(manga)
+    }
+
+    /// The same jump, and on into the next chapter from the last page (the third way to complete): nothing either.
+    @Test func aJumpDownAndOnToTheNextChapterDoesNotComplete() async throws {
+        let (reader, manga) = try await openedWebtoon(mangaKey: "saltosiguiente", chapter: first, page: 12)
+        for page in [30, 31, 32] {
+            reader.setCurrentPage(page, position: nil)
+        }
+        reader.setChapter(second)
+        try await Task.sleep(for: .seconds(2))
+        #expect(await storedProgress(id(manga, first)).completed == false, "completed going on to the next chapter after a jump")
+        await closeWebtoon(manga)
+    }
+
+    /// Protector (born green): from the first page down to the transition, page after page: completed.
+    @Test func goingDownFromTheFirstPageCompletes() async throws {
+        let (reader, manga) = try await openedWebtoon(mangaKey: "bajarprimera", chapter: first, page: 1)
+        for page in 2...(Self.webtoonPages + 1) {
+            reader.setCurrentPage(page, position: nil)
+        }
+        #expect(await completed(id(manga, first)) == true)
+        #expect(refusals(id(manga, first)).isEmpty)
+        await closeWebtoon(manga)
+    }
+
+    /// The slider is deliberate: dropped at page 30, going down from there completes.
+    @Test func theSliderToThe30thAndGoingDownCompletes() async throws {
+        let (reader, manga) = try await openedWebtoon(mangaKey: "barra", chapter: first, page: 12)
+        reader.sliderJump {
+            reader.setCurrentPage(30, position: nil)
+        }
+        for page in [31, 32, 33] {
+            reader.setCurrentPage(page, position: nil)
+        }
+        #expect(await completed(id(manga, first)) == true)
+        await closeWebtoon(manga)
+    }
+
+    /// «Continuar» at page 12 (the stored one) and going down: completed.
+    @Test func continuingAtThe12thAndGoingDownCompletes() async throws {
+        let (reader, manga) = try await openedWebtoon(mangaKey: "continuar", chapter: first, page: 12)
+        for page in 13...(Self.webtoonPages + 1) {
+            reader.setCurrentPage(page, position: nil)
+        }
+        #expect(await completed(id(manga, first)) == true)
+        await closeWebtoon(manga)
+    }
+
+    /// Entering the chapter going down from the previous one (scrolling on from its end) and reading it to the end:
+    /// completed.
+    @Test func enteringGoingDownFromThePreviousChapterAndReachingTheEndCompletes() async throws {
+        let (reader, manga) = try await openedWebtoon(mangaKey: "entrando", chapter: first, page: 30)
+        for page in [31, 32] {
+            reader.setCurrentPage(page, position: nil)
+        }
+        reader.setChapter(second)
+        for page in 1...(Self.webtoonPages + 1) {
+            reader.setCurrentPage(page, position: nil)
+        }
+        #expect(await completed(id(manga, second)) == true)
+        await closeWebtoon(manga)
     }
 }
 }
