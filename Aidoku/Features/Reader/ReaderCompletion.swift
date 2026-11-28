@@ -173,6 +173,14 @@ extension ReaderCompletion {
             }
         }
 
+        /// The screen the descent starts on (the one the chapter opened at, or the slider dropped the user at) shows
+        /// the pages down to `page`: what is seen counts as reached, so the user's first moves, which tell the page in
+        /// the middle of the screen and not the one at its top, are not a jump (SUWA-39 R2-I1). Not once it broke, and
+        /// not for a chapter nothing started a descent in.
+        mutating func screenShows(upTo page: Int) {
+             // pendiente[I1#1]
+        }
+
         /// Whether the chapter, of `totalPages` pages, may be completed: the user went down it to its last page (or the
         /// one before it: the transition fully on screen while the middle of the screen is still on it).
         func allowsCompletion(totalPages: Int) -> Bool {

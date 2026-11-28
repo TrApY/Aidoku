@@ -380,7 +380,7 @@ class ReaderViewController: BaseObservingViewController {
         addObserver(forName: "Reader.readingMode.\(manga.identifier)") { [weak self] _ in
             guard let self else { return }
             self.setReadingMode(UserDefaults.standard.string(forKey: "Reader.readingMode.\(self.manga.identifier)"))
-            self.reader?.setChapter(self.chapter, startPage: self.currentPage)
+            self.reloadReaderAtTheCurrentPage()
             // if the tap zone is auto, it will changed based on the current reader
             self.updateTapZone()
         }
@@ -395,7 +395,7 @@ class ReaderViewController: BaseObservingViewController {
         }
         let reloadBlock: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
-            self.reader?.setChapter(self.chapter, startPage: self.currentPage)
+            self.reloadReaderAtTheCurrentPage()
         }
         // reload pages when processors change
         addObserver(forName: "Reader.downsampleImages", using: reloadBlock)
@@ -410,7 +410,7 @@ class ReaderViewController: BaseObservingViewController {
             self.configureBarToggleTapGestures()
             self.configureDictionaryLookupGesture()
             self.configureDictionaryOverlayInteractionMode()
-            self.reader?.setChapter(self.chapter, startPage: self.currentPage)
+            self.reloadReaderAtTheCurrentPage()
         }
         for key in [
             AppSettings.dictionary.enable.key,
@@ -816,6 +816,19 @@ extension ReaderViewController {
         reader?.setChapter(chapter, startPage: currentPage)
     }
 
+    /// The reader put in the chapter again at the page being read (the reading mode changed, or a setting that
+    /// reloads the reader). A webtoon reader takes over from another reader or from itself: the descent of the
+    /// chapter starts again at that page, as with the slider, because the pages the reader before turned to did not go
+    /// through it (SUWA-39 R2-I3). The paged and the text readers: unchanged.
+    func reloadReaderAtTheCurrentPage() {
+        restartWebtoonDescentAtTheCurrentPage()
+        reader?.setChapter(chapter, startPage: currentPage)
+    }
+
+    private func restartWebtoonDescentAtTheCurrentPage() {
+         // pendiente[I3#2]
+    }
+
     /// Where in the page it opens at the webtoon reader goes (SUWA-19 D12): the history's scrollPosition is the
     /// page plus its fraction; it counts only for the page it opens at (an old version, another device or a text
     /// reader, whose position is from 0 to 1, leave values for another page, and nil does not clear it).
@@ -930,6 +943,9 @@ extension ReaderViewController {
             reader?.sliderStopped(value: sender.currentValue)
         }
     }
+
+    /// Tests (SUWA-39 R2): the page slider, whose handlers (`sliderMoved`, `sliderStopped`) are the reader's own.
+    var pageSlider: ReaderSliderView { toolbarView.sliderView }
 
     /// What the slider does when the user lets go of it: the page it drops them at is deliberate, not a jump
     /// (SUWA-39 B1: a webtoon descent starts there).
@@ -1398,6 +1414,18 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
         } else {
             webtoonDescents[chapter.key, default: .init()].report(page: page)
         }
+    }
+
+    /// The screen the webtoon opened the chapter at (or the slider dropped the user at) shows the pages down to
+    /// `page`: they count as reached (SUWA-39 R2-I1).
+    func webtoonScreenShows(upToPage page: Int) {
+         // pendiente[I1#3]
+    }
+
+    /// Whether the descent of the chapter being read allows its completion, without writing anything (SUWA-39 B1):
+    /// the webtoon asks before it notes «webtoon: transición final», so a refusal is not preceded by it.
+    func webtoonDescentAllowsCompletion() -> Bool {
+        true // pendiente[J#4]
     }
 
     /// Whether the webtoon may complete `chapter`: only after going down it to its last page (SUWA-39 B1). A refusal

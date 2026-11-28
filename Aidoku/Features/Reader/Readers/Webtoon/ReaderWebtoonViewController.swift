@@ -89,6 +89,18 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// reported or the completion then. A count and not a flag: a chapter in above and one below may overlap.
     private var sectionChanges = 0
     var isChangingSections: Bool { sectionChanges > 0 }
+    /// Which stretch of changes of the sections is the current one: a new chapter (`setChapter`) starts another one, and
+    /// the changes of the one before, which may never come back, no longer count (SUWA-39 R2-m2).
+    private var sectionGeneration = 0
+    /// Tests (SUWA-39 R2): awaited right before the collection applies a batch of sections, with the arrays already
+    /// changed; one that never comes back stands for a batch that never ends.
+    var sectionBatchGate: (() async -> Void)?
+    /// Tests (SUWA-39 R2): awaited by `setChapter` before the pages of the new chapter are asked for: until it comes
+    /// back the reader still has the pages of the chapters before.
+    var pagesLoadGate: (() async -> Void)?
+    /// The screen the chapter opened at (or the slider dropped the user at) still has to tell the pages it shows: the
+    /// user has not moved yet (SUWA-39 R2-I1).
+    private var screenReachPending = false
     private var dictionaryOverlayTapHandler: ((String, String, CGRect, [CGRect]) -> Void)?
     private var dictionaryOverlayInteractionMode: DictionaryOverlayInteractionMode = .none
 
@@ -341,6 +353,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             let sectionPages = pages[safe: path.section],
             collectionNode.view.numberOfItems(inSection: path.section) == sectionPages.count,
             let chapter = chapters[safe: path.section],
+             // pendiente[I2#5]
             let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
             let found = ReadingAnchorGeometry.locate(
                 lineY: collectionNode.contentOffset.y + collectionNode.bounds.height / 2,
@@ -399,6 +412,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             let section = chapters.firstIndex(where: { $0.key == anchor.chapterKey }),
             collectionNode.view.numberOfSections == pages.count,
             let sectionPages = pages[safe: section],
+             // pendiente[I2#6]
             collectionNode.view.numberOfItems(inSection: section) == sectionPages.count,
             anchor.item < sectionPages.count
         else { return nil }
@@ -416,6 +430,43 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             }
         }
         return (path, anchor.fraction, anchor.screenFraction)
+    }
+
+    /// Whether the pages of the section are the ones of its chapter: while `setChapter` waits for the pages of the new
+    /// chapter, `chapters` has it and `pages` and the collection still have the old ones, so a section of the
+    /// collection read through `chapters` would put the new chapter on the old chapter's geometry (SUWA-39 R2-I2). The
+    /// first image page of the section says whose it is (a transition's `chapterId` is not always the chapter's key).
+    private func sectionHolds(chapterAt section: Int) -> Bool {
+        true // pendiente[I2#7]
+    }
+
+    /// The lowest page of the current chapter that shows on the screen now, whole or in part (SUWA-39 R2-I1); nil if
+    /// none does or the collection is not the reader's chapters (a batch not applied).
+    func lowestVisiblePage() -> Int? {
+        guard
+            !isChangingSections,
+            let chapter,
+            let chapterIndex = chapters.firstIndex(of: chapter),
+            let chapterPages = pages[safe: chapterIndex],
+            collectionNode.view.numberOfSections == pages.count
+        else { return nil }
+        let viewport = CGRect(origin: collectionNode.contentOffset, size: collectionNode.bounds.size)
+        let offset = chapterPages.first?.type != .imagePage ? 0 : 1
+        let attributes = collectionNode.collectionViewLayout.layoutAttributesForElements(in: viewport) ?? []
+        return attributes
+            .filter {
+                $0.indexPath.section == chapterIndex
+                    && chapterPages[safe: $0.indexPath.item]?.type == .imagePage
+                    && $0.frame.intersection(viewport).height > 0
+            }
+            .map { $0.indexPath.item + offset }
+            .max()
+    }
+
+    /// The first thing the user does after the chapter opened or the slider dropped them: the screen they were looking
+    /// at counts (SUWA-39 R2-I1). `force`: right now, whether or not the screen was pending.
+    private func noteScreenReach(force: Bool = false) {
+         // pendiente[I1#8]
     }
 
     /// The page of the anchor, counted as getCurrentPage() counts them, when it is in the current chapter.
@@ -733,6 +784,7 @@ extension ReaderWebtoonViewController {
 
     private func startAutoScroll() {
         guard !isAutoScrolling else { return }
+        noteScreenReach()
 
         isAutoScrolling = true
         resumeAutoScroll()
@@ -810,6 +862,7 @@ extension ReaderWebtoonViewController {
 // MARK: - Scroll View Delegate
 extension ReaderWebtoonViewController {
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        noteScreenReach()
         userIsScrolling = true
         turningPage = false
         super.scrollViewWillBeginDragging(scrollView)
@@ -1187,7 +1240,7 @@ extension ReaderWebtoonViewController {
                 inForeground: UIApplication.shared.applicationState != .background
             )
         {
-            if !journaledEnds.contains(chapter.key) {
+            if !journaledEnds.contains(chapter.key) { // pendiente[J#9]
                 journaledEnds.insert(chapter.key)
                 CompletionJournal.record(
                     .init(sourceKey: viewModel.manga.sourceKey, mangaKey: viewModel.manga.key, chapterKey: chapter.key),
@@ -1220,7 +1273,7 @@ extension ReaderWebtoonViewController {
 
         // a trim left for later (the user was touching when the chapter came in) is done when nothing is loading
         // (SUWA-39 A3)
-        if !loadingNext, !loadingPrevious, chapters.count > maxRetainedChapters, !isUserTouching {
+        if !loadingNext, !loadingPrevious, chapters.count > maxRetainedChapters, !isUserTouching { // pendiente[M1#10]
             Task { @MainActor in
                 await trimPendingSection()
             }
@@ -1236,15 +1289,18 @@ extension ReaderWebtoonViewController {
     }
 
     /// A change of the sections starts: from now on nobody moves the anchor, the chapter or the page (SUWA-39 A1).
-    private func beginSectionChange() {
+    private func beginSectionChange() -> Int {
         sectionChanges += 1
+        return sectionGeneration
     }
 
-    /// The batch is applied and the screen is on the anchor: the scroll events are the user's again.
-    private func endSectionChange() {
-        sectionChanges = max(0, sectionChanges - 1)
+    /// The batch is applied and the screen is on the anchor: the scroll events are the user's again. A change of a
+    /// generation before the current one (a chapter was opened since) no longer counts (SUWA-39 R2-m2).
+    private func endSectionChange(_ generation: Int) {
+        sectionChanges = max(0, sectionChanges - 1) // pendiente[M2#11]
         // the page measured ahead and the decode window were counted on the sections of before
         measuredAheadFrom = nil
+         // pendiente[M3#12]
     }
 
     /// Takes the section at `index` out: the arrays first, then the collection's batch. The caller holds the change
@@ -1253,6 +1309,7 @@ extension ReaderWebtoonViewController {
         chapters.remove(at: index)
         pages.remove(at: index)
         onSectionsMutated?()
+        await sectionBatchGate?()
         await collectionNode.performBatch(animated: false) {
             collectionNode.deleteSections(IndexSet(integer: index))
         }
@@ -1279,8 +1336,8 @@ extension ReaderWebtoonViewController {
         let current = chapter.flatMap { chapters.firstIndex(of: $0) } ?? 0
         let ends = [0, pages.count - 1].sorted { abs($0 - current) > abs($1 - current) }
         guard let index = ends.first(where: { canTrimSection(at: $0) }) else { return }
-        beginSectionChange()
-        defer { endSectionChange() }
+        let generation = beginSectionChange()
+        defer { endSectionChange(generation) }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         CATransaction.setAnimationDuration(0)
@@ -1326,10 +1383,12 @@ extension ReaderWebtoonViewController {
         // wait until zooming and scrolling stops, and nobody is touching or changing the sections (SUWA-39 A1, A3)
         while isZooming || isScrolling || isUserTouching || isChangingSections {
             try? await Task.sleep(nanoseconds: 500_000_000)
+             // pendiente[M5#13]
         }
+         // pendiente[M4#14]
         // from here (no suspension since the wait) until the batch is applied: nobody moves the anchor
-        beginSectionChange()
-        defer { endSectionChange() }
+        let generation = beginSectionChange()
+        defer { endSectionChange(generation) }
 
         var chapterPages = [Page(
             type: .prevInfoPage,
@@ -1349,6 +1408,7 @@ extension ReaderWebtoonViewController {
         chapters.insert(prevChapter, at: 0)
         pages.insert(chapterPages, at: 0)
         onSectionsMutated?()
+        await sectionBatchGate?()
 
         // disable animations and adjust offset before re-enabling (the layout keeps the anchor: SUWA-19)
         CATransaction.begin()
@@ -1386,10 +1446,12 @@ extension ReaderWebtoonViewController {
         // wait until zooming and scrolling stops, and nobody is touching or changing the sections (SUWA-39 A1, A3)
         while isZooming || isScrolling || isUserTouching || isChangingSections {
             try? await Task.sleep(nanoseconds: 500_000_000)
+             // pendiente[M5#15]
         }
+         // pendiente[M4#16]
         // from here (no suspension since the wait) until the batch is applied: nobody moves the anchor
-        beginSectionChange()
-        defer { endSectionChange() }
+        let generation = beginSectionChange()
+        defer { endSectionChange(generation) }
 
         var chapterPages = preloadedPages + [Page(
             type: .nextInfoPage,
@@ -1409,6 +1471,7 @@ extension ReaderWebtoonViewController {
         chapters.append(nextChapter)
         pages.append(chapterPages)
         onSectionsMutated?()
+        await sectionBatchGate?()
 
         // disable animations and adjust offset before re-enabling
         CATransaction.begin()
@@ -1534,6 +1597,7 @@ extension ReaderWebtoonViewController {
 // MARK: - Reader Delegate
 extension ReaderWebtoonViewController: ReaderReaderDelegate {
     func moveLeft() {
+        noteScreenReach()
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: max(
@@ -1550,6 +1614,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
     }
 
     func moveRight() {
+        noteScreenReach()
         let offset = CGPoint(
             x: collectionNode.contentOffset.x,
             y: min(
@@ -1611,6 +1676,8 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         isSliding = false
         writeAnchorFromScreen()
         scrollViewDidScroll(collectionNode.view)
+        // what shows where the slider dropped the user counts as reached (SUWA-39 R2-I1)
+        noteScreenReach(force: true)
     }
 
     func setChapter(_ chapter: AidokuRunner.Chapter, startPage: Int) {
@@ -1627,6 +1694,8 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         measureWantedIDs.set([])
         // and the data of its pages coming (SUWA-29 F1): the next chapter's pages may never come to take their place
         stopDownloadingAhead()
+         // pendiente[M2#17]
+        screenReachPending = false
         self.chapter = chapter
         // a new chapter: its first page is reported even if it has the number the last one had
         pageReports.reset()
@@ -1641,6 +1710,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
         chapters = [chapter]
 
         Task {
+            await pagesLoadGate?()
             await viewModel.loadPages(chapter: chapter)
             delegate?.setPages(viewModel.pages)
             if viewModel.pages.isEmpty {
@@ -1692,6 +1762,7 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
             if openingFraction != nil {
                 applyAnchor()
             }
+             // pendiente[I1#18]
         }
     }
 }

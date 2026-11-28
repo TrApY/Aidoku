@@ -28,8 +28,16 @@ protocol ReaderHoldingDelegate: AnyObject {
     func setSliderOffset(_ offset: CGFloat)
     /// false if it didn't count (incognito, the app not in front)
     @discardableResult func setCompleted() -> Bool
+    /// The webtoon reader: the screen it opened the chapter at, or the slider dropped the user at, shows the pages
+    /// down to `page` (SUWA-39 R2-I1): what is seen counts as reached.
+    func webtoonScreenShows(upToPage page: Int)
+    /// The webtoon reader, before it writes «webtoon: transición final» to the journal: false when the user did not
+    /// go down the chapter (SUWA-39 B1), whose refusal the reader's own completion writes. Nothing is written here.
+    func webtoonDescentAllowsCompletion() -> Bool
 }
 
 extension ReaderHoldingDelegate {
     func movedUpIntoChapter() {}
+    func webtoonScreenShows(upToPage page: Int) {}
+    func webtoonDescentAllowsCompletion() -> Bool { true }
 }
