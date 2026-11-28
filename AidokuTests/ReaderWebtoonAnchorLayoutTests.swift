@@ -111,6 +111,9 @@ extension ImagePipelineSwappingTests {
         let modeKey: String
         let pipeline: ImagePipeline
         let loader: HeldImageLoader
+        /// The manga's chapters, oldest first, as the reader has them (SUWA-39).
+        let chain: [AidokuRunner.Chapter]
+        let sourceKey: String
 
         func close() async {
             window.isHidden = true
@@ -132,7 +135,8 @@ extension ImagePipelineSwappingTests {
         /// Where the anchor's point is on the screen against where it should be (0: in its place).
         func distanceFromTheAnchor() throws -> CGFloat {
             let anchor = try #require(webtoon.anchor, "no anchor")
-            let section = sections == 2 && anchor.chapterKey == "c2" ? 1 : 0
+            // the section of the anchor's chapter in the reader's own list (with two chapters, c1 above c2)
+            let section = webtoon.chapters.firstIndex { $0.key == anchor.chapterKey } ?? 0
             let frame = try frame(row: anchor.item, section: section)
             let point = frame.minY + frame.height * anchor.fraction - webtoon.collectionNode.contentOffset.y
             return point - anchor.screenFraction * webtoon.collectionNode.bounds.height
@@ -145,21 +149,30 @@ extension ImagePipelineSwappingTests {
     }
 
     /// Opens chapter 2 ("c2", with "c1" before it) at `startPage`; the pages whose file name `holding` says wait.
-    private func open(mangaKey: String, startPage: Int, holding: @escaping @Sendable (String) -> Bool) async throws -> Opened {
-        let previous = AidokuRunner.Chapter(key: "c1", chapterNumber: 1)
-        let chapter = AidokuRunner.Chapter(key: "c2", chapterNumber: 2)
-        let manga = AidokuRunner.Manga(sourceKey: "lectoranclalayout", key: mangaKey, title: "Webtoon", chapters: [chapter, previous])
-        let ids = [previous, chapter].map { ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: $0.key) }
+    /// SUWA-39: `chain` (oldest first) and `startKey` open another chapter of a longer manga (its pages all tall).
+    private func open(
+        mangaKey: String,
+        startPage: Int,
+        holding: @escaping @Sendable (String) -> Bool,
+        chain keys: [String] = ["c1", "c2"],
+        startKey: String = "c2"
+    ) async throws -> Opened {
+        let chain = keys.enumerated().map { AidokuRunner.Chapter(key: $0.element, chapterNumber: Float($0.offset + 1)) }
+        let startIndex = try #require(keys.firstIndex(of: startKey))
+        let chapter = chain[startIndex]
+        let previous = chain[safe: startIndex - 1]
+        let manga = AidokuRunner.Manga(sourceKey: "lectoranclalayout", key: mangaKey, title: "Webtoon", chapters: Array(chain.reversed()))
+        let ids = chain.map { ChapterIdentifier(sourceKey: manga.sourceKey, mangaKey: manga.key, chapterKey: $0.key) }
         for id in ids {
             await removeTestHistory(id)
         }
-        await DataRepositories.shared.history.savePage(PageSave(chapter: ids[1], page: startPage, totalPages: Self.pageCount))
+        await DataRepositories.shared.history.savePage(PageSave(chapter: ids[startIndex], page: startPage, totalPages: Self.pageCount))
         let modeKey = "Reader.readingMode.\(manga.identifier)"
         UserDefaults.standard.set("webtoon", forKey: modeKey)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("anclalayout-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key, in: directory)
-        let previousPages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: previous.key, in: directory)
+        let previousPages = try previous.map { try Self.pages(sourceKey: manga.sourceKey, chapterKey: $0.key, in: directory) } ?? []
 
         let pipeline = ImagePipeline.shared
         let loader = HeldImageLoader { path in holding((path as NSString).lastPathComponent) }
@@ -187,7 +200,7 @@ extension ImagePipelineSwappingTests {
         webtoon.viewModel.preloadedPages = previousPages
         return Opened(
             reader: reader, webtoon: webtoon, ids: ids, window: window, center: center, directory: directory, modeKey: modeKey,
-            pipeline: pipeline, loader: loader
+            pipeline: pipeline, loader: loader, chain: chain, sourceKey: manga.sourceKey
         )
     }
 
@@ -471,6 +484,171 @@ extension ImagePipelineSwappingTests {
         let previous = await storedProgress(opened.ids[0])
         #expect(previous.progress == nil, "chapter 1 saved at page \(String(describing: previous.progress)): it was only peeked at from below")
         #expect(previous.completed == false, "chapter 1 completed: it was only peeked at from below")
+        await opened.close()
+    }
+
+    // MARK: - SUWA-39 A: the screen while a chapter is put in or trimmed
+
+    /// Chapters d1...d5 of a manga, all tall (each one is several screens), opened at `start`.
+    private static let chain = ["d1", "d2", "d3", "d4", "d5"]
+
+    /// Nobody is dragging: the flags of the last scroll are cleared (a layout's own scroll sets «scrolling»).
+    private func settle(_ opened: Opened) async throws {
+        opened.webtoon.scrollViewWillBeginDragging(opened.webtoon.scrollView)
+        opened.webtoon.scrollViewDidEndDragging(opened.webtoon.scrollView, willDecelerate: false)
+        try await Task.sleep(for: .milliseconds(300))
+    }
+
+    /// The next chapter the reader will be asked for: its pages are there when `appendNextChapter`/`prependPreviousChapter` ask.
+    private func preload(_ opened: Opened, _ key: String) throws {
+        let chapter = try #require(opened.chain.first { $0.key == key })
+        opened.webtoon.viewModel.preloadedPages = try Self.pages(sourceKey: opened.sourceKey, chapterKey: key, in: opened.directory)
+        opened.webtoon.viewModel.preloadedChapter = chapter
+    }
+
+    /// The user drags until the middle of the screen is at `row` of the chapter `key` (already put in), and lets go.
+    private func readInto(_ opened: Opened, _ key: String, row: Int) async throws {
+        let section = try #require(opened.webtoon.chapters.firstIndex { $0.key == key }, "\(key) is not in the reader")
+        try userScrolls(opened, toRow: row, section: section, at: 0.5)
+        try await Task.sleep(for: .milliseconds(800))
+        try #require(opened.reader.chapter.key == key, "the reader is in \(opened.reader.chapter.key), not in \(key)")
+        try await settle(opened)
+    }
+
+    /// Reading chapter d3 of [d1, d2, d3] (the ones above and the one being read are taller than the screen),
+    /// d4 is next: appending it takes the window over its limit and trims d1.
+    private func readingTheThirdOfThree(_ mangaKey: String) async throws -> Opened {
+        let opened = try await open(mangaKey: mangaKey, startPage: 6, holding: { _ in false }, chain: Self.chain, startKey: "d1")
+        for key in ["d2", "d3"] {
+            try await settle(opened)
+            try preload(opened, key)
+            await opened.webtoon.appendNextChapter()
+            try await readInto(opened, key, row: 3)
+        }
+        try #require(opened.webtoon.chapters.map(\.key) == ["d1", "d2", "d3"], "\(opened.webtoon.chapters.map(\.key))")
+        try preload(opened, "d4")
+        return opened
+    }
+
+    /// Reading chapter d2 of [d2, d3, d4] (d1 is next up): putting d1 in above takes the window over its limit and trims d4.
+    private func readingTheFirstOfThree(_ mangaKey: String) async throws -> Opened {
+        let opened = try await open(mangaKey: mangaKey, startPage: 6, holding: { _ in false }, chain: Self.chain, startKey: "d4")
+        for key in ["d3", "d2"] {
+            try await settle(opened)
+            try preload(opened, key)
+            await opened.webtoon.prependPreviousChapter()
+            try await readInto(opened, key, row: 8)
+        }
+        try #require(opened.webtoon.chapters.map(\.key) == ["d2", "d3", "d4"], "\(opened.webtoon.chapters.map(\.key))")
+        try preload(opened, "d1")
+        return opened
+    }
+
+    /// The user drags a little, in the middle of a change of sections.
+    private func userDrags(_ opened: Opened) {
+        let webtoon = opened.webtoon
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.scrollView.setContentOffset(CGPoint(x: 0, y: webtoon.scrollView.contentOffset.y + 30), animated: false)
+    }
+
+    /// A page of a chapter above the screen changes its height (another ratio), in the middle of a change of sections.
+    /// False if there was no such page.
+    private func aPageAboveChangesItsHeight(_ opened: Opened) -> Bool {
+        let webtoon = opened.webtoon
+        guard
+            let node = webtoon.collectionNode.nodeForItem(at: IndexPath(item: 2, section: 1)) as? ReaderWebtoonPageNode,
+            case let before = webtoon.collectionNode.view.contentSize.height
+        else { return false }
+        node.ratio = (node.ratio ?? 1.5) * 0.4
+        webtoon.collectionNode.collectionViewLayout.invalidateLayout()
+        webtoon.collectionNode.view.layoutIfNeeded()
+        return webtoon.collectionNode.view.contentSize.height < before - 100
+    }
+
+    /// After the change: the reader still reads what it read, and the screen is where it was.
+    private func expectStill(_ opened: Opened, readingKey: String, readingItem: Int, sections: [String], _ what: String) throws {
+        let webtoon = opened.webtoon
+        #expect(webtoon.anchor?.item == readingItem, "\(what): the anchor is at item \(String(describing: webtoon.anchor?.item)), not \(readingItem)")
+        #expect(webtoon.chapters.map(\.key) == sections, "\(what): the chapters are \(webtoon.chapters.map(\.key))")
+        #expect(opened.sections == sections.count, "\(what): the collection has \(opened.sections) sections")
+        #expect(opened.reader.chapter.key == readingKey, "\(what): the chapter is \(opened.reader.chapter.key)")
+        #expect(webtoon.anchor?.chapterKey == readingKey, "\(what): the anchor is \(String(describing: webtoon.anchor))")
+        if let distance = try? opened.distanceFromTheAnchor() {
+            #expect(abs(distance) <= 1, "\(what): the anchor's point is \(distance) pt from its place")
+        } else {
+            Issue.record("\(what): no anchor to measure from")
+        }
+        #expect(opened.scrollViewsAgree, "\(what): the two scroll views have other offsets")
+    }
+
+    /// A·1 (i): the user drags while the first chapter is trimmed (the arrays have 3 chapters, the collection 4): the
+    /// anchor, the chapter and the screen stay where they were.
+    @Test func aDragWhileTheFirstChapterIsTrimmedKeepsTheAnchorAndTheChapter() async throws {
+        let opened = try await readingTheThirdOfThree("recortearrastre")
+        let webtoon = opened.webtoon
+        let item = try #require(webtoon.anchor?.item)
+        webtoon.onSectionsMutated = { self.userDrags(opened) }
+        await webtoon.appendNextChapter()
+        webtoon.onSectionsMutated = nil
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+        try await Task.sleep(for: .seconds(1))
+        try expectStill(opened, readingKey: "d3", readingItem: item, sections: ["d2", "d3", "d4"], "drag")
+        await opened.close()
+    }
+
+    /// A·1 (ii): a page above the screen changes its height in the same moment.
+    @Test func aPageAboveChangingItsHeightWhileTheFirstChapterIsTrimmedKeepsTheAnchor() async throws {
+        let opened = try await readingTheThirdOfThree("recortealto")
+        let webtoon = opened.webtoon
+        let item = try #require(webtoon.anchor?.item)
+        var changes = 0
+        webtoon.onSectionsMutated = {
+            if self.aPageAboveChangesItsHeight(opened) {
+                changes += 1
+            }
+        }
+        await webtoon.appendNextChapter()
+        webtoon.onSectionsMutated = nil
+        try await Task.sleep(for: .seconds(1))
+        #expect(changes > 0, "no page above changed its height")
+        try expectStill(opened, readingKey: "d3", readingItem: item, sections: ["d2", "d3", "d4"], "height")
+        await opened.close()
+    }
+
+    /// A·1 (iii): the same putting a chapter in above and trimming the last one.
+    @Test func aDragWhileTheLastChapterIsTrimmedKeepsTheAnchorAndTheChapter() async throws {
+        let opened = try await readingTheFirstOfThree("recortarprepend")
+        let webtoon = opened.webtoon
+        let item = try #require(webtoon.anchor?.item)
+        webtoon.onSectionsMutated = { self.userDrags(opened) }
+        await webtoon.prependPreviousChapter()
+        webtoon.onSectionsMutated = nil
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+        try await Task.sleep(for: .seconds(1))
+        try expectStill(opened, readingKey: "d2", readingItem: item, sections: ["d1", "d2", "d3"], "prepend drag")
+        await opened.close()
+    }
+
+    /// A·3: the user touches the content right before the trim: it is not done (the screen would move under their
+    /// finger); when they let go, the next end of a scroll trims it.
+    @Test func theTrimWaitsWhileTheUserIsTouchingAndIsDoneAfterwards() async throws {
+        let opened = try await readingTheThirdOfThree("recortetocando")
+        let webtoon = opened.webtoon
+        let item = try #require(webtoon.anchor?.item)
+        var touching = false
+        webtoon.isUserTouchingOverride = { touching }
+        // the user puts a finger down once the new chapter is in
+        webtoon.onSectionsMutated = { touching = true }
+        await webtoon.appendNextChapter()
+        webtoon.onSectionsMutated = nil
+        try await Task.sleep(for: .milliseconds(500))
+        try expectStill(opened, readingKey: "d3", readingItem: item, sections: ["d1", "d2", "d3", "d4"], "touching")
+        // lets go: the end of the scroll takes the trim that was left
+        touching = false
+        webtoon.scrollViewWillBeginDragging(webtoon.scrollView)
+        webtoon.scrollViewDidEndDragging(webtoon.scrollView, willDecelerate: false)
+        try await waitUntil { webtoon.chapters.count == 3 }
+        try expectStill(opened, readingKey: "d3", readingItem: item, sections: ["d2", "d3", "d4"], "after letting go")
         await opened.close()
     }
 
