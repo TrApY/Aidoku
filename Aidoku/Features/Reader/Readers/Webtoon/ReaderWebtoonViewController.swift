@@ -353,7 +353,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             let sectionPages = pages[safe: path.section],
             collectionNode.view.numberOfItems(inSection: path.section) == sectionPages.count,
             let chapter = chapters[safe: path.section],
-             // pendiente[I2#5]
+            sectionHolds(chapterAt: path.section),
             let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
             let found = ReadingAnchorGeometry.locate(
                 lineY: collectionNode.contentOffset.y + collectionNode.bounds.height / 2,
@@ -412,7 +412,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
             let section = chapters.firstIndex(where: { $0.key == anchor.chapterKey }),
             collectionNode.view.numberOfSections == pages.count,
             let sectionPages = pages[safe: section],
-             // pendiente[I2#6]
+            sectionHolds(chapterAt: section),
             collectionNode.view.numberOfItems(inSection: section) == sectionPages.count,
             anchor.item < sectionPages.count
         else { return nil }
@@ -437,7 +437,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// collection read through `chapters` would put the new chapter on the old chapter's geometry (SUWA-39 R2-I2). The
     /// first image page of the section says whose it is (a transition's `chapterId` is not always the chapter's key).
     private func sectionHolds(chapterAt section: Int) -> Bool {
-        true // pendiente[I2#7]
+        guard
+            let chapter = chapters[safe: section],
+            let first = pages[safe: section]?.first(where: { $0.type == .imagePage })
+        else { return false }
+        return first.chapterId == chapter.key
     }
 
     /// The lowest page of the current chapter that shows on the screen now, whole or in part (SUWA-39 R2-I1); nil if
