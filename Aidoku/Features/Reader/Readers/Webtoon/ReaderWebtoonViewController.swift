@@ -466,7 +466,11 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// The first thing the user does after the chapter opened or the slider dropped them: the screen they were looking
     /// at counts (SUWA-39 R2-I1). `force`: right now, whether or not the screen was pending.
     private func noteScreenReach(force: Bool = false) {
-         // pendiente[I1#8]
+        guard screenReachPending || force else { return }
+        screenReachPending = false
+        if let page = lowestVisiblePage() {
+            delegate?.webtoonScreenShows(upToPage: page)
+        }
     }
 
     /// The page of the anchor, counted as getCurrentPage() counts them, when it is in the current chapter.
@@ -1762,7 +1766,8 @@ extension ReaderWebtoonViewController: ReaderReaderDelegate {
             if openingFraction != nil {
                 applyAnchor()
             }
-             // pendiente[I1#18]
+            // the screen it opened at is the one the user was looking at until they move: its pages count (SUWA-39 R2-I1)
+            screenReachPending = true
         }
     }
 }

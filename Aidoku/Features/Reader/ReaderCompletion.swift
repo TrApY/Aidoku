@@ -178,7 +178,8 @@ extension ReaderCompletion {
         /// the middle of the screen and not the one at its top, are not a jump (SUWA-39 R2-I1). Not once it broke, and
         /// not for a chapter nothing started a descent in.
         mutating func screenShows(upTo page: Int) {
-             // pendiente[I1#1]
+            guard jump == nil, let reached else { return }
+            self.reached = max(reached, page)
         }
 
         /// Whether the chapter, of `totalPages` pages, may be completed: the user went down it to its last page (or the

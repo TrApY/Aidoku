@@ -1419,7 +1419,7 @@ extension ReaderViewController: @MainActor ReaderHoldingDelegate {
     /// The screen the webtoon opened the chapter at (or the slider dropped the user at) shows the pages down to
     /// `page`: they count as reached (SUWA-39 R2-I1).
     func webtoonScreenShows(upToPage page: Int) {
-         // pendiente[I1#3]
+        webtoonDescents[chapter.key]?.screenShows(upTo: page)
     }
 
     /// Whether the descent of the chapter being read allows its completion, without writing anything (SUWA-39 B1):
