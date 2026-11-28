@@ -83,6 +83,12 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     var onSectionsMutated: (() -> Void)?
     /// Tests (SUWA-39): says whether the user is touching the content, instead of the scroll view's own state.
     var isUserTouchingOverride: (() -> Bool)?
+    /// How many changes of the sections (a chapter put in or trimmed, above or below) are going on (SUWA-39 A1). From
+    /// right before `chapters` and `pages` change until the collection has applied the batch and the screen is on the
+    /// anchor again, the collection has other sections than the arrays: nobody moves the anchor, the chapter, the page
+    /// reported or the completion then. A count and not a flag: a chapter in above and one below may overlap.
+    private var sectionChanges = 0
+    var isChangingSections: Bool { sectionChanges > 0 }
     private var dictionaryOverlayTapHandler: ((String, String, CGRect, [CGRect]) -> Void)?
     private var dictionaryOverlayInteractionMode: DictionaryOverlayInteractionMode = .none
 
@@ -327,8 +333,13 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
 
     /// The anchor at the middle of the screen now: the item there and where in it (SUWA-19).
     func anchorAtScreen() -> ReadingAnchor? {
+        // the collection's sections are the reader's chapters (not in the middle of a batch: its section 2 would be
+        // another chapter), as anchorTarget asks (SUWA-39 A2)
         guard
+            collectionNode.view.numberOfSections == pages.count,
             let path = getCurrentPagePath(),
+            let sectionPages = pages[safe: path.section],
+            collectionNode.view.numberOfItems(inSection: path.section) == sectionPages.count,
             let chapter = chapters[safe: path.section],
             let frame = collectionNode.collectionViewLayout.layoutAttributesForItem(at: path)?.frame,
             let found = ReadingAnchorGeometry.locate(
@@ -351,7 +362,7 @@ class ReaderWebtoonViewController: ZoomableCollectionViewController {
     /// The user moved: the anchor is where the middle of the screen is now (nothing there: it stays). Not with the
     /// app out of front (SUWA-19 I7).
     private func writeAnchorFromScreen() {
-        guard delegate?.appActivity.isActive ?? true, let new = anchorAtScreen() else { return }
+        guard !isChangingSections, delegate?.appActivity.isActive ?? true, let new = anchorAtScreen() else { return }
         anchor = new
         anchorIsTheUsers = true
     }
@@ -821,7 +832,10 @@ extension ReaderWebtoonViewController {
         // and the other the old one, which, with the content above changed, is another place (another chapter). That is
         // not the user moving, also during a drag or a deceleration (SUWA-19 revisión, hallazgo 4: pages shrinking
         // above during a deceleration took the reader into the next chapter). The anchor's page is still told
-        let placing = applyingAnchor
+        // A chapter put in or trimmed is the same: until its batch is applied the collection's sections are not the
+        // arrays' (SUWA-39 A1)
+        let changing = isChangingSections
+        let placing = applyingAnchor || changing
             || (collectionNode.collectionViewLayout as? VerticalContentOffsetPreservingLayout)?.isPlacingTheScreen == true
 
         guard
@@ -844,7 +858,7 @@ extension ReaderWebtoonViewController {
         let isAt = anchorOffsetIntoChapter()
 
         // the chapter is the anchor's: only the user moves it, so a layout never changes the chapter (SUWA-19)
-        if infinite, let key = anchor?.chapterKey, let anchorIndex = chapters.firstIndex(where: { $0.key == key }) {
+        if infinite, !changing, let key = anchor?.chapterKey, let anchorIndex = chapters.firstIndex(where: { $0.key == key }) {
             if chapterIndex > 0 && anchorIndex < chapterIndex {
                 movePreviousChapter()
                 needsInfoRefresh = true
@@ -887,7 +901,7 @@ extension ReaderWebtoonViewController {
         // the page is the anchor's: the content moving without the user tells nothing (SUWA-19); with it, where in
         // the page (D12), also when only that changes, but not inside a chapter entered from below (F3, G1: what
         // counts there is the next page)
-        if let page = anchorPage() {
+        if !changing, let page = anchorPage() {
             let position = positionToReport(page: page)
             if pageReports.shouldReport(page) {
                 reportedPosition = position
@@ -902,7 +916,9 @@ extension ReaderWebtoonViewController {
                 delegate?.setCurrentPage(page, position: position)
             }
         }
-        measureAhead()
+        if !changing {
+            measureAhead()
+        }
     }
 
     // disable slider movement while zooming
@@ -1140,6 +1156,9 @@ extension ReaderWebtoonViewController {
 
     // check if at the top or bottom to append the next/prev chapter
     func checkInfiniteLoad() {
+        // the sections are changing: what this looks at (the pages under the screen, the chapter's end) is not there
+        // yet (SUWA-39 A1)
+        guard !isChangingSections else { return }
         // prepend previous chapter
         if !loadingPrevious {
             let topPath = getCurrentPagePath(pos: .top)
@@ -1198,6 +1217,76 @@ extension ReaderWebtoonViewController {
                 }
             }
         }
+
+        // a trim left for later (the user was touching when the chapter came in) is done when nothing is loading
+        // (SUWA-39 A3)
+        if !loadingNext, !loadingPrevious, chapters.count > maxRetainedChapters, !isUserTouching {
+            Task { @MainActor in
+                await trimPendingSection()
+            }
+        }
+    }
+
+    /// The user has a finger on the content, or it is still moving after they let go (SUWA-39 A3).
+    private var isUserTouching: Bool {
+        if let isUserTouchingOverride {
+            return isUserTouchingOverride()
+        }
+        return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+    }
+
+    /// A change of the sections starts: from now on nobody moves the anchor, the chapter or the page (SUWA-39 A1).
+    private func beginSectionChange() {
+        sectionChanges += 1
+    }
+
+    /// The batch is applied and the screen is on the anchor: the scroll events are the user's again.
+    private func endSectionChange() {
+        sectionChanges = max(0, sectionChanges - 1)
+        // the page measured ahead and the decode window were counted on the sections of before
+        measuredAheadFrom = nil
+    }
+
+    /// Takes the section at `index` out: the arrays first, then the collection's batch. The caller holds the change
+    /// of the sections (`beginSectionChange`).
+    private func trimSection(at index: Int) async {
+        chapters.remove(at: index)
+        pages.remove(at: index)
+        onSectionsMutated?()
+        await collectionNode.performBatch(animated: false) {
+            collectionNode.deleteSections(IndexSet(integer: index))
+        }
+        collectionNode.view.layoutIfNeeded()
+    }
+
+    /// Both scroll views on the anchor, after the sections changed (SUWA-39 A1): the layout does it in its own pass;
+    /// this is the one that makes sure, with the batch applied.
+    private func putTheScreenBackOnTheAnchor() {
+        collectionNode.view.layoutIfNeeded()
+        applyAnchor()
+        scrollView.contentOffset = collectionNode.contentOffset
+        zoomView.adjustContentSize()
+    }
+
+    /// The window holds more chapters than it keeps because the user was touching when the trim was due: the one
+    /// farthest from the one being read that is entirely off screen goes now, if nothing is touched or loading.
+    private func trimPendingSection() async {
+        guard
+            !isChangingSections, !isUserTouching, !isZooming, !isSliding,
+            !loadingNext, !loadingPrevious,
+            chapters.count > maxRetainedChapters
+        else { return }
+        let current = chapter.flatMap { chapters.firstIndex(of: $0) } ?? 0
+        let ends = [0, pages.count - 1].sorted { abs($0 - current) > abs($1 - current) }
+        guard let index = ends.first(where: { canTrimSection(at: $0) }) else { return }
+        beginSectionChange()
+        defer { endSectionChange() }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setAnimationDuration(0)
+        await trimSection(at: index)
+        putTheScreenBackOnTheAnchor()
+        CATransaction.commit()
     }
 
     /// What of the chapter is on screen: the page under the bottom edge, the last page visible and whether
@@ -1234,10 +1323,13 @@ extension ReaderWebtoonViewController {
             return
         }
 
-        // wait until zooming and scrolling stops
-        while isZooming || isScrolling {
+        // wait until zooming and scrolling stops, and nobody is touching or changing the sections (SUWA-39 A1, A3)
+        while isZooming || isScrolling || isUserTouching || isChangingSections {
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
+        // from here (no suspension since the wait) until the batch is applied: nobody moves the anchor
+        beginSectionChange()
+        defer { endSectionChange() }
 
         var chapterPages = [Page(
             type: .prevInfoPage,
@@ -1269,19 +1361,14 @@ extension ReaderWebtoonViewController {
         // settle the insert's offset adjustment before the trim changes the content size
         collectionNode.view.layoutIfNeeded()
 
-        // trim the newest section once the window is full
+        // trim the newest section once the window is full, unless the user touches the content right now: it is left
+        // for the next end of a scroll (SUWA-39 A3)
         let trimIndex = pages.count - 1
-        if !loadingNext, canTrimSection(at: trimIndex) {
-            chapters.removeLast()
-            pages.removeLast()
-            onSectionsMutated?()
-            await collectionNode.performBatch(animated: false) {
-                collectionNode.deleteSections(IndexSet(integer: trimIndex))
-            }
+        if !loadingNext, !isUserTouching, canTrimSection(at: trimIndex) {
+            await trimSection(at: trimIndex)
         }
 
-        self.scrollView.contentOffset = self.collectionNode.contentOffset
-        self.zoomView.adjustContentSize()
+        putTheScreenBackOnTheAnchor()
         CATransaction.commit()
     }
 
@@ -1296,10 +1383,13 @@ extension ReaderWebtoonViewController {
             return
         }
 
-        // wait until zooming and scrolling stops
-        while isZooming || isScrolling {
+        // wait until zooming and scrolling stops, and nobody is touching or changing the sections (SUWA-39 A1, A3)
+        while isZooming || isScrolling || isUserTouching || isChangingSections {
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
+        // from here (no suspension since the wait) until the batch is applied: nobody moves the anchor
+        beginSectionChange()
+        defer { endSectionChange() }
 
         var chapterPages = preloadedPages + [Page(
             type: .nextInfoPage,
@@ -1330,18 +1420,14 @@ extension ReaderWebtoonViewController {
 
         collectionNode.view.layoutIfNeeded()
 
-        if !loadingPrevious, canTrimSection(at: 0) {
-            // the anchor is by chapter: its section index changing moves nothing (SUWA-19)
-            chapters.removeFirst()
-            pages.removeFirst()
-            onSectionsMutated?()
-            await collectionNode.performBatch(animated: false) {
-                collectionNode.deleteSections(IndexSet(integer: 0))
-            }
+        // the user touching the content right now: the trim is left for the next end of a scroll (SUWA-39 A3)
+        if !loadingPrevious, !isUserTouching, canTrimSection(at: 0) {
+            // the anchor is by chapter: its section index changing moves nothing (SUWA-19), and nobody moves it
+            // while the batch is not applied (SUWA-39 A1)
+            await trimSection(at: 0)
         }
 
-        scrollView.contentOffset = self.collectionNode.contentOffset
-        zoomView.adjustContentSize()
+        putTheScreenBackOnTheAnchor()
         CATransaction.commit()
     }
 
