@@ -301,5 +301,6 @@ extension ImagePipelineSwappingTests {
         #expect(await completed(id(manga, second)) == true)
         await closeWebtoon(manga)
     }
+
 }
 }

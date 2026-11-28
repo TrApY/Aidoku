@@ -132,4 +132,64 @@ struct ReaderWebtoonDescentTests {
     @Test func aChapterWithoutPagesNeverCompletes() {
         #expect(!descent(opening: 1, []).allowsCompletion(totalPages: 0))
     }
+
+    // MARK: - SUWA-39 R2-I1: what the screen shows counts as reached
+
+    /// Opened at page 1 on a tall screen (seven short pages on it): the first move tells the page in the middle of the
+    /// screen, the fifth. Without the screen's pages that is a jump from 1 to 5; with them, going down.
+    @Test func theFirstMoveToThePageInTheMiddleOfTheOpeningScreenIsNotAJump() {
+        var broken = ReaderCompletion.WebtoonDescent(startingAt: 1)
+        broken.report(page: 5)
+        #expect(broken.jump == ReaderCompletion.WebtoonDescent.Jump(from: 1, to: 5))
+
+        var result = ReaderCompletion.WebtoonDescent(startingAt: 1)
+        result.screenShows(upTo: 7)
+        #expect(result.reached == 7)
+        for page in [5, 6, 7, 8, 9] + down(10, total + 1) {
+            result.report(page: page)
+        }
+        #expect(result.jump == nil)
+        #expect(result.allowsCompletion(totalPages: total))
+    }
+
+    /// What the screen showed is the margin's start: two pages further is still going down, three is a jump.
+    @Test func theMarginCountsFromTheLastPageTheScreenShowed() {
+        var result = ReaderCompletion.WebtoonDescent(startingAt: 1)
+        result.screenShows(upTo: 7)
+        result.report(page: 9)
+        #expect(result.jump == nil)
+        result.report(page: 13)
+        #expect(result.jump == ReaderCompletion.WebtoonDescent.Jump(from: 9, to: 13))
+    }
+
+    /// The slider drops the user at 30 and the screen there shows down to 32: a new descent whose first moves, to the
+    /// page in the middle of the screen, are not jumps.
+    @Test func theScreenWhereTheSliderDroppedTheUserCountsToo() {
+        var result = ReaderCompletion.WebtoonDescent(startingAt: 12)
+        result.report(page: 25)
+        #expect(result.jump != nil)
+        result = ReaderCompletion.WebtoonDescent(startingAt: 25)
+        result.screenShows(upTo: 28)
+        for page in down(27, total + 1) {
+            result.report(page: page)
+        }
+        #expect(result.jump == nil)
+        #expect(result.allowsCompletion(totalPages: total))
+    }
+
+    /// A screen that comes later changes nothing for a descent that broke, nor for one nothing started.
+    @Test func theScreenDoesNotMendABrokenDescentNorStartOne() {
+        var result = descent(opening: 12, [30])
+        let broken = result
+        result.screenShows(upTo: 32)
+        #expect(result == broken)
+        #expect(!result.allowsCompletion(totalPages: total))
+
+        var unstarted = ReaderCompletion.WebtoonDescent()
+        unstarted.screenShows(upTo: 7)
+        #expect(unstarted.reached == nil)
+        unstarted.report(page: 5)
+        #expect(unstarted.jump == ReaderCompletion.WebtoonDescent.Jump(from: 0, to: 5))
+    }
+
 }

@@ -83,14 +83,22 @@ extension ImagePipelineSwappingTests {
 
     /// Chapter 2's pages are tall (300×900 and 300×860: about 1200 pt on screen, the provisional height is ~577);
     /// chapter 1's are short (300×100: ~134 pt), so they shrink when they come (by more than a screen, three of them).
-    private static func pages(sourceKey: String, chapterKey: String, in directory: URL) throws -> [Aidoku.Page] {
+    /// SUWA-39 R2: `count` pages, of the size `size` says (nil: as above).
+    private static func pages(
+        sourceKey: String,
+        chapterKey: String,
+        in directory: URL,
+        count: Int = pageCount,
+        size customSize: (@Sendable (String, Int) -> CGSize)? = nil
+    ) throws -> [Aidoku.Page] {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         var pages: [Aidoku.Page] = []
-        for index in 0..<pageCount {
-            let size = CGSize(width: 300, height: chapterKey == "c1" ? 100 : (index % 2 == 0 ? 900 : 860))
+        for index in 0..<count {
+            let size = customSize?(chapterKey, index)
+                ?? CGSize(width: 300, height: chapterKey == "c1" ? 100 : (index % 2 == 0 ? 900 : 860))
             let data = UIGraphicsImageRenderer(size: size, format: format).pngData { context in
-                UIColor(hue: CGFloat(index) / CGFloat(pageCount), saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
+                UIColor(hue: CGFloat(index % 12) / 12, saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
                 context.fill(CGRect(origin: .zero, size: size))
             }
             let url = directory.appendingPathComponent("\(chapterKey)-\(index).png")
@@ -114,6 +122,9 @@ extension ImagePipelineSwappingTests {
         /// The manga's chapters, oldest first, as the reader has them (SUWA-39).
         let chain: [AidokuRunner.Chapter]
         let sourceKey: String
+        /// How many pages each chapter has and the size of them (nil: the default ones) (SUWA-39 R2).
+        var pageCount = ReaderWebtoonAnchorLayoutTests.pageCount
+        var pageSize: (@Sendable (String, Int) -> CGSize)?
 
         func close() async {
             window.isHidden = true
@@ -155,7 +166,10 @@ extension ImagePipelineSwappingTests {
         startPage: Int,
         holding: @escaping @Sendable (String) -> Bool,
         chain keys: [String] = ["c1", "c2"],
-        startKey: String = "c2"
+        startKey: String = "c2",
+        windowSize: CGSize = CGSize(width: 402, height: 874),
+        pageCount: Int = ReaderWebtoonAnchorLayoutTests.pageCount,
+        pageSize: (@Sendable (String, Int) -> CGSize)? = nil
     ) async throws -> Opened {
         let chain = keys.enumerated().map { AidokuRunner.Chapter(key: $0.element, chapterNumber: Float($0.offset + 1)) }
         let startIndex = try #require(keys.firstIndex(of: startKey))
@@ -166,13 +180,15 @@ extension ImagePipelineSwappingTests {
         for id in ids {
             await removeTestHistory(id)
         }
-        await DataRepositories.shared.history.savePage(PageSave(chapter: ids[startIndex], page: startPage, totalPages: Self.pageCount))
+        await DataRepositories.shared.history.savePage(PageSave(chapter: ids[startIndex], page: startPage, totalPages: pageCount))
         let modeKey = "Reader.readingMode.\(manga.identifier)"
         UserDefaults.standard.set("webtoon", forKey: modeKey)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("anclalayout-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key, in: directory)
-        let previousPages = try previous.map { try Self.pages(sourceKey: manga.sourceKey, chapterKey: $0.key, in: directory) } ?? []
+        let pages = try Self.pages(sourceKey: manga.sourceKey, chapterKey: chapter.key, in: directory, count: pageCount, size: pageSize)
+        let previousPages = try previous.map {
+            try Self.pages(sourceKey: manga.sourceKey, chapterKey: $0.key, in: directory, count: pageCount, size: pageSize)
+        } ?? []
 
         let pipeline = ImagePipeline.shared
         let loader = HeldImageLoader { path in holding((path as NSString).lastPathComponent) }
@@ -186,7 +202,7 @@ extension ImagePipelineSwappingTests {
         reader.appActivity = ReaderAppActivity(center: center, active: true)
         let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.frame = CGRect(origin: .zero, size: windowSize)
         window.rootViewController = reader
         window.makeKeyAndVisible()
         try await Task.sleep(for: .seconds(1))
@@ -200,7 +216,7 @@ extension ImagePipelineSwappingTests {
         webtoon.viewModel.preloadedPages = previousPages
         return Opened(
             reader: reader, webtoon: webtoon, ids: ids, window: window, center: center, directory: directory, modeKey: modeKey,
-            pipeline: pipeline, loader: loader, chain: chain, sourceKey: manga.sourceKey
+            pipeline: pipeline, loader: loader, chain: chain, sourceKey: manga.sourceKey, pageCount: pageCount, pageSize: pageSize
         )
     }
 
@@ -502,7 +518,9 @@ extension ImagePipelineSwappingTests {
     /// The next chapter the reader will be asked for: its pages are there when `appendNextChapter`/`prependPreviousChapter` ask.
     private func preload(_ opened: Opened, _ key: String) throws {
         let chapter = try #require(opened.chain.first { $0.key == key })
-        opened.webtoon.viewModel.preloadedPages = try Self.pages(sourceKey: opened.sourceKey, chapterKey: key, in: opened.directory)
+        opened.webtoon.viewModel.preloadedPages = try Self.pages(
+            sourceKey: opened.sourceKey, chapterKey: key, in: opened.directory, count: opened.pageCount, size: opened.pageSize
+        )
         opened.webtoon.viewModel.preloadedChapter = chapter
     }
 
@@ -517,7 +535,7 @@ extension ImagePipelineSwappingTests {
 
     /// Reading chapter d3 of [d1, d2, d3] (the ones above and the one being read are taller than the screen),
     /// d4 is next: appending it takes the window over its limit and trims d1.
-    private func readingTheThirdOfThree(_ mangaKey: String) async throws -> Opened {
+    private func readingTheThirdOfThree(_ mangaKey: String, preloadingTheNext: Bool = true) async throws -> Opened {
         let opened = try await open(mangaKey: mangaKey, startPage: 6, holding: { _ in false }, chain: Self.chain, startKey: "d1")
         for key in ["d2", "d3"] {
             try await settle(opened)
@@ -526,7 +544,9 @@ extension ImagePipelineSwappingTests {
             try await readInto(opened, key, row: 3)
         }
         try #require(opened.webtoon.chapters.map(\.key) == ["d1", "d2", "d3"], "\(opened.webtoon.chapters.map(\.key))")
-        try preload(opened, "d4")
+        if preloadingTheNext {
+            try preload(opened, "d4")
+        }
         return opened
     }
 
@@ -651,6 +671,88 @@ extension ImagePipelineSwappingTests {
         try expectStill(opened, readingKey: "d3", readingItem: item, sections: ["d2", "d3", "d4"], "after letting go")
         await opened.close()
     }
+
+    // MARK: - SUWA-39 ronda 2
+
+    /// A gate the test opens (a held `pagesLoadGate`).
+    private actor Gate {
+        private var isOpen = false
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            if isOpen { return }
+            await withCheckedContinuation { waiting.append($0) }
+        }
+
+        func open() {
+            isOpen = true
+            let continuations = waiting
+            waiting = []
+            for continuation in continuations {
+                continuation.resume()
+            }
+        }
+    }
+
+    /// Whether the chapter is completed in the history, waiting up to `seconds` for it to be saved.
+    private func completedInHistory(_ id: ChapterIdentifier, seconds: Double = 5) async -> Bool {
+        let start = ContinuousClock.now
+        while ContinuousClock.now - start < .milliseconds(Int(seconds * 1000)) {
+            if await storedProgress(id).completed { return true }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return false
+    }
+
+    /// The lines of the journal for the chapter that start with `prefix` (the reader's own notes).
+    private func journalLines(_ id: ChapterIdentifier, startingWith prefix: String) -> [String] {
+        CompletionJournal.lines().compactMap { line in
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 5, fields[1] == id.sourceKey, fields[2] == id.mangaKey, fields[3] == id.chapterKey, fields[4].hasPrefix(prefix) else {
+                return nil
+            }
+            return fields[4]
+        }
+    }
+
+    /// The user reads down: a drag at a time, each one to the page `rows` says (in order), in `section`.
+    private func readsDown(_ opened: Opened, rows: [Int], section: Int = 0) async throws {
+        for row in rows {
+            try userScrolls(opened, toRow: row, section: section, at: 0.5)
+            try await Task.sleep(for: .milliseconds(120))
+        }
+    }
+
+    /// R2-I1: pages of about 150 pt on an iPad's screen (1024 high): opened at page 1, the page the first drag tells is
+    /// the one in the middle of the screen, about the fifth. That is not a jump: the screen it opened at showed them.
+    /// Reading down with real drags to the final transition completes the chapter.
+    @Test(.timeLimit(.minutes(2))) func goingDownShortPagesOnAnIPadScreenCompletesTheChapter() async throws {
+        let opened = try await open(
+            mangaKey: "paginascortas", startPage: 1, holding: { _ in false }, chain: ["e1"], startKey: "e1",
+            windowSize: CGSize(width: 768, height: 1024), pageCount: 30, pageSize: { _, _ in CGSize(width: 768, height: 150) }
+        )
+        let chapterId = opened.ids[0]
+        // short pages: seven of them, about, fit in the screen it opened at
+        let seventh = try opened.frame(row: 7, section: 0)
+        let screenHeight = opened.webtoon.collectionNode.bounds.height
+        try #require(
+            seventh.height < 200 && seventh.minY - opened.webtoon.collectionNode.contentOffset.y < screenHeight,
+            "the pages are not short: \(seventh), the screen is \(screenHeight) high"
+        )
+        try await readsDown(opened, rows: Array(5...30))
+        try await readsDown(opened, rows: [31])
+        let completed = await completedInHistory(chapterId)
+        let refusals = journalLines(chapterId, startingWith: "webtoon: no completa")
+        #expect(completed, "not completed; the journal says \(refusals); at page \(opened.reader.currentPage)")
+        #expect(refusals.isEmpty, "\(refusals)")
+        await opened.close()
+    }
+
+
+
+
+
+
 
 }
 }
