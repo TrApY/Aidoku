@@ -826,7 +826,9 @@ extension ReaderViewController {
     }
 
     private func restartWebtoonDescentAtTheCurrentPage() {
-         // pendiente[I3#2]
+        guard reader is ReaderWebtoonViewController else { return }
+        webtoonDescents[chapter.key] = .init(startingAt: max(1, currentPage))
+        webtoonRefusalsNoted.remove(chapter.key)
     }
 
     /// Where in the page it opens at the webtoon reader goes (SUWA-19 D12): the history's scrollPosition is the
