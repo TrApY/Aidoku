@@ -302,5 +302,40 @@ extension ImagePipelineSwappingTests {
         await closeWebtoon(manga)
     }
 
+    /// R2-I3: the pages of the paged reader do not go through the webtoon's descent. Paged at page 1, on to page 20,
+    /// then the reading mode changes to the webtoon: it opens at page 20 and its first report is not a jump from 1. Going
+    /// down to the end completes the chapter.
+    @Test func changingFromThePagedReaderToTheWebtoonAtPage20AndGoingDownCompletes() async throws {
+        let manga = AidokuRunner.Manga(sourceKey: "lectorfinal", key: "pagbtoon", title: "Final", chapters: [second, first])
+        let modeKey = "Reader.readingMode.\(manga.identifier)"
+        UserDefaults.standard.set("rtl", forKey: modeKey)
+        let (reader, _) = await self.reader(mangaKey: "pagbtoon", chapter: first)
+        try #require(reader.reader is ReaderPagedViewController, "not the paged reader")
+        reader.setCurrentPage(1, position: nil)
+        reader.setCurrentPage(20, position: nil)
+        // the setting changes: the webtoon takes over at the page being read
+        UserDefaults.standard.set("webtoon", forKey: modeKey)
+        NotificationCenter.default.post(name: Notification.Name(modeKey), object: nil)
+        let webtoon = try #require(reader.reader as? ReaderWebtoonViewController, "not the webtoon reader")
+        // its load asks for the pages (it has no source, so it finds none and tells so): when it is done they are told again
+        for _ in 0..<40 where webtoon.viewModel.chapter != first {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        try await Task.sleep(for: .seconds(1))
+        reader.presentedViewController?.dismiss(animated: false)
+        // the page is still the one being read
+        reader.setPages((0..<Self.pageCount).map {
+            Page(sourceId: manga.sourceKey, chapterId: first.key, index: $0, imageURL: "https://example.invalid/\($0).jpg")
+        })
+        try #require(reader.currentPage == 20, "the reader is at page \(reader.currentPage)")
+        for page in 20...(Self.pageCount + 1) {
+            reader.setCurrentPage(page, position: nil)
+        }
+        let done = await completed(id(manga, first))
+        #expect(done, "not completed; the journal says \(refusals(id(manga, first)))")
+        #expect(refusals(id(manga, first)).isEmpty, "\(refusals(id(manga, first)))")
+        UserDefaults.standard.removeObject(forKey: modeKey)
+        await DataRepositories.shared.history.removeAll(of: manga.identifier)
+    }
 }
 }
